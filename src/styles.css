@@ -1,0 +1,12 @@
+:root {
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  color: #23312d;
+  background: #f5f7f6;
+  font-synthesis: none;
+}
+body { margin: 0; }
+main { margin: 10vh auto; padding: 32px; max-width: 720px; }
+h1 { font-size: 36px; font-weight: 600; }
+p { line-height: 1.7; }
+.eyebrow { color: #367160; font-size: 12px; letter-spacing: 2px; }
+.note { color: #64726d; }

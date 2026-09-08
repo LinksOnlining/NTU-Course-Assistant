@@ -1,5 +1,7 @@
 # 基础设计（Phase 0 提议）
 
+实施状态（2026-09-09）：Phase 1.1 工程空壳已通过真实桌面运行与 HMR 验证，停止等待用户确认 Phase 1.2。下述 Course、时间轴、存储和导入设计仍未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
+
 ## 技术方案
 
 采用 Tauri 2 + React + TypeScript + Rust，Vite 构建前端、npm 管理前端依赖。选择基于 Windows 11、时间轴 UI 开发效率和本地系统集成需要。采用系统 WebView2，安装包与内存优势是选型预期，具体体积、CPU、内存必须由实际构建测量，不承诺数字。
