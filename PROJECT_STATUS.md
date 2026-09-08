@@ -1,17 +1,19 @@
 # 项目状态
 
 - 最后更新：2026-09-09
-- 当前阶段：Phase 1.1 PASS（最小桌面空壳）。Phase 1 整体尚未完成。
-- 阶段门禁：停止等待用户确认，不进入 Phase 1.2。
-- 本轮修复：Vite 明确忽略 src-tauri/target、所有 target、src-tauri/gen、node_modules、dist、.git、.local；保留 src 监听和 React HMR。补齐 Windows 编译必需的 icon.ico/icon.png。
-- 验证 PASS：npm run build；npm run tauri dev 的 Rust 编译完成并启动独立 ntu-course-assistant.exe；Computer Use 核对真实窗口及内容；同一桌面窗口内 App.tsx HMR 修改和恢复；实际 watcher 目录检查；Rust fmt。
-- EBUSY：此次编译、运行及两次热更新未再出现 target DLL 锁定导致的 Vite 崩溃。
-- 工具链：本机 MSVC/SDK 已可成功链接，之前 link.exe 缺失问题已解决。Rust 1.98.1 MSVC；Cargo.lock 已生成并纳入工程。
-- 已知非阻断项：Rust 将 MSVC 的“正在创建库/对象”标准输出列为 linker_messages warning，编译和运行成功。未关闭该警告。
-- 尚未实现：Course 模型、时间轴课程表、CRUD、存储、PDF 导入、教务导入、提醒、自启动；不把空壳 PASS 当成产品功能完成。
-- PDF：已有真实样本检查，15 条固定安排和 3 条非固定实践课程，详见 docs/pdf-sample-review.md。原件及截图不入 Git；实际钟点和学期起点仍需确认。
-- 下一步：用户确认后才开始 Phase 1.2。当前停止。
-- 文档和验证依据：docs/phase-1-verification.md。
-- Git：本阶段稳定检查后本地提交；提交号以 git log -1 为准，不推送远端。
+- 当前阶段：Phase 1.2 PASS（最小 Course 模型与时间计算）；Phase 1 整体尚未完成。
+- 阶段门禁：停止等待用户确认，不进入 Phase 1.3。
+- 已完成：Phase 0；Phase 1.1 桌面空壳；Phase 1.2 只读 Course/TimeRange/PeriodTime 类型、纯分钟计算、按星期及周数判断课程重叠、测试时间配置、单元及架构测试。
+- 核心规则：严格 HH:mm，非法时间/非正持续时间抛 RangeError；相邻课程零空闲且不重叠；重叠的空闲量为零；超出时间轴明确报错，不裁剪。位置只由实际时间计算，不依赖数组顺序或节次。
+- 验证 PASS：严格 typecheck（含类型反例及无 DOM 核心检查）、36 项单元测试、23 项架构测试、npm run build、npm run verify、修改文件 Prettier 检查。
+- Desktop PASS：停止旧开发会话后重新执行 npm run tauri dev，Rust 编译成功，独立 Windows 窗口 id 198634，截图及可访问性文本确认原空壳正常显示。不是浏览器替代验证。
+- 测试配置：src/config/timetable.ts 中 TEST_TIMETABLE 明确 purpose=test-only，只含测试轴和两条节次样例；不代表正式南通大学作息，未接入 UI。
+- 架构：core 只依赖同层逻辑及共享纯类型，不访问 DOM/React/Tauri/系统 IO；测试用 oxc-parser 是新增开发依赖，没有新增生产依赖。
+- 尚未实现：正式课程表 UI、手动录入和完整外部 Course 校验、存储、PDF/教务导入、提醒、自启动、托盘、安装包。
+- 已知非阻断项：Rust 的 linker_messages 创建库/对象输出警告仍存在，编译和运行正常。没有忽略失败测试。
+- PDF：已有真实样本检查，15 条固定安排和 3 条非固定实践课程；原件不入 Git，实际钟点和学期起点仍需用户确认。
+- 下一步：用户确认后才进入 Phase 1.3，本轮停止。
+- 验证详情：docs/phase-1-verification.md。
+- Git：验证通过后本地提交 feat: add course model and time calculations；具体提交号见 git log -1，不推送远端。
 
-继续前阅读 CODEX.md、DESIGN.md 和验证记录，勿重复安装工具链或重做已通过的样本检查。
+继续前阅读 CODEX.md、DESIGN.md 和验证记录；保留 Phase 1.1 的 Vite watcher 忽略规则。

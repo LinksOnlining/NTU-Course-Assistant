@@ -2,7 +2,7 @@
 
 面向大学生的 Windows 11 本地课程表与上课提醒程序，优先适配南通大学。
 
-Phase 0 已完成；用户已确认继续 Phase 1。Phase 1.1 工程空壳已通过实际 Windows 桌面启动与 HMR 验证，当前停止等待确认 Phase 1.2。尚无课程表功能或安装包。
+Phase 1.1 桌面空壳及 Phase 1.2 最小课程模型/时间计算已 PASS。当前停止等待确认 Phase 1.3；尚无正式课程表 UI 或安装包。
 
 - [设计与数据模型](DESIGN.md)
 - [阶段状态](PROJECT_STATUS.md)
@@ -14,7 +14,7 @@ Phase 0 已完成；用户已确认继续 Phase 1。Phase 1.1 工程空壳已通
 
 当前命令：`npm install` 安装依赖；`npm run build` 执行类型检查和前端构建；`npm run dev` 启动本机前端预览。三者均已执行成功。
 
-桌面命令 `npm run tauri dev` 已实际运行成功，可打开独立 Windows 窗口。当前没有完整 verify/lint/test 命令，须随本阶段后续小步骤加入，不能把空壳构建当成阶段完成。
+桌面命令 `npm run tauri dev` 已实际运行成功，可打开独立 Windows 窗口。`npm run verify` 包含 typecheck/build 和单元、架构测试；也可分别运行 `npm run test:unit` 与 `npm run test:arch`。尚无 lint 命令，核心边界由严格类型和 AST 测试检查。
 
 本次已安装用户级 Rust，未修改持久 PATH；终端需将用户 `.cargo/bin` 加入当前会话 PATH 后调用 Cargo。本机 C++ 桌面工具及 Windows SDK 已通过实际编译验证。
 

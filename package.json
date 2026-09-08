@@ -3,10 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.2.0" },
+  "engines": {
+    "node": ">=24.2.0"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.core.json",
+    "test:unit": "node --test tests/unit/*.test.mjs",
+    "test:arch": "node --test tests/architecture/*.test.mjs",
+    "test": "npm run test:unit && npm run test:arch",
+    "verify": "npm run build && npm test",
     "build": "npm run typecheck && vite build",
     "tauri": "tauri"
   },
@@ -19,6 +25,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "6.1.1",
+    "oxc-parser": "0.149.0",
     "typescript": "7.0.2",
     "vite": "8.2.2"
   }

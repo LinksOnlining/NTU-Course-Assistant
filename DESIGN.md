@@ -1,6 +1,6 @@
 # 基础设计（Phase 0 提议）
 
-实施状态（2026-09-09）：Phase 1.1 工程空壳已通过真实桌面运行与 HMR 验证，停止等待用户确认 Phase 1.2。下述 Course、时间轴、存储和导入设计仍未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
+实施状态（2026-09-09）：Phase 1.2 已完成 Course 类型和纯分钟计算，桌面空壳回归通过，停止等待用户确认 Phase 1.3。时间轴 UI、存储和导入设计仍未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
 
 ## 技术方案
 
@@ -24,7 +24,7 @@ ImportCandidate 可以缺字段，携带原文、来源位置和问题列表；C
 
 ## 最小 Course 模型
 
-以下为文档契约，尚未创建 TypeScript 源文件。
+契约已实现于 src/types/course.ts（实际字段只读，继承 TimeRange，weeks 为只读数组）。以下简写展示数据内容：
 
 ```ts
 interface Course {
@@ -43,7 +43,7 @@ interface Course {
 
 一条 Course 表示同名课程的一个固定上课安排。同一课程星期、时段或教室不同则分成多条，不增加课程目录/教学班等实体。单双周归一化为明确周数。
 
-校验：id 唯一、名称非空；节次为正整数且起始不大于结束；时间格式有效且开始早于结束；星期在 1–7；周数非空、正整数、去重排序，并在学期周数配置范围内。首版不支持跨午夜课程。教师/教室确实未知使用 null 并提示，不能编造；时间、星期、周数不确定则留在导入候选中。
+未来录入/导入边界的完整校验要求（本阶段尚未实现）：id 唯一、名称非空；节次为正整数且起始不大于结束；时间格式有效且开始早于结束；星期在 1–7；周数非空、正整数、去重排序，并在学期周数配置范围内。首版不支持跨午夜课程。教师/教室确实未知使用 null 并提示，不能编造；时间、星期、周数不确定则留在导入候选中。
 
 独立配置：TermConfig（第一教学周周一日期、总周数、时区 Asia/Shanghai），PeriodTime[]（节次、HH:mm 开始/结束）。尚未核实的学校作息绝不作为官方默认值。Phase 1 仅明确标注的测试配置和测试教学周。
 
@@ -71,3 +71,13 @@ Windows 通知必须在实际安装的应用中验收；开发态不能代表正
 - [Tauri 通知](https://v2.tauri.app/plugin/notification/)：Windows 安装态限制。
 - [Tauri 自启动](https://v2.tauri.app/plugin/autostart/)：启用、关闭、状态查询能力。
 - [PDF.js](https://mozilla.github.io/pdf.js/)：PDF 解析与渲染候选。
+
+## Phase 1.2 已实现的时间语义
+
+核心不读取配置，调用方将 TimeRange 轴参数传入 courseTiming，结果仅含分钟偏移与持续量。UI 像素转换留到 Phase 1.3，Course 不携带任何坐标或样式。
+
+时间严格为 HH:mm（00:00–23:59）；非法钟点或结束不晚于开始抛 RangeError。offsetMinutes 可返回轴起点之前的负偏移，courseTiming 则拒绝越界并要求扩展轴；不静默裁剪。idleMinutes 表示按参数顺序的非负空闲量，重叠或逆序时为零；不能用它代替重叠判断。区间采用 [start,end)，相邻课程不重叠。coursesOverlap 还要求同星期及共同教学周。
+
+TEST_TIMETABLE 只有明确标为测试用的轴和两条节次，不代表学校作息，也没有默认接入 UI。完整课程运行时校验、正式学期和节次设置仍待后续阶段。
+
+开发检查使用 Node 内置 node:test；oxc-parser 是仅用于 AST 架构守卫的开发依赖。tsconfig.core.json 不提供 DOM 或 Node 全局类型，类型反例测试纳入主 typecheck；所有 core/types/config 禁止 any。当前不引入完整 ESLint 框架。

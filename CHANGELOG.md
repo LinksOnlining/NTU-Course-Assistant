@@ -2,6 +2,12 @@
 
 ## 未发布 — 2026-09-09
 
+- Phase 1.2 PASS：新增最小 Course 类型、严格时间转换、分钟偏移/持续/空闲与重叠判断，配置明确为测试用。
+- 新增 36 项单元测试、23 项架构测试、类型契约反例和 npm run verify；build 与重新启动的真实桌面窗口回归通过。
+- 本阶段没有接入课程表 UI、PDF 或存储；停止等待 Phase 1.3 确认。
+
+### Phase 1.1 稳定节点（历史）
+
 - Phase 1.1 PASS：修复 Vite 监听 Rust target 导致 Windows DLL 锁定 EBUSY 的问题，前端 src/HMR 保持正常。
 - 补齐必需 Windows 应用图标，Rust 编译成功，独立桌面窗口已实际打开并验证 React 热更新及恢复。
 - 保存 Cargo.lock 和此前的最小桌面空壳，形成可恢复的 Phase 1.1 节点。
