@@ -1,0 +1,12 @@
+node_modules/
+dist/
+src-tauri/target/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.*
+*.local.*
+*.db
+*.db-shm
+*.db-wal
