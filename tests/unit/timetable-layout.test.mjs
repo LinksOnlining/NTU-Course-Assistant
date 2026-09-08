@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { courseTiming, coursesOverlap } from "../../src/core/timetable-layout.ts";
+import { courseTiming, coursesOverlap, layoutCourses } from "../../src/core/timetable-layout.ts";
 import { durationMinutes, idleMinutes, timeToMinutes } from "../../src/core/time.ts";
 import { TEST_TIMETABLE } from "../../src/config/timetable.ts";
 
@@ -70,4 +70,45 @@ test("test configuration is explicit, valid and never a school default", () => {
     assert(timeToMinutes(period.startTime) >= timeToMinutes(TEST_TIMETABLE.axis.startTime));
   }
   assert.equal(idleMinutes(TEST_TIMETABLE.periods[0], TEST_TIMETABLE.periods[1]), 5);
+});
+
+test("layout filters current week into seven stable weekday columns", () => {
+  const result = layoutCourses(
+    [
+      course({ id: "monday", weekday: 1, weeks: [3] }),
+      course({ id: "sunday", weekday: 7, weeks: [3] }),
+      course({ id: "hidden", weekday: 5, weeks: [2] }),
+    ],
+    3,
+    TEST_TIMETABLE.axis,
+  );
+  assert.equal(result.length, 7);
+  assert.deepEqual(
+    result.map((day) => day.map((item) => item.course.id)),
+    [["monday"], [], [], [], [], [], ["sunday"]],
+  );
+  assert.throws(() => layoutCourses([], 0, TEST_TIMETABLE.axis), RangeError);
+  assert.throws(() => layoutCourses([], 1.5, TEST_TIMETABLE.axis), RangeError);
+});
+
+test("chain overlaps share a stable two-lane group without affecting later courses", () => {
+  const [monday] = layoutCourses(
+    [
+      course({ id: "a", startTime: "08:00", endTime: "09:30" }),
+      course({ id: "b", startTime: "09:00", endTime: "10:00" }),
+      course({ id: "c", startTime: "09:45", endTime: "10:45" }),
+      course({ id: "d", startTime: "11:00", endTime: "12:00" }),
+    ],
+    3,
+    TEST_TIMETABLE.axis,
+  );
+  assert.deepEqual(
+    monday.map(({ course: item, lane, laneCount }) => [item.id, lane, laneCount]),
+    [
+      ["a", 0, 2],
+      ["b", 1, 2],
+      ["c", 0, 2],
+      ["d", 0, 1],
+    ],
+  );
 });

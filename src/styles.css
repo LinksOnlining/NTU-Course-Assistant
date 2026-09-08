@@ -1,12 +1,238 @@
 :root {
-  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
-  color: #23312d;
-  background: #f5f7f6;
+  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  color: #20312c;
+  background: #f3f6f4;
   font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
-body { margin: 0; }
-main { margin: 10vh auto; padding: 32px; max-width: 720px; }
-h1 { font-size: 36px; font-weight: 600; }
-p { line-height: 1.7; }
-.eyebrow { color: #367160; font-size: 12px; letter-spacing: 2px; }
-.note { color: #64726d; }
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+.app-shell {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  padding: 24px 28px 20px;
+}
+
+.app-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 0 auto 12px;
+  width: min(100%, 1600px);
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: #397363;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(26px, 3vw, 36px);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+
+.subtitle {
+  margin: 5px 0 0;
+  color: #66766f;
+  font-size: 13px;
+}
+
+.week-status {
+  display: grid;
+  min-width: 150px;
+  padding: 10px 14px;
+  border: 1px solid #d8e2dd;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgb(37 69 59 / 6%);
+}
+
+.week-status span,
+.week-status small {
+  color: #6f7d78;
+  font-size: 11px;
+}
+.week-status strong {
+  margin: 2px 0;
+  font-size: 18px;
+}
+
+.fixture-notice {
+  flex: 0 0 auto;
+  margin: 0 auto 10px;
+  width: min(100%, 1600px);
+  color: #7b6452;
+  font-size: 12px;
+}
+
+.timetable-scroll {
+  width: min(100%, 1600px);
+  min-height: 0;
+  flex: 1 1 auto;
+  margin: 0 auto;
+  overflow: auto;
+  border: 1px solid #d8e2dd;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(35 67 57 / 7%);
+  scrollbar-gutter: stable;
+}
+
+.timetable-grid {
+  display: grid;
+  grid-template-columns: 72px repeat(7, minmax(150px, 1fr));
+  min-width: 1122px;
+  width: 100%;
+}
+
+.week-corner,
+.day-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  height: 44px;
+  place-items: center;
+  border-bottom: 1px solid #d8e2dd;
+  background: rgb(250 252 251 / 96%);
+  color: #40534c;
+  font-size: 13px;
+  font-weight: 650;
+  backdrop-filter: blur(8px);
+}
+
+.week-corner {
+  left: 0;
+  z-index: 7;
+  border-right: 1px solid #d8e2dd;
+  color: #798680;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.day-header + .day-header {
+  border-left: 1px solid #edf1ef;
+}
+
+.time-axis,
+.day-column {
+  position: relative;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--hour-height) - 1px),
+    #e8eeeb calc(var(--hour-height) - 1px),
+    #e8eeeb var(--hour-height)
+  );
+}
+
+.time-axis {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  border-right: 1px solid #d8e2dd;
+  background-color: #fafcfb;
+}
+
+.time-axis time {
+  position: absolute;
+  right: 11px;
+  color: #7b8883;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  transform: translateY(-50%);
+}
+
+.day-column {
+  min-width: 0;
+  border-left: 1px solid #edf1ef;
+  background-color: #fff;
+}
+
+.course-card {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  padding: 6px 7px;
+  border: 1px solid #b9d6cc;
+  border-left: 3px solid #3c806d;
+  border-radius: 9px;
+  background: #e8f3ef;
+  box-shadow: 0 2px 5px rgb(45 83 71 / 10%);
+  color: #22473c;
+}
+
+.course-card:focus-visible {
+  z-index: 3;
+  outline: 3px solid #8dbdaf;
+  outline-offset: 1px;
+}
+
+.course-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.course-time,
+.course-classroom,
+.course-teacher {
+  overflow: hidden;
+  flex: 0 0 auto;
+  font-size: 10px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.course-time {
+  color: #315f52;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.course-classroom,
+.course-teacher {
+  color: #64766f;
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    padding: 16px 14px 12px;
+  }
+  .subtitle {
+    display: none;
+  }
+  .week-status {
+    min-width: 132px;
+    padding: 8px 11px;
+  }
+}

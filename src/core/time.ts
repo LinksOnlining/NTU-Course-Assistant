@@ -8,6 +8,13 @@ export function timeToMinutes(time: string): number {
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 }
 
+export function minutesToTime(minutes: number): string {
+  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1439) {
+    throw new RangeError("分钟数必须是 0–1439 范围内的整数");
+  }
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
 /** A signed offset: a time before the origin stays negative instead of being clipped. */
 export function offsetMinutes(time: string, origin: string): number {
   return timeToMinutes(time) - timeToMinutes(origin);

@@ -1,3 +1,40 @@
+# Phase 1.3 七天课程表时间轴 UI：PASS
+
+日期：2026-09-09。仅完成 Phase 1.3；停止等待用户确认 Phase 1.4。
+
+## 实现范围
+
+- `src/core/timetable-layout.ts` 的 `layoutCourses` 按当前教学周过滤，固定返回周一至周日七组数据；同一天按开始/结束时间稳定排序，并为重叠及链式重叠课程分配横向 lane。返回值仍是分钟几何，不包含 DOM 或 CSS。
+- `Timetable`、`TimeAxis`、`DayColumn`、`CourseCard` 负责渲染 07:00–22:00 测试时间轴。课程卡片 `top = offsetMinutes × pxPerMinute`，`height = durationMinutes × pxPerMinute`；数组顺序和节次不参与位置计算。
+- 页面只有 `.timetable-scroll` 一个双向滚动容器。星期表头使用 `position: sticky; top: 0`，时间轴使用 `position: sticky; left: 0`；900×600 时七列保持最小宽度并横向滚动。
+- `src/fixtures/courses.ts` 覆盖早/中/晚、10:00–14:00 四小时空闲、相邻、重叠链、超长中文标题、空星期、周一和周日。配置及页面均明确标注为测试数据，不代表南通大学正式课表或作息。
+- 课程卡片优先显示课程名、时间、教室、教师；长标题两行截断，完整内容保留在 `title` 和 `aria-label`。未加入正式交互、当前时间线或 Phase 2 功能。
+
+## 实际检查
+
+| 检查 | 结果 |
+| --- | --- |
+| npm run typecheck | PASS，应用和无 DOM core 双重 TypeScript 检查 |
+| npm run test:unit | PASS，39 项，0 失败/跳过；新增七列周过滤、真实分钟几何和重叠链 lane 测试 |
+| npm run test:arch | PASS，23 项，0 失败/跳过；core/types/config 边界保持纯逻辑 |
+| npm run test:ui | PASS，16 项，2 项按非小视口条件跳过；三组项目总计 18 场景 |
+| 1280×800 / 100% | PASS，七列、分钟定位、4 小时留白、重叠、长标题、sticky 滚动及控制台无错误 |
+| 1280×800 / 125% | PASS，同上 |
+| 900×600 / 150% | PASS，同上，并确认 `scrollWidth > clientWidth`、单列宽度至少 149px |
+| npm run lint | PASS，oxlint 1.82.0，`--deny-warnings` |
+| npm run format:check | PASS，Prettier 3.9.6 |
+| npm run build | PASS，TypeScript + Vite 8.2.2，24 个模块；无控制台报错或资源 404 |
+| npm run verify | PASS，串联 typecheck、unit、architecture、UI、lint、format 和 build |
+| npm run tauri dev | PASS，Rust dev profile 完成并运行 `target\\debug\\ntu-course-assistant.exe`；Vite 未出现 EBUSY |
+| 真实 Windows 独立窗口 | PASS，项目 exe 进程 PID 1948，窗口标题“大学课程表”，MainWindowHandle 非零，Responding=True；不是浏览器进程 |
+| React HMR | PASS，在运行中的桌面开发会话临时修改并恢复 `App.tsx`，Vite 两次记录 `hmr update /src/App.tsx`，应用进程持续存活 |
+
+Playwright 使用本机 Edge 的真实 CSS 布局引擎核对像素几何。900×600 项验证小窗口横向滚动策略，1280×800 项验证常规窗口；真实 Tauri 回归另行启动项目 exe，因此浏览器验证没有替代 Desktop PASS。桌面控制接口本轮未提供原生窗口表面，桌面存在性以项目 exe、窗口句柄、标题、响应状态和同一开发会话 HMR 交叉确认。
+
+首次从隔离的非登录 PowerShell 启动时，`cargo` 不在该进程 PATH，命令在编译前退出。将本机既有 `%USERPROFILE%\\.cargo\\bin` 仅加入当前命令会话后重新执行成功；没有安装/删除 Rust、修改系统安全设置或持久环境变量。Rust 仍输出既有 `linker_messages` 非阻断警告。
+
+---
+
 # Phase 1.2 最小模型与时间计算：PASS
 
 日期：2026-09-09。仅完成 Phase 1.2；停止等待用户确认 Phase 1.3。

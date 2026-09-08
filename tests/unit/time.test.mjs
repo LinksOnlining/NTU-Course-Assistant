@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  timeToMinutes,
-  offsetMinutes,
   durationMinutes,
   idleMinutes,
+  minutesToTime,
+  offsetMinutes,
   timeRangesOverlap,
+  timeToMinutes,
 } from "../../src/core/time.ts";
 
 const range = (startTime, endTime) => ({ startTime, endTime });
@@ -20,6 +21,15 @@ for (const [clock, minutes] of [
 ]) {
   test(`HH:mm ${clock} → ${minutes}`, () => assert.equal(timeToMinutes(clock), minutes));
 }
+
+test("minutes convert back to strict HH:mm", () => {
+  assert.equal(minutesToTime(0), "00:00");
+  assert.equal(minutesToTime(420), "07:00");
+  assert.equal(minutesToTime(1439), "23:59");
+  for (const value of [-1, 1.5, 1440, Number.NaN]) {
+    assert.throws(() => minutesToTime(value), RangeError);
+  }
+});
 
 test("offset is based on clock time, with a signed value before origin", () => {
   assert.equal(offsetMinutes("08:00", "07:00"), 60);

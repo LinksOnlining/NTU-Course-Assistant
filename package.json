@@ -11,8 +11,12 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.core.json",
     "test:unit": "node --test tests/unit/*.test.mjs",
     "test:arch": "node --test tests/architecture/*.test.mjs",
-    "test": "npm run test:unit && npm run test:arch",
-    "verify": "npm run build && npm test",
+    "test:ui": "playwright test",
+    "test": "npm run test:unit && npm run test:arch && npm run test:ui",
+    "lint": "oxlint src tests vite.config.ts playwright.config.ts --deny-warnings",
+    "format": "prettier \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,mjs}\" \"*.{ts,json}\" --write",
+    "format:check": "prettier \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,mjs}\" \"*.{ts,json}\" --check",
+    "verify": "npm run typecheck && npm test && npm run lint && npm run format:check && npm run build",
     "build": "npm run typecheck && vite build",
     "tauri": "tauri"
   },
@@ -21,11 +25,14 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@tauri-apps/cli": "2.11.4",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "6.1.1",
     "oxc-parser": "0.149.0",
+    "oxlint": "1.82.0",
+    "prettier": "3.9.6",
     "typescript": "7.0.2",
     "vite": "8.2.2"
   }
