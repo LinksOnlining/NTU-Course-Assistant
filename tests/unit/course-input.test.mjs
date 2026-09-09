@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { validateCourseInput } from "../../src/core/course-input.ts";
-import { parseWeeks } from "../../src/core/weeks.ts";
+import { formatWeeks, parseWeeks } from "../../src/core/weeks.ts";
 import { TEST_TIMETABLE } from "../../src/config/timetable.ts";
 
 for (const [source, expected] of [
@@ -14,6 +14,13 @@ for (const [source, expected] of [
     assert.deepEqual(parseWeeks(source), expected);
   });
 }
+
+test("validated week arrays are compacted for edit form prefill", () => {
+  assert.equal(formatWeeks([12, 2, 3, 4, 7, 10, 11, 12, 1]), "1-4,7,10-12");
+  assert.throws(() => formatWeeks([]), RangeError);
+  assert.throws(() => formatWeeks([0, 1]), RangeError);
+  assert.throws(() => formatWeeks([1, 31]), RangeError);
+});
 
 for (const source of ["", "0", "-1", "18-3", "abc", "1,,3", "1-", "31"]) {
   test(`invalid weeks ${JSON.stringify(source)} are rejected`, () => {

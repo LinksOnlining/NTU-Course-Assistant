@@ -1,6 +1,6 @@
 # 基础设计（Phase 0 提议）
 
-实施状态（2026-09-09）：Phase 1 和 Phase 2.1 已通过验收。已在不改变时间轴几何的前提下加入课程表单、周数解析和统一外部输入校验；用户课程暂存 React 内存，编辑、删除、SQLite 和导入尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
+实施状态（2026-09-09）：Phase 1 和 Phase 2.1–2.2 已通过验收。已在不改变时间轴几何的前提下加入课程添加、编辑、删除、周数解析和统一外部输入校验；用户课程暂存 React 内存，SQLite 和导入尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
 
 ## 技术方案
 
@@ -46,6 +46,8 @@ interface Course {
 Phase 2.1 已实现共享 `validateCourseInput` 边界：名称 trim 后必填并限制 80 字符；星期限 1–7；时间复用严格 HH:mm 逻辑且开始必须早于结束；周数支持范围、离散和混合写法，归一化为 1–30 内的排序去重数组；教师和教室 trim 后为空时转为 null。当前表单还会明确阻止超出测试时间轴 07:00–22:00 的课程，不做裁切。ID 由浏览器标准 `crypto.randomUUID()` 生成，不增加依赖。
 
 普通用户只填写真实时间。因为尚无经确认的南通大学节次映射，手动新增记录的 `startPeriod`/`endPeriod` 为 null；fixture 可继续携带测试节次。统一校验成功前 UI 不产生 Course，未来导入器应复用同一边界，而不是自行构造正式记录。
+
+Phase 2.2 复用同一个 `CourseForm`：传入已有 Course 时预填字段，周数压缩为可编辑范围文本，保存仍调用 `validateCourseInput` 并沿用原 ID。React 内存数组按 ID 更新或删除；取消不触发状态写入。fixture ID 不进入用户 ID 集合，因此卡片不渲染编辑入口，正常 UI 无法修改或删除 fixture。删除确认后重新执行既有纯布局函数，剩余重叠课程自然恢复 lane 宽度。
 
 独立配置：TermConfig（第一教学周周一日期、总周数、时区 Asia/Shanghai），PeriodTime[]（节次、HH:mm 开始/结束）。尚未核实的学校作息绝不作为官方默认值。Phase 1 仅明确标注的测试配置和测试教学周。
 

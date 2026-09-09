@@ -14,6 +14,7 @@ interface TimetableProps {
   readonly currentWeek: number;
   readonly axis: TimeRange;
   readonly pxPerMinute: number;
+  readonly onEditCourse?: (course: Course) => void;
 }
 
 export function Timetable({
@@ -22,6 +23,7 @@ export function Timetable({
   currentWeek,
   axis,
   pxPerMinute,
+  onEditCourse,
 }: TimetableProps) {
   if (!Number.isFinite(pxPerMinute) || pxPerMinute <= 0) {
     throw new RangeError("每分钟像素比例必须大于零");
@@ -51,6 +53,7 @@ export function Timetable({
             height={timelineHeight}
             pxPerMinute={pxPerMinute}
             userCourseIds={userCourseIds}
+            onEditCourse={onEditCourse}
           />
         ))}
       </div>

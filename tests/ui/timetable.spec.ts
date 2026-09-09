@@ -1,9 +1,33 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 async function box(locator: Locator) {
   const value = await locator.boundingBox();
   expect(value).not.toBeNull();
   return value!;
+}
+
+interface CourseFields {
+  readonly name: string;
+  readonly teacher?: string;
+  readonly classroom?: string;
+  readonly weekday?: string;
+  readonly startTime?: string;
+  readonly endTime?: string;
+  readonly weeks?: string;
+}
+
+async function addUserCourse(page: Page, fields: CourseFields) {
+  await page.getByRole("button", { name: "添加课程" }).click();
+  const dialog = page.getByRole("dialog", { name: "添加课程" });
+  await dialog.getByLabel("课程名称", { exact: true }).fill(fields.name);
+  await dialog.getByLabel("教师（可选）").fill(fields.teacher ?? "测试教师");
+  await dialog.getByLabel("教室（可选）").fill(fields.classroom ?? "测试教室");
+  await dialog.getByLabel("星期").selectOption(fields.weekday ?? "3");
+  await dialog.getByLabel("开始时间").fill(fields.startTime ?? "14:00");
+  await dialog.getByLabel("结束时间").fill(fields.endTime ?? "15:30");
+  await dialog.getByLabel("上课周数").fill(fields.weeks ?? "1-16");
+  await dialog.getByRole("button", { name: "保存课程" }).click();
+  return page.locator('[data-source="user"]').filter({ hasText: fields.name }).first();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -223,4 +247,138 @@ test("long Chinese user course name remains inside its real-height card", async 
   expect(nameBox.x + nameBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
   expect(nameBox.y + nameBox.height).toBeLessThanOrEqual(cardBox.y + cardBox.height);
   await expect(card).toHaveAttribute("title", new RegExp(longName));
+});
+
+test("only user courses expose edit controls and edit keeps ID while moving geometry", async ({
+  page,
+}) => {
+  await expect(page.locator('[data-source="fixture"] .course-edit-button')).toHaveCount(0);
+  const original = await addUserCourse(page, { name: "机械设计基础" });
+  const originalId = await original.getAttribute("data-course-id");
+  await original.getByRole("button", { name: "编辑 机械设计基础" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "编辑课程" });
+  await expect(dialog.getByLabel("课程名称", { exact: true })).toHaveValue("机械设计基础");
+  await expect(dialog.getByLabel("教师（可选）")).toHaveValue("测试教师");
+  await expect(dialog.getByLabel("教室（可选）")).toHaveValue("测试教室");
+  await expect(dialog.getByLabel("星期")).toHaveValue("3");
+  await expect(dialog.getByLabel("开始时间")).toHaveValue("14:00");
+  await expect(dialog.getByLabel("结束时间")).toHaveValue("15:30");
+  await expect(dialog.getByLabel("上课周数")).toHaveValue("1-16");
+
+  await dialog.getByLabel("课程名称", { exact: true }).fill("机械原理");
+  await dialog.getByLabel("教室（可选）").fill("JX03-201");
+  await dialog.getByLabel("星期").selectOption("4");
+  await dialog.getByLabel("开始时间").fill("09:00");
+  await dialog.getByLabel("结束时间").fill("10:30");
+  await dialog.getByRole("button", { name: "保存修改" }).click();
+
+  await expect(page.locator('[data-weekday="3"] [data-source="user"]')).toHaveCount(0);
+  const edited = page.locator('[data-weekday="4"] [data-source="user"]');
+  await expect(edited).toHaveCount(1);
+  await expect(edited).toContainText("机械原理");
+  await expect(edited).toContainText("JX03-201");
+  await expect(edited).toHaveAttribute("data-course-id", originalId!);
+  const day = await box(page.locator('[data-weekday="4"]'));
+  const editedBox = await box(edited);
+  expect(editedBox.y - day.y).toBeCloseTo(120, 0);
+  expect(editedBox.height).toBeCloseTo(90, 0);
+});
+
+test("editing weeks can hide a course without deleting it", async ({ page }) => {
+  const card = await addUserCourse(page, { name: "周数调整课程" });
+  await card.getByRole("button", { name: "编辑 周数调整课程" }).click();
+  const dialog = page.getByRole("dialog", { name: "编辑课程" });
+  await dialog.getByLabel("上课周数").fill("4-8,10,12-15");
+  await dialog.getByRole("button", { name: "保存修改" }).click();
+  await expect(page.locator('[data-source="user"]')).toHaveCount(0);
+});
+
+test("invalid edit is blocked and cancel preserves the original course", async ({ page }) => {
+  const card = await addUserCourse(page, { name: "不可破坏课程" });
+  const originalId = await card.getAttribute("data-course-id");
+  const originalTitle = await card.getAttribute("title");
+  await card.getByRole("button", { name: "编辑 不可破坏课程" }).click();
+  const dialog = page.getByRole("dialog", { name: "编辑课程" });
+  await dialog.getByLabel("课程名称", { exact: true }).fill("");
+  await dialog.getByLabel("开始时间").fill("15:30");
+  await dialog.getByLabel("结束时间").fill("14:00");
+  await dialog.getByLabel("上课周数").fill("abc");
+  await dialog.getByRole("button", { name: "保存修改" }).click();
+  await expect(dialog.getByText("课程名称不能为空")).toBeVisible();
+  await expect(dialog.getByText("结束时间必须晚于开始时间，且不能跨午夜")).toBeVisible();
+  await expect(dialog.getByText("周数格式不正确，请使用 1-4,7,10-12")).toBeVisible();
+
+  await dialog.getByLabel("课程名称", { exact: true }).fill("越界修改");
+  await dialog.getByLabel("开始时间").fill("06:00");
+  await dialog.getByLabel("结束时间").fill("07:00");
+  await dialog.getByLabel("上课周数").fill("1-16");
+  await dialog.getByRole("button", { name: "保存修改" }).click();
+  await expect(dialog.getByText("课程时间超出当前显示范围（07:00–22:00）")).toBeVisible();
+  await dialog.getByRole("button", { name: "取消" }).click();
+
+  const unchanged = page.locator(`[data-course-id="${originalId}"]`);
+  await expect(unchanged).toHaveCount(1);
+  await expect(unchanged).toHaveAttribute("title", originalTitle!);
+  await expect(page.getByText("越界修改", { exact: true })).toHaveCount(0);
+});
+
+test("edit cancel discards every changed field without creating a copy", async ({ page }) => {
+  const card = await addUserCourse(page, { name: "保持原样课程", classroom: "原教室" });
+  const id = await card.getAttribute("data-course-id");
+  await card.getByRole("button", { name: "编辑 保持原样课程" }).click();
+  const dialog = page.getByRole("dialog", { name: "编辑课程" });
+  await dialog.getByLabel("课程名称", { exact: true }).fill("不应保存");
+  await dialog.getByLabel("星期").selectOption("6");
+  await dialog.getByLabel("开始时间").fill("08:00");
+  await dialog.getByRole("button", { name: "取消" }).click();
+  await expect(page.locator('[data-source="user"]')).toHaveCount(1);
+  await expect(page.locator(`[data-course-id="${id}"]`)).toContainText("保持原样课程");
+  await expect(page.locator(`[data-course-id="${id}"]`)).toContainText("原教室");
+  await expect(page.getByText("不应保存", { exact: true })).toHaveCount(0);
+});
+
+test("delete confirmation supports cancel and then removes by course ID", async ({ page }) => {
+  let card = await addUserCourse(page, { name: "待删除课程" });
+  await card.getByRole("button", { name: "编辑 待删除课程" }).click();
+  let dialog = page.getByRole("dialog", { name: "编辑课程" });
+  await dialog.getByRole("button", { name: "删除 待删除课程" }).click();
+  await expect(dialog.getByText("确定删除“待删除课程”吗？")).toBeVisible();
+  await dialog.getByRole("button", { name: "保留课程" }).click();
+  await expect(dialog.getByText("确定删除“待删除课程”吗？")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "取消" }).click();
+  await expect(page.locator('[data-source="user"]')).toHaveCount(1);
+
+  card = page.locator('[data-source="user"]');
+  await card.getByRole("button", { name: "编辑 待删除课程" }).click();
+  dialog = page.getByRole("dialog", { name: "编辑课程" });
+  await dialog.getByRole("button", { name: "删除 待删除课程" }).click();
+  await dialog.getByRole("button", { name: "确认删除 待删除课程" }).click();
+  await expect(page.locator('[data-source="user"]')).toHaveCount(0);
+});
+
+test("deleting an overlap recalculates the remaining course to one lane", async ({ page }) => {
+  const first = await addUserCourse(page, {
+    name: "用户重叠 A",
+    weekday: "6",
+    startTime: "08:00",
+    endTime: "09:30",
+    weeks: "3",
+  });
+  const second = await addUserCourse(page, {
+    name: "用户重叠 B",
+    weekday: "6",
+    startTime: "09:00",
+    endTime: "10:00",
+    weeks: "3",
+  });
+  await expect(first).toHaveAttribute("data-lane-count", "2");
+  await expect(second).toHaveAttribute("data-lane-count", "2");
+  await second.getByRole("button", { name: "编辑 用户重叠 B" }).click();
+  const dialog = page.getByRole("dialog", { name: "编辑课程" });
+  await dialog.getByRole("button", { name: "删除 用户重叠 B" }).click();
+  await dialog.getByRole("button", { name: "确认删除 用户重叠 B" }).click();
+  await expect(page.locator('[data-source="user"]')).toHaveCount(1);
+  await expect(first).toHaveAttribute("data-lane", "0");
+  await expect(first).toHaveAttribute("data-lane-count", "1");
 });

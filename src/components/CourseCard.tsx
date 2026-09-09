@@ -1,12 +1,14 @@
 import type { PositionedCourse } from "../core/timetable-layout.ts";
+import type { Course } from "../types/course.ts";
 
 interface CourseCardProps {
   readonly item: PositionedCourse;
   readonly pxPerMinute: number;
   readonly isUserCourse: boolean;
+  readonly onEdit?: (course: Course) => void;
 }
 
-export function CourseCard({ item, pxPerMinute, isUserCourse }: CourseCardProps) {
+export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit }: CourseCardProps) {
   const { course, lane, laneCount } = item;
   const laneWidth = 100 / laneCount;
   const density =
@@ -39,6 +41,16 @@ export function CourseCard({ item, pxPerMinute, isUserCourse }: CourseCardProps)
       aria-label={title}
     >
       {isUserCourse && <span className="course-origin">用户添加</span>}
+      {isUserCourse && onEdit && (
+        <button
+          type="button"
+          className="course-edit-button"
+          onClick={() => onEdit(course)}
+          aria-label={`编辑 ${course.name}`}
+        >
+          编辑
+        </button>
+      )}
       <strong className="course-name">{course.name}</strong>
       <span className="course-time">
         {course.startTime}–{course.endTime}

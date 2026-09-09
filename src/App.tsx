@@ -8,6 +8,7 @@ import type { Course } from "./types/course.ts";
 export function App() {
   const [userCourses, setUserCourses] = useState<readonly Course[]>([]);
   const [isAdding, setIsAdding] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const courses = useMemo(() => [...TEST_COURSES, ...userCourses], [userCourses]);
   const userCourseIds = useMemo(
     () => new Set(userCourses.map((course) => course.id)),
@@ -46,15 +47,29 @@ export function App() {
         currentWeek={TEST_TIMETABLE.currentWeek}
         axis={TEST_TIMETABLE.axis}
         pxPerMinute={TEST_TIMETABLE.pxPerMinute}
+        onEditCourse={(course) => setEditingCourse(course)}
       />
-      {isAdding && (
+      {(isAdding || editingCourse) && (
         <CourseForm
           axis={TEST_TIMETABLE.axis}
-          onAdd={(course) => {
-            setUserCourses((current) => [...current, course]);
+          course={editingCourse ?? undefined}
+          onSave={(course) => {
+            setUserCourses((current) =>
+              editingCourse
+                ? current.map((item) => (item.id === editingCourse.id ? course : item))
+                : [...current, course],
+            );
             setIsAdding(false);
+            setEditingCourse(null);
           }}
-          onCancel={() => setIsAdding(false)}
+          onDelete={(id) => {
+            setUserCourses((current) => current.filter((course) => course.id !== id));
+            setEditingCourse(null);
+          }}
+          onCancel={() => {
+            setIsAdding(false);
+            setEditingCourse(null);
+          }}
         />
       )}
     </main>

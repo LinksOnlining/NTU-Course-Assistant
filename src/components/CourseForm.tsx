@@ -5,6 +5,7 @@ import {
   COURSE_TEACHER_MAX_LENGTH,
   validateCourseInput,
 } from "../core/course-input.ts";
+import { formatWeeks } from "../core/weeks.ts";
 import type { Course } from "../types/course.ts";
 import type { CourseInput, CourseInputErrors } from "../types/course-input.ts";
 import type { TimeRange } from "../types/time.ts";
@@ -23,13 +24,31 @@ const INITIAL_INPUT: CourseInput = {
 
 interface CourseFormProps {
   readonly axis: TimeRange;
-  readonly onAdd: (course: Course) => void;
+  readonly course?: Course;
+  readonly onSave: (course: Course) => void;
+  readonly onDelete?: (id: string) => void;
   readonly onCancel: () => void;
 }
 
-export function CourseForm({ axis, onAdd, onCancel }: CourseFormProps) {
-  const [input, setInput] = useState<CourseInput>(INITIAL_INPUT);
+function inputFromCourse(course: Course): CourseInput {
+  return {
+    name: course.name,
+    teacher: course.teacher ?? "",
+    classroom: course.classroom ?? "",
+    weekday: course.weekday,
+    startTime: course.startTime,
+    endTime: course.endTime,
+    weeks: formatWeeks(course.weeks),
+  };
+}
+
+export function CourseForm({ axis, course, onSave, onDelete, onCancel }: CourseFormProps) {
+  const isEditing = course !== undefined;
+  const [input, setInput] = useState<CourseInput>(() =>
+    course ? inputFromCourse(course) : INITIAL_INPUT,
+  );
   const [errors, setErrors] = useState<CourseInputErrors>({});
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const update = <Field extends keyof CourseInput>(field: Field, value: CourseInput[Field]) => {
     setInput((current) => ({ ...current, [field]: value }));
@@ -38,12 +57,12 @@ export function CourseForm({ axis, onAdd, onCancel }: CourseFormProps) {
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = validateCourseInput(input, crypto.randomUUID(), { axis });
+    const result = validateCourseInput(input, course?.id ?? crypto.randomUUID(), { axis });
     if (!result.ok) {
       setErrors(result.errors);
       return;
     }
-    onAdd(result.course);
+    onSave(result.course);
   };
 
   return (
@@ -56,14 +75,14 @@ export function CourseForm({ axis, onAdd, onCancel }: CourseFormProps) {
       >
         <div className="course-form-heading">
           <div>
-            <p className="eyebrow">PHASE 2.1 · 仅保存在内存</p>
-            <h2 id="course-form-title">添加课程</h2>
+            <p className="eyebrow">PHASE 2.2 · 仅保存在内存</p>
+            <h2 id="course-form-title">{isEditing ? "编辑课程" : "添加课程"}</h2>
           </div>
           <button
             type="button"
             className="icon-button"
             onClick={onCancel}
-            aria-label="关闭添加课程表单"
+            aria-label={`关闭${isEditing ? "编辑" : "添加"}课程表单`}
           >
             ×
           </button>
@@ -163,13 +182,46 @@ export function CourseForm({ axis, onAdd, onCancel }: CourseFormProps) {
             当前时间轴显示 {axis.startTime}–{axis.endTime}，超出范围的课程暂不能保存。
           </p>
           <div className="form-actions">
+            {isEditing && course && onDelete && (
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => setIsConfirmingDelete(true)}
+                aria-label={`删除 ${course.name}`}
+              >
+                删除课程
+              </button>
+            )}
+            <span className="form-actions-spacer" />
             <button type="button" className="secondary-button" onClick={onCancel}>
               取消
             </button>
             <button type="submit" className="primary-button">
-              保存课程
+              {isEditing ? "保存修改" : "保存课程"}
             </button>
           </div>
+          {isConfirmingDelete && course && onDelete && (
+            <div className="delete-confirmation" role="alert">
+              <p>确定删除“{course.name}”吗？</p>
+              <div>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setIsConfirmingDelete(false)}
+                >
+                  保留课程
+                </button>
+                <button
+                  type="button"
+                  className="danger-button danger-button--confirm"
+                  onClick={() => onDelete(course.id)}
+                  aria-label={`确认删除 ${course.name}`}
+                >
+                  确认删除
+                </button>
+              </div>
+            </div>
+          )}
         </form>
       </section>
     </div>

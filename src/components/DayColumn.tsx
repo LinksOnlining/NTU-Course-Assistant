@@ -1,4 +1,5 @@
 import type { PositionedCourse } from "../core/timetable-layout.ts";
+import type { Course } from "../types/course.ts";
 import { CourseCard } from "./CourseCard.tsx";
 
 interface DayColumnProps {
@@ -8,6 +9,7 @@ interface DayColumnProps {
   readonly height: number;
   readonly pxPerMinute: number;
   readonly userCourseIds: ReadonlySet<string>;
+  readonly onEditCourse?: (course: Course) => void;
 }
 
 export function DayColumn({
@@ -17,6 +19,7 @@ export function DayColumn({
   height,
   pxPerMinute,
   userCourseIds,
+  onEditCourse,
 }: DayColumnProps) {
   return (
     <section
@@ -32,6 +35,7 @@ export function DayColumn({
           item={item}
           pxPerMinute={pxPerMinute}
           isUserCourse={userCourseIds.has(item.course.id)}
+          onEdit={onEditCourse}
         />
       ))}
     </section>
