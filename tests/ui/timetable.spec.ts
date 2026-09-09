@@ -427,6 +427,26 @@ test("storage failures keep the original UI state and show a clear error", async
   await expect(original).toHaveCount(1);
 });
 
+test("a failed insert does not create a course in the UI", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command === "load_courses") return { courses: [], warnings: [] };
+          if (command === "insert_course") throw "保存课程失败，请稍后重试。";
+          throw "未预期的存储命令";
+        },
+      },
+    });
+  });
+  await page.reload();
+  await addUserCourse(page, { name: "不应出现的课程" });
+  const dialog = page.getByRole("dialog", { name: "添加课程" });
+  await expect(dialog.getByText("保存课程失败，请稍后重试。")).toBeVisible();
+  await expect(page.locator('[data-source="user"]')).toHaveCount(0);
+});
+
 test("a stored course outside the current axis is skipped without crashing", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
@@ -460,5 +480,27 @@ test("a stored course outside the current axis is skipped without crashing", asy
     page.getByText("课程“轴外损坏课程”超出当前显示范围，已跳过且未修改原数据。"),
   ).toBeVisible();
   await expect(page.locator('[data-course-id="outside-axis"]')).toHaveCount(0);
+  await expect(page.getByTestId("day-column")).toHaveCount(7);
+});
+
+test("unsupported database version leaves the app usable but disables writes", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command === "load_courses") {
+            throw "本地课程数据暂时无法加载：数据库来自较新版本，请升级应用后重试。";
+          }
+          throw "存储不可用";
+        },
+      },
+    });
+  });
+  await page.reload();
+  await expect(
+    page.getByText("本地课程数据暂时无法加载：数据库来自较新版本，请升级应用后重试。"),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "添加课程" })).toBeDisabled();
   await expect(page.getByTestId("day-column")).toHaveCount(7);
 });

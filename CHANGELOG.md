@@ -2,6 +2,11 @@
 
 ## 未发布 — 2026-09-09
 
+- **Phase 2 PASS**：完成 Phase 2.4 持久化健壮性、恢复验证与 Phase 2 总验收；没有进入 PDF、教务导入、提醒、自启动或 Phase 3。
+- 新增独立 SQLite 测试，覆盖数据库不存在时自动建库、关闭重开、混合坏记录隔离且原行保留、未来 `user_version` 拒绝且数据不变、3 秒 busy timeout 和写失败无数据损坏。
+- 数据库初始化失败继续打开应用并禁用写入；未来 schema 向用户显示升级提示，内部错误仅写日志。新增/编辑/删除失败均验证 UI 保留原状态。
+- 64 项 TypeScript 单元、28 项架构、9 项 Rust 数据库、207 项 UI 场景（201 通过、6 项条件跳过）及 typecheck、clippy、lint、format、build、verify 全部通过。真实 Tauri 从数据库不存在开始完成四轮启动和添加/编辑/删除重启恢复，原数据库随后恢复。
+
 - **Phase 2.3 PASS**：使用 bundled rusqlite 在 Tauri Rust 边界实现课程加载、新增、更新和删除；数据库由 `app_local_data_dir()` 定位，fixture 不入库。
 - 新增单表 schema 与事务化 `user_version` 0→1 migration；weeks 以严格验证的 JSON 保存，null 教师/教室/节次完整往返。损坏记录跳过并提示，不修改原数据；数据库错误不提前改变 UI。
 - 添加、编辑和删除均改为 SQLite 成功后更新 React；启动自动加载用户课程。生产构建隐藏 fixture，开发浏览器保留内存测试 adapter。

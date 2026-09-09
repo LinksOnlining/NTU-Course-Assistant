@@ -110,3 +110,44 @@
 4. 再次正常关闭并重启，已删除 ID 仍不存在。最后通过标准 `WM_CLOSE` 正常退出。
 
 数据库文件保留在应用数据目录，测试课程最终已删除，schema 和空数据库继续保留供下次运行。项目进程、Vite 1420 和 WebView 调试 9223 端口均在验收后清理。
+
+## Phase 2.4 与 Phase 2 总验收：PASS
+
+本阶段只收尾持久化健壮性、恢复验证与 Phase 2 总验收，没有增加业务功能，也没有进入 Phase 3。
+
+### 数据库健壮性
+
+- 从数据库文件完全不存在开始启动真实应用，自动创建目录、数据库、`courses` 表和 `user_version=1`；首次读取为 0 门用户课程，界面可正常添加。
+- 独立数据库验证连接关闭与重开后数据一致。mixed-record 测试同时保存合法记录、轴外合法记录、非法 weeks JSON、非法 weekday、非法时间和无法解码为文本的字段；四条坏记录逐条跳过，合法记录继续加载，六条原始记录均留在数据库。Rust 日志包含各行具体原因，UI 只显示概括提示。轴外记录由前端布局边界跳过且不修改数据库。
+- `user_version=2` 的独立数据库被拒绝打开；再次检查仍为版本 2，预置 sentinel 数据不变，没有覆盖、降级或删除。界面显示“数据库来自较新版本，请升级应用后重试”，应用不崩溃且添加入口禁用。
+- 独立连接以 `BEGIN IMMEDIATE` 持有写锁。应用连接保留 3 秒 busy timeout，写入明确失败且不 panic；释放锁后原课程仍是唯一记录。
+- UI 自动测试分别注入 INSERT、UPDATE、DELETE 失败；添加不出现伪课程，编辑保留原卡片，删除保留原课程。初始化/加载失败时应用继续显示七天时间轴并禁止写入。
+- fixture 未经过 storage service，正式构建中不存在测试课程；migration、CRUD 与恢复测试均只处理用户课程。
+
+### 自动验证
+
+| 检查 | 结果 |
+| --- | --- |
+| npm run typecheck | PASS |
+| npm run test:unit | PASS，64 项 |
+| npm run test:arch | PASS，28 项 |
+| npm run test:ui | PASS，207 场景中 201 项通过、6 项按既有条件跳过 |
+| npm run lint / format:check | PASS |
+| npm run build | PASS，31 个模块 |
+| npm run verify | PASS |
+| cargo test | PASS，9 项 |
+| cargo fmt --check | PASS |
+| cargo clippy --all-targets -- -D warnings | PASS |
+
+### 真实 Windows Tauri 总验收
+
+先确认项目进程、Vite 1420 和 WebView 调试 9223 端口均为空，将原 AppData 数据库及 WAL/SHM 精确备份后，使正式数据库路径完全不存在。随后四次实际执行 `npm run tauri dev`；每次均为项目 exe 的 `Tauri Window` 独立窗口，标题“大学课程表”，不是独立浏览器。
+
+1. 首次启动日志确认在 Windows Local AppData 自动创建 `courses.sqlite3`（schema 1）；Rust `load_courses` 返回 0 门，界面可用。
+2. 添加“机械设计基础”、周三、14:00–15:30、1–16 周、JX02-407、测试教师；关闭重启后课程及生成的 UUID 完整恢复。
+3. 编辑为“机械原理”、周四、09:00–10:30、JX03-201；ID 保持不变，top=120px、height=90px。再次关闭重启后修改仍存在。
+4. 应用内确认删除；再次关闭重启后 UI 与 Rust `load_courses` 均确认该 ID 不存在。
+
+四轮均经标准 `WM_CLOSE` 正常退出。验收结束后项目进程和两个端口为空，Phase 2.4 测试库移出正式位置，原数据库及 WAL/SHM 已完整恢复。
+
+Phase 2.1–2.4 全部满足验收条件，项目状态正式记为 **Phase 2 PASS**。停止等待用户确认，不进入 Phase 3。

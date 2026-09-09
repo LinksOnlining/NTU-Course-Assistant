@@ -72,6 +72,10 @@ impl CourseDatabase {
 
     fn from_connection(connection: Connection) -> Result<Self, StorageError> {
         connection.busy_timeout(Duration::from_secs(3))?;
+        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version > CURRENT_SCHEMA_VERSION {
+            return Err(StorageError::UnsupportedSchema(version));
+        }
         connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")?;
         let mut database = Self { connection };
         database.migrate()?;
@@ -342,12 +346,54 @@ mod tests {
     }
 
     #[test]
+    fn invalid_rows_are_isolated_while_valid_rows_still_load() {
+        let database = database();
+        database
+            .insert_course(&course())
+            .expect("insert valid course");
+        database
+            .connection
+            .execute_batch(
+                "PRAGMA ignore_check_constraints = ON;
+                 INSERT INTO courses VALUES
+                   ('bad-weeks','坏周数',NULL,NULL,1,'08:00','09:00',NULL,NULL,'not-json'),
+                   ('bad-weekday','坏星期',NULL,NULL,9,'08:00','09:00',NULL,NULL,'[1]'),
+                   ('bad-time','坏时间',NULL,NULL,1,'bad','09:00',NULL,NULL,'[1]'),
+                   ('bad-type',X'0102',NULL,NULL,1,'08:00','09:00',NULL,NULL,'[1]'),
+                   ('outside-axis','轴外课程',NULL,NULL,1,'06:00','07:00',NULL,NULL,'[1]');
+                 PRAGMA ignore_check_constraints = OFF;",
+            )
+            .expect("insert deliberately invalid rows");
+        let loaded = database.load_courses().expect("load mixed records");
+        assert_eq!(
+            loaded
+                .courses
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["outside-axis", "course-id"]
+        );
+        assert_eq!(loaded.warnings.len(), 4);
+        let stored_count: i64 = database
+            .connection
+            .query_row("SELECT count(*) FROM courses", [], |row| row.get(0))
+            .expect("count unchanged records");
+        assert_eq!(stored_count, 6);
+    }
+
+    #[test]
     fn add_update_and_delete_survive_file_reopen() {
         let path = temporary_database_path();
         remove_database_files(&path);
         let mut expected = course();
         {
             let database = CourseDatabase::open(&path).expect("create database file");
+            assert_eq!(database.schema_version().expect("new schema version"), 1);
+            assert!(database
+                .load_courses()
+                .expect("new database is empty")
+                .courses
+                .is_empty());
             database
                 .insert_course(&expected)
                 .expect("persist inserted course");
@@ -386,13 +432,59 @@ mod tests {
 
     #[test]
     fn newer_schema_is_rejected_without_modification() {
-        let connection = Connection::open_in_memory().expect("open memory database");
+        let path = temporary_database_path();
+        remove_database_files(&path);
+        let connection = Connection::open(&path).expect("open future database");
         connection
-            .pragma_update(None, "user_version", 2)
-            .expect("set future version");
+            .execute_batch(
+                "CREATE TABLE sentinel(value TEXT NOT NULL);
+                 INSERT INTO sentinel VALUES ('keep-me');
+                 PRAGMA user_version = 2;",
+            )
+            .expect("create future database");
+        drop(connection);
         assert!(matches!(
-            CourseDatabase::from_connection(connection),
+            CourseDatabase::open(&path),
             Err(StorageError::UnsupportedSchema(2))
         ));
+        let unchanged = Connection::open(&path).expect("reopen future database");
+        let version: i64 = unchanged
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .expect("future version remains");
+        let journal_mode: String = unchanged
+            .pragma_query_value(None, "journal_mode", |row| row.get(0))
+            .expect("future journal mode remains");
+        let value: String = unchanged
+            .query_row("SELECT value FROM sentinel", [], |row| row.get(0))
+            .expect("future data remains");
+        assert_eq!(version, 2);
+        assert_eq!(journal_mode, "delete");
+        assert_eq!(value, "keep-me");
+        drop(unchanged);
+        remove_database_files(&path);
+    }
+
+    #[test]
+    fn busy_write_returns_error_after_timeout_without_data_loss() {
+        let path = temporary_database_path();
+        remove_database_files(&path);
+        let database = CourseDatabase::open(&path).expect("create locked database");
+        let original = course();
+        database.insert_course(&original).expect("insert original");
+        let lock = Connection::open(&path).expect("open lock connection");
+        lock.execute_batch("BEGIN IMMEDIATE;")
+            .expect("hold write lock");
+        let mut blocked = course();
+        blocked.id = "blocked-course".into();
+        let started = std::time::Instant::now();
+        let result = database.insert_course(&blocked);
+        assert!(result.is_err());
+        assert!(started.elapsed() >= Duration::from_secs(2));
+        lock.execute_batch("ROLLBACK;").expect("release write lock");
+        let loaded = database.load_courses().expect("load after busy failure");
+        assert_eq!(loaded.courses, vec![original]);
+        drop(lock);
+        drop(database);
+        remove_database_files(&path);
     }
 }

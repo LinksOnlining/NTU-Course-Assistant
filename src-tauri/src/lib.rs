@@ -10,7 +10,7 @@ use tauri::{Manager, State};
 
 enum StorageAvailability {
     Ready(CourseDatabase),
-    Unavailable,
+    Unavailable { message: String },
 }
 
 struct CourseState(Mutex<StorageAvailability>);
@@ -25,13 +25,23 @@ impl CourseState {
             .0
             .lock()
             .map_err(|_| "课程存储当前不可用，请重新启动应用。".to_string())?;
-        let StorageAvailability::Ready(database) = &*storage else {
-            return Err("无法访问本地课程数据库，请检查应用数据目录权限后重启。".into());
+        let database = match &*storage {
+            StorageAvailability::Ready(database) => database,
+            StorageAvailability::Unavailable { message } => return Err(message.clone()),
         };
         action(database).map_err(|error| {
             eprintln!("Course database {operation} failed: {error}");
             format!("{operation}失败，请稍后重试。")
         })
+    }
+}
+
+fn initialization_message(error: &db::StorageError) -> String {
+    match error {
+        db::StorageError::UnsupportedSchema(_) => {
+            "本地课程数据暂时无法加载：数据库来自较新版本，请升级应用后重试。".into()
+        }
+        _ => "本地课程数据暂时无法加载，请检查应用数据目录权限或文件状态后重启。".into(),
     }
 }
 
@@ -92,13 +102,17 @@ pub fn run() {
                                 "Course database initialization failed at {}: {error}",
                                 path.display()
                             );
-                            StorageAvailability::Unavailable
+                            StorageAvailability::Unavailable {
+                                message: initialization_message(&error),
+                            }
                         }
                     }
                 }
                 Err(error) => {
                     eprintln!("Application data directory resolution failed: {error}");
-                    StorageAvailability::Unavailable
+                    StorageAvailability::Unavailable {
+                        message: "本地课程数据暂时无法加载，请检查应用数据目录权限后重启。".into(),
+                    }
                 }
             };
             app.manage(CourseState(Mutex::new(storage)));
