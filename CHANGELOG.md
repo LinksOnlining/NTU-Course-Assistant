@@ -2,6 +2,12 @@
 
 ## 未发布 — 2026-09-09
 
+- **Phase 2.3 PASS**：使用 bundled rusqlite 在 Tauri Rust 边界实现课程加载、新增、更新和删除；数据库由 `app_local_data_dir()` 定位，fixture 不入库。
+- 新增单表 schema 与事务化 `user_version` 0→1 migration；weeks 以严格验证的 JSON 保存，null 教师/教室/节次完整往返。损坏记录跳过并提示，不修改原数据；数据库错误不提前改变 UI。
+- 添加、编辑和删除均改为 SQLite 成功后更新 React；启动自动加载用户课程。生产构建隐藏 fixture，开发浏览器保留内存测试 adapter。
+- 64 项 TypeScript 单元、28 项架构、7 项 Rust 数据库、9 组窗口/缩放矩阵中的 183 项 UI 测试以及 clippy、lint、format、build、verify 全部通过。真实 Tauri AppData 数据库完成添加/编辑/删除及四轮启动恢复验收。
+- 本阶段没有进入 Phase 2.4、PDF、教务导入、提醒、自启动或其他后续功能。
+
 - **Phase 2.2 PASS**：同一课程表单支持编辑预填与统一校验，修改名称、星期、时间和周数后按原 ID 更新并立即重排；取消保持原记录不变。
 - 用户课程提供键盘可达的编辑入口和应用内删除确认；fixture 不渲染操作入口。取消删除零修改，确认删除按 ID 移除，重叠课程 lane 随即重新计算。
 - 64 项单元、26 项架构、9 组窗口/缩放矩阵中的 165 项 UI 测试以及 lint、format、build、verify 全部通过。真实 Tauri WebView 完成指定课程添加、编辑、ID 保留、120px/90px 几何、删除与重启空状态验收。

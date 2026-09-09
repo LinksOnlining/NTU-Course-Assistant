@@ -72,3 +72,41 @@
 首次运行先添加“机械设计基础”：周三、14:00–15:30、1–16 周、JX02-407、测试教师。随后从用户卡片进入编辑，周数正确预填为 `1-16`；改为“机械原理”、周四、09:00–10:30、JX03-201 后保存。原周三卡片消失，新卡片 ID 与编辑前 UUID 完全一致，相对 07:00 的 top 为 120px、高度为 90px。通过应用内确认删除后，用户课程数量为 0，页面和控制台错误均为空。
 
 真实窗口经标准 `WM_CLOSE` 正常退出。第二次启动后用户课程仍为 0，符合 Phase 2.2 内存状态边界；随后再次正常关闭应用。
+
+## Phase 2.3：PASS
+
+本阶段只实现 SQLite 与用户课程持久化，没有进入 Phase 2.4 或任何导入、提醒、自启动功能。
+
+### 数据库设计与错误边界
+
+- 选择 Rust `rusqlite 0.40.2` + bundled SQLite；Tauri 2.11.5 通过四个受限 command 提供 CRUD，前端 `course-storage` service 是唯一 Tauri API 调用者。没有 ORM，也没有允许 React 执行任意 SQL。
+- 路径由 `app.path().app_local_data_dir()` 获取。实机确认数据库位于 Windows 用户本地应用数据目录下的 `com.ntu-course-assistant.desktop/courses.sqlite3`；未写入源码、安装或当前工作目录，绝对用户名路径不写入公开文档。
+- schema 只有 `courses` 表，id 为主键；teacher/classroom/start_period/end_period 保留 null；weekday、节次和文本长度有约束；时间以 HH:mm 文本保存；weeks 为 JSON 数字数组。
+- SQLite `user_version=1` 记录版本。0→1 migration 在事务中创建表并更新版本；高于支持版本会拒绝打开且不修改文件。使用 WAL、外键检查和 3 秒 busy timeout。
+- Rust 在写入前校验 Course，加载逐行解析 JSON 并校验。异常行记录内部错误、跳过并向 UI 返回概括提示，数据库原值不变。初始化失败时应用继续打开但禁用添加；INSERT/UPDATE/DELETE 失败时表单显示错误且 React 状态保持原值。
+- 正式构建不显示 fixture；fixture 从未传给 storage service。非 Tauri 的 Vite 开发测试使用独立内存 adapter，Tauri 运行始终调用 SQLite。
+
+### 自动验证
+
+| 检查 | 结果 |
+| --- | --- |
+| npm run typecheck / test:unit | PASS，64 项 TypeScript 单元测试 |
+| npm run test:arch | PASS，28 项；React 不含 SQL/Tauri 调用，core 不依赖存储 |
+| npm run test:ui | PASS，189 场景中 183 项通过、6 项按既有条件跳过 |
+| UI 存储错误 | PASS，更新/删除失败保留原卡片并显示明确错误；轴外损坏记录跳过且时间轴继续运行 |
+| cargo test | PASS，7 项；migration、insert/load、null、1–16 周、update、delete、损坏 JSON、未来版本拒绝及文件关闭重开均覆盖 |
+| cargo fmt --check | PASS |
+| cargo clippy --all-targets -- -D warnings | PASS |
+| npm run lint / format:check | PASS |
+| npm run build / verify | PASS，生产构建 31 个模块 |
+
+### 真实 Windows Tauri 持久化验收
+
+四轮实际执行 `npm run tauri dev`，每轮均运行项目 exe 的 `Tauri Window` 独立窗口；本机 DPI 为 192（200%）。WebView 检查直接连接真实 Tauri 页面，并额外调用 Rust `load_courses` 核对数据库内容。
+
+1. 首次自动创建 schema 1 数据库。添加“机械设计基础”、周三、14:00–15:30、1–16 周、JX02-407、测试教师；Rust 读取结果包含生成的 UUID、完整 1–16 数组以及 null 节次。
+2. 正常关闭并重启，原课程存在。编辑为“机械原理”、周四、09:00–10:30、JX03-201；数据库返回相同 UUID，UI top=120px、height=90px。
+3. 再次正常关闭并重启，编辑结果完整保留。应用内确认删除后，UI 与 `load_courses` 均找不到该 ID。
+4. 再次正常关闭并重启，已删除 ID 仍不存在。最后通过标准 `WM_CLOSE` 正常退出。
+
+数据库文件保留在应用数据目录，测试课程最终已删除，schema 和空数据库继续保留供下次运行。项目进程、Vite 1420 和 WebView 调试 9223 端口均在验收后清理。

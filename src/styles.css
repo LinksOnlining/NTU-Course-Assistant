@@ -130,6 +130,11 @@ button {
   background: #286b5b;
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .add-course-button:focus-visible,
 .primary-button:focus-visible,
 .secondary-button:focus-visible,
@@ -171,6 +176,22 @@ select:focus-visible {
   color: #805a27;
   font-size: 10px;
   letter-spacing: 0.04em;
+}
+
+.storage-notice {
+  flex: 0 0 auto;
+  margin: 0 auto 8px;
+  width: min(100%, 1600px);
+  color: #596d66;
+  font-size: 11px;
+}
+
+.storage-notice--error {
+  color: #9b403b;
+}
+
+.storage-notice--ready {
+  color: #775f39;
 }
 
 .timetable-scroll {

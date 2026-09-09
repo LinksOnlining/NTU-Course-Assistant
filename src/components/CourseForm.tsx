@@ -25,8 +25,8 @@ const INITIAL_INPUT: CourseInput = {
 interface CourseFormProps {
   readonly axis: TimeRange;
   readonly course?: Course;
-  readonly onSave: (course: Course) => void;
-  readonly onDelete?: (id: string) => void;
+  readonly onSave: (course: Course) => Promise<void>;
+  readonly onDelete?: (id: string) => Promise<void>;
   readonly onCancel: () => void;
 }
 
@@ -49,20 +49,41 @@ export function CourseForm({ axis, course, onSave, onDelete, onCancel }: CourseF
   );
   const [errors, setErrors] = useState<CourseInputErrors>({});
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [storageError, setStorageError] = useState("");
 
   const update = <Field extends keyof CourseInput>(field: Field, value: CourseInput[Field]) => {
     setInput((current) => ({ ...current, [field]: value }));
     setErrors({});
   };
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const result = validateCourseInput(input, course?.id ?? crypto.randomUUID(), { axis });
     if (!result.ok) {
       setErrors(result.errors);
       return;
     }
-    onSave(result.course);
+    setIsSaving(true);
+    setStorageError("");
+    try {
+      await onSave(result.course);
+    } catch (error) {
+      setStorageError(error instanceof Error ? error.message : "课程保存失败，请稍后重试。");
+      setIsSaving(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    if (!onDelete) return;
+    setIsSaving(true);
+    setStorageError("");
+    try {
+      await onDelete(id);
+    } catch (error) {
+      setStorageError(error instanceof Error ? error.message : "课程删除失败，请稍后重试。");
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -178,6 +199,11 @@ export function CourseForm({ axis, course, onSave, onDelete, onCancel }: CourseF
               {errors.form}
             </p>
           )}
+          {storageError && (
+            <p className="form-error" role="alert">
+              {storageError}
+            </p>
+          )}
           <p className="axis-note">
             当前时间轴显示 {axis.startTime}–{axis.endTime}，超出范围的课程暂不能保存。
           </p>
@@ -193,11 +219,16 @@ export function CourseForm({ axis, course, onSave, onDelete, onCancel }: CourseF
               </button>
             )}
             <span className="form-actions-spacer" />
-            <button type="button" className="secondary-button" onClick={onCancel}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onCancel}
+              disabled={isSaving}
+            >
               取消
             </button>
-            <button type="submit" className="primary-button">
-              {isEditing ? "保存修改" : "保存课程"}
+            <button type="submit" className="primary-button" disabled={isSaving}>
+              {isSaving ? "正在保存…" : isEditing ? "保存修改" : "保存课程"}
             </button>
           </div>
           {isConfirmingDelete && course && onDelete && (
@@ -214,8 +245,9 @@ export function CourseForm({ axis, course, onSave, onDelete, onCancel }: CourseF
                 <button
                   type="button"
                   className="danger-button danger-button--confirm"
-                  onClick={() => onDelete(course.id)}
+                  onClick={() => void remove(course.id)}
                   aria-label={`确认删除 ${course.name}`}
+                  disabled={isSaving}
                 >
                   确认删除
                 </button>

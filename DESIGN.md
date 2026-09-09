@@ -1,6 +1,6 @@
 # 基础设计（Phase 0 提议）
 
-实施状态（2026-09-09）：Phase 1 和 Phase 2.1–2.2 已通过验收。已在不改变时间轴几何的前提下加入课程添加、编辑、删除、周数解析和统一外部输入校验；用户课程暂存 React 内存，SQLite 和导入尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
+实施状态（2026-09-09）：Phase 1 和 Phase 2.1–2.3 已通过验收。课程添加、编辑和删除通过 Rust `rusqlite` 持久化到 Windows 用户应用数据目录，关闭重启后能够恢复；导入、提醒等后续能力尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
 
 ## 技术方案
 
@@ -8,7 +8,11 @@
 
 Rust 仅负责桌面宿主及必要系统 IO；不引入服务器、全局状态库、UI 大组件库或 ORM。相比 Electron，该选择符合复用系统 WebView 的方向；相比切换 C#/WinUI，保留用户优先评估的 Web UI 技术栈，避免同时改变语言和 UI 开发方式。代价是维护 TypeScript/Rust 两套工具链。
 
-Phase 1 仅内存测试数据。Phase 2 使用 SQLite 本地文件，少量表与事务，Rust 存储边界提供受限 CRUD 命令；React 不拼 SQL。选择 SQLite 是为了后续导入批量写入的事务性，不是为了建立复杂数据库。数据库放应用数据目录，不放安装目录或 Git 仓库。
+Phase 2.3 使用 rusqlite 0.40.2 的 bundled SQLite，Rust 存储边界只提供 `load_courses`、`insert_course`、`update_course`、`delete_course` 四个受限 command；React 通过 `src/services/course-storage.ts` 调用，不接触 SQL。数据库路径由 Tauri `app_local_data_dir()` 解析，实际文件为该目录下 `courses.sqlite3`，不依赖安装目录、源码目录或当前工作目录。
+
+首版 schema 只有 `courses` 表：id 为文本主键，教师、教室和节次允许 null，星期及节次含 CHECK 约束，时间固定存 HH:mm 文本，weeks 存排序去重数字数组的 JSON 文本。`PRAGMA user_version` 记录 schema 版本；0→1 migration 在事务中建表并更新版本，遇到高于程序支持的版本时拒绝打开且不修改数据库。数据库使用 3 秒 busy timeout、WAL 和外键检查，不引入 ORM。
+
+Rust 在命令写入前再次校验 Course，读取时逐行解析 JSON 和校验字段。损坏记录被跳过、记录内部错误并向 UI 返回不含数据库细节的提示；原行不会修改或删除。初始化失败时应用仍打开并禁用添加入口，CRUD 失败时 UI 保留原状态。格式合法但超出当前 UI 时间轴的记录由启动加载边界跳过并提示，避免破坏布局，数据库内容同样保持不变。
 
 PDF.js 是 Phase 3 文本型 PDF 提取候选，需真实南通大学样本验证；它不等于课程识别器。学校规则单独解析文本和位置。扫描件首版提示暂不支持，不假装识别成功。当前不安装 PDF 依赖。
 
@@ -48,6 +52,8 @@ Phase 2.1 已实现共享 `validateCourseInput` 边界：名称 trim 后必填�
 普通用户只填写真实时间。因为尚无经确认的南通大学节次映射，手动新增记录的 `startPeriod`/`endPeriod` 为 null；fixture 可继续携带测试节次。统一校验成功前 UI 不产生 Course，未来导入器应复用同一边界，而不是自行构造正式记录。
 
 Phase 2.2 复用同一个 `CourseForm`：传入已有 Course 时预填字段，周数压缩为可编辑范围文本，保存仍调用 `validateCourseInput` 并沿用原 ID。React 内存数组按 ID 更新或删除；取消不触发状态写入。fixture ID 不进入用户 ID 集合，因此卡片不渲染编辑入口，正常 UI 无法修改或删除 fixture。删除确认后重新执行既有纯布局函数，剩余重叠课程自然恢复 lane 宽度。
+
+Phase 2.3 将状态提交顺序改为“SQLite 成功后更新 React”。插入、更新或删除失败时表单保持打开并显示明确错误，内存状态不提前变化。开发服务器且不在 Tauri 运行时使用进程内测试 adapter 维持 Playwright fixture 能力；正式生产构建不显示 fixture，Tauri 运行始终使用 SQLite。
 
 独立配置：TermConfig（第一教学周周一日期、总周数、时区 Asia/Shanghai），PeriodTime[]（节次、HH:mm 开始/结束）。尚未核实的学校作息绝不作为官方默认值。Phase 1 仅明确标注的测试配置和测试教学周。
 

@@ -382,3 +382,83 @@ test("deleting an overlap recalculates the remaining course to one lane", async 
   await expect(first).toHaveAttribute("data-lane", "0");
   await expect(first).toHaveAttribute("data-lane-count", "1");
 });
+
+test("storage failures keep the original UI state and show a clear error", async ({ page }) => {
+  await page.addInitScript(() => {
+    const storedCourse = {
+      id: "storage-failure-course",
+      name: "数据库原课程",
+      teacher: null,
+      classroom: null,
+      weekday: 3,
+      startPeriod: null,
+      endPeriod: null,
+      startTime: "14:00",
+      endTime: "15:30",
+      weeks: [1, 2, 3],
+    };
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command === "load_courses") return { courses: [storedCourse], warnings: [] };
+          if (command === "update_course") throw "更新课程失败，请稍后重试。";
+          if (command === "delete_course") throw "删除课程失败，请稍后重试。";
+          throw "未预期的存储命令";
+        },
+      },
+    });
+  });
+  await page.reload();
+  const original = page.locator('[data-course-id="storage-failure-course"]');
+  await original.getByRole("button", { name: "编辑 数据库原课程" }).click();
+  let dialog = page.getByRole("dialog", { name: "编辑课程" });
+  await dialog.getByLabel("课程名称", { exact: true }).fill("不应保存的修改");
+  await dialog.getByRole("button", { name: "保存修改" }).click();
+  await expect(dialog.getByText("更新课程失败，请稍后重试。")).toBeVisible();
+  await expect(original).toContainText("数据库原课程");
+  await dialog.getByRole("button", { name: "取消" }).click();
+
+  await original.getByRole("button", { name: "编辑 数据库原课程" }).click();
+  dialog = page.getByRole("dialog", { name: "编辑课程" });
+  await dialog.getByRole("button", { name: "删除 数据库原课程" }).click();
+  await dialog.getByRole("button", { name: "确认删除 数据库原课程" }).click();
+  await expect(dialog.getByText("删除课程失败，请稍后重试。")).toBeVisible();
+  await expect(original).toHaveCount(1);
+});
+
+test("a stored course outside the current axis is skipped without crashing", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command !== "load_courses") throw "未预期的存储命令";
+          return {
+            courses: [
+              {
+                id: "outside-axis",
+                name: "轴外损坏课程",
+                teacher: null,
+                classroom: null,
+                weekday: 3,
+                startPeriod: null,
+                endPeriod: null,
+                startTime: "06:00",
+                endTime: "07:00",
+                weeks: [3],
+              },
+            ],
+            warnings: [],
+          };
+        },
+      },
+    });
+  });
+  await page.reload();
+  await expect(
+    page.getByText("课程“轴外损坏课程”超出当前显示范围，已跳过且未修改原数据。"),
+  ).toBeVisible();
+  await expect(page.locator('[data-course-id="outside-axis"]')).toHaveCount(0);
+  await expect(page.getByTestId("day-column")).toHaveCount(7);
+});
