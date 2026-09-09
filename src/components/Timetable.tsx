@@ -54,7 +54,6 @@ export function Timetable({
             items={days[index]}
             height={timelineHeight}
             pxPerMinute={pxPerMinute}
-            axis={axis}
             userCourseIds={userCourseIds}
             periods={periods}
             onEditCourse={onEditCourse}

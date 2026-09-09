@@ -96,7 +96,8 @@ test("period markers use real start times and preserve breaks", async ({ page })
   const exactCourse = await box(page.locator('[data-course-id="wednesday-first"]'));
   expect(exactCourse.y - wednesday.y).toBeCloseTo(firstBox.y - axis.y, 0);
   expect(exactCourse.height).toBeCloseTo(firstBox.height, 0);
-  await expect(page.locator('[data-weekday="3"] [data-period-guide="1"]')).toHaveCSS("top", "60px");
+  await expect(page.locator(".period-guide")).toHaveCount(0);
+  await expect(page.locator('[data-weekday="3"]')).toHaveCSS("background-image", "none");
   await expect(page.locator('[data-course-id="wednesday-first"] .course-time')).toContainText(
     "第1节 · 08:00–08:45",
   );
