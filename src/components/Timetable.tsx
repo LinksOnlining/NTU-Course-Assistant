@@ -38,7 +38,7 @@ export function Timetable({
     <div className="timetable-scroll" data-testid="timetable-scroll">
       <div className="timetable-grid" data-testid="timetable-grid" style={gridStyle}>
         <div className="week-corner" aria-hidden="true">
-          时间
+          节次 / 时间
         </div>
         {DAYS.map((day) => (
           <div className="day-header" key={day}>
@@ -54,6 +54,7 @@ export function Timetable({
             items={days[index]}
             height={timelineHeight}
             pxPerMinute={pxPerMinute}
+            axis={axis}
             userCourseIds={userCourseIds}
             periods={periods}
             onEditCourse={onEditCourse}

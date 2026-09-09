@@ -1,6 +1,6 @@
 # 基础设计（Phase 0 提议）
 
-实施状态（2026-09-09）：Phase 1、Phase 2、Phase 2.5 和 Phase 2.6 已通过验收。课程添加、编辑和删除以及用户作息通过 Rust `rusqlite` 持久化；连续时间轴按真实分钟显示节次和实际时间。导入、提醒等后续能力尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的正式作息配置。
+实施状态（2026-09-09）：Phase 1、Phase 2、Phase 2.5、Phase 2.6 和 Phase 2.7 已通过验收。课程添加、编辑和删除以及用户作息通过 Rust `rusqlite` 持久化；连续时间轴按真实分钟显示节次、实际时间和课程位置。导入、提醒等后续能力尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的正式作息配置。
 
 ## 技术方案
 
@@ -62,6 +62,8 @@ Phase 2.3 将状态提交顺序改为“SQLite 成功后更新 React”。插入
 Phase 2.5 实现 `PeriodTime` 配置边界和 `periodToTime`、`periodRangeToTimeRange`、`timeRangeToPeriods` 纯函数。配置要求正整数且严格递增的唯一节次、严格 HH:mm、开始早于结束、相邻节次不重叠；正常课间保留。反向映射只有开始和结束均精确命中配置、且中间节次连续时才返回节次范围，否则返回 null，不做近似猜测。
 
 Phase 2.6 将 `PeriodTime[]` 作为用户可配置的作息：设置对话框复用同一份核心校验，允许编辑时间、添加下一节和删除最后一节，最多 30 节且必须从第 1 节连续编号。保存通过 Tauri `save_period_times` 事务完成；首次运行或未保存时使用 test-only fallback，保存后的配置由 `load_period_times` 恢复。`getTimelineBounds` 会将测试轴与作息覆盖范围合并并向整点扩展，TimeAxis 仍是连续分钟轴；课程的 `startTime/endTime` 永不因作息修改而改变，只有精确命中当前配置的原有节次才显示节次标签，不匹配时仅显示实际时间。
+
+Phase 2.7 只调整桌面表现。TimeAxis 的每个节次块把节次、开始和结束时间分层显示；DayColumn 使用与节次起点同一分钟计算的轻量引导线，使课程 top 与对应节次在视觉上可直接对照。小时线只作为次级连续时间参考。课程卡片始终由 `courseTiming` 提供 top/height，不使用离散 grid 行；普通卡片采用 10–12px 内边距和低饱和稳定色，短课和重叠 lane 会依据可用高度/宽度缩小文字，但不隐藏课程名称、时间、教室或教师，也不以省略号替代字段。
 
 `TEST_PERIOD_TIMES` 明确为 test-only，共 1–11 节，只用于当前原型和自动测试，不代表南通大学正式作息。TimeAxis 接收 `PeriodTime[]` 并按 `(startTime - axis.startTime) × pxPerMinute` 定位，每个标记高度也来自真实持续分钟。小时网格仍覆盖 07:00–22:00 连续时间轴。手动课程继续只填写时间并保存 null 节次；课程卡片仅在记录已有非 null 节次时显示节次。
 

@@ -11,6 +11,31 @@ interface CourseCardProps {
   readonly periods: readonly PeriodTime[];
 }
 
+const CARD_TONES = ["mint", "sky", "lilac", "peach", "lemon", "rose"] as const;
+
+function cardTone(id: string): (typeof CARD_TONES)[number] {
+  let hash = 0;
+  for (const character of id) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return CARD_TONES[hash % CARD_TONES.length];
+}
+
+function textDensity(course: Course, durationMinutes: number, laneCount: number) {
+  const contentLength =
+    course.name.length +
+    course.startTime.length +
+    course.endTime.length +
+    (course.classroom?.length ?? 0) +
+    (course.teacher?.length ?? 0);
+  if (durationMinutes <= 45) {
+    return contentLength > 42 || laneCount > 1 ? "tiny" : "micro";
+  }
+  if (durationMinutes < 75 && laneCount > 1) return "micro";
+  if (durationMinutes < 75 || laneCount > 1) return "small";
+  return "regular";
+}
+
 export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit, periods }: CourseCardProps) {
   const { course, lane, laneCount } = item;
   const laneWidth = 100 / laneCount;
@@ -34,6 +59,8 @@ export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit, periods }:
     course.classroom ?? "教室待定",
     course.teacher ?? "教师待定",
   ].join(" · ");
+  const tone = cardTone(course.id);
+  const contentDensity = textDensity(course, item.durationMinutes, laneCount);
 
   return (
     <article
@@ -44,6 +71,8 @@ export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit, periods }:
       data-lane={lane}
       data-lane-count={laneCount}
       data-source={isUserCourse ? "user" : "fixture"}
+      data-tone={tone}
+      data-text-density={contentDensity}
       style={{
         top: item.offsetMinutes * pxPerMinute,
         height: item.durationMinutes * pxPerMinute,

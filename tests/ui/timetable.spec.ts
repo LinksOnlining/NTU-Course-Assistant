@@ -81,7 +81,8 @@ test("period markers use real start times and preserve breaks", async ({ page })
   const third = page.locator('[data-period="3"]');
   const sixth = page.locator('[data-period="6"]');
   await expect(first).toContainText("第1节");
-  await expect(first).toContainText("08:00–08:45");
+  await expect(first.locator(".period-start")).toHaveText("08:00");
+  await expect(first.locator(".period-end")).toHaveText("08:45");
   const firstBox = await box(first);
   const secondBox = await box(second);
   const thirdBox = await box(third);
@@ -91,6 +92,11 @@ test("period markers use real start times and preserve breaks", async ({ page })
   expect(secondBox.y - (firstBox.y + firstBox.height)).toBeCloseTo(5, 0);
   expect(thirdBox.y - (secondBox.y + secondBox.height)).toBeCloseTo(20, 0);
   expect(sixthBox.y - axis.y).toBeCloseTo(420, 0);
+  const wednesday = await box(page.locator('[data-weekday="3"]'));
+  const exactCourse = await box(page.locator('[data-course-id="wednesday-first"]'));
+  expect(exactCourse.y - wednesday.y).toBeCloseTo(firstBox.y - axis.y, 0);
+  expect(exactCourse.height).toBeCloseTo(firstBox.height, 0);
+  await expect(page.locator('[data-weekday="3"] [data-period-guide="1"]')).toHaveCSS("top", "60px");
   await expect(page.locator('[data-course-id="wednesday-first"] .course-time')).toContainText(
     "第1节 · 08:00–08:45",
   );
@@ -120,6 +126,9 @@ test("period settings save custom proportions and can add a twelfth period", asy
   const second = await box(page.locator('[data-period="2"]'));
   expect(first.y - axis.y).toBeCloseTo(60, 0);
   expect(second.y - (first.y + first.height)).toBeCloseTo(15, 0);
+  const unchangedCourse = page.locator('[data-course-id="wednesday-first"]');
+  await expect(unchangedCourse).toHaveCSS("height", "45px");
+  await expect(unchangedCourse.locator(".course-time")).toHaveText("08:00–08:45");
 
   await page.getByRole("button", { name: "设置" }).click();
   const secondDialog = page.getByRole("dialog", { name: "作息时间" });
@@ -185,6 +194,10 @@ test("overlap chain is visible in two lanes", async ({ page }) => {
     "data-lane-count",
     "2",
   );
+  const chain = page.locator('[data-course-id="tuesday-overlap-chain"]');
+  await expect(chain).toHaveAttribute("data-text-density", "micro");
+  await expect(chain.locator(".course-classroom")).toContainText("测试室 103");
+  await expect(chain.locator(".course-teacher")).toContainText("测试教师己");
 });
 
 test("long title stays inside its fixed-height card", async ({ page }) => {
@@ -198,13 +211,28 @@ test("long title stays inside its fixed-height card", async ({ page }) => {
   expect(overflow).toBe("hidden");
 });
 
-test("short cards reduce detail without changing real height", async ({ page }) => {
+test("desktop columns and cards keep readable horizontal space", async ({ page }) => {
+  const monday = await box(page.locator('[data-weekday="1"]'));
+  const card = page.locator('[data-course-id="monday-morning"]');
+  const name = card.locator(".course-name");
+  expect(monday.width).toBeGreaterThanOrEqual(154);
+  await expect(card).toHaveCSS("border-radius", "12px");
+  await expect(name).toHaveCSS("writing-mode", "horizontal-tb");
+  await expect(name).toHaveCSS("font-size", "14px");
+});
+
+test("short cards retain course details with a smaller type scale", async ({ page }) => {
   const card = page.locator('[data-course-id="wednesday-first"]');
   await expect(card).toHaveAttribute("data-density", "compact");
+  await expect(card).toHaveAttribute("data-text-density", "micro");
   await expect(card.locator(".course-name")).toBeVisible();
   await expect(card.locator(".course-time")).toBeVisible();
-  await expect(card.locator(".course-classroom")).toBeHidden();
-  await expect(card.locator(".course-teacher")).toBeHidden();
+  await expect(card.locator(".course-classroom")).toBeVisible();
+  await expect(card.locator(".course-teacher")).toBeVisible();
+  await expect(card.locator(".course-classroom")).toContainText("测试楼 C-101");
+  await expect(card.locator(".course-teacher")).toContainText("测试教师庚");
+  await expect(card.locator(".course-name")).toHaveCSS("font-size", "8px");
+  await expect(card.locator(".course-time")).toHaveCSS("font-size", "7px");
   expect((await box(card)).height).toBeCloseTo(45, 0);
 });
 

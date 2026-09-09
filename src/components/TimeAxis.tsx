@@ -24,7 +24,12 @@ export function TimeAxis({ axis, height, pxPerMinute, periods }: TimeAxisProps) 
       {ticks.map((minutes) => {
         const label = minutesToTime(minutes);
         return (
-          <time key={minutes} dateTime={label} style={{ top: (minutes - start) * pxPerMinute }}>
+          <time
+            className="hour-tick"
+            key={minutes}
+            dateTime={label}
+            style={{ top: (minutes - start) * pxPerMinute }}
+          >
             {label}
           </time>
         );
@@ -33,19 +38,20 @@ export function TimeAxis({ axis, height, pxPerMinute, periods }: TimeAxisProps) 
         const top = (timeToMinutes(period.startTime) - start) * pxPerMinute;
         const periodHeight = durationMinutes(period) * pxPerMinute;
         if (top < 0 || top + periodHeight > height) return null;
+        const density = periodHeight < 42 ? "compact" : "regular";
         return (
           <div
-            className="period-marker"
+            className={`period-marker period-marker--${density}`}
             data-period={period.period}
+            data-period-duration={periodHeight}
             data-testid="period-marker"
             key={period.period}
             style={{ top, height: periodHeight }}
             aria-label={`第${period.period}节，${period.startTime}至${period.endTime}`}
           >
             <strong>第{period.period}节</strong>
-            <span>
-              {period.startTime}–{period.endTime}
-            </span>
+            <span className="period-start">{period.startTime}</span>
+            <span className="period-end">{period.endTime}</span>
           </div>
         );
       })}
