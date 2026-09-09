@@ -104,6 +104,72 @@ test("a user course without stored periods shows time without a fabricated perio
   await expect(card.locator(".course-time")).not.toContainText("节");
 });
 
+test("period settings save custom proportions and can add a twelfth period", async ({ page }) => {
+  await page.getByRole("button", { name: "设置" }).click();
+  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByTestId("period-row")).toHaveCount(11);
+  await dialog.getByLabel("第1节结束时间").fill("08:30");
+  await dialog.getByLabel("第2节开始时间").fill("08:45");
+  await dialog.getByRole("button", { name: "保存作息" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId("schedule-notice")).toHaveText("已使用自定义作息。");
+  await expect(page.locator('[data-period="1"]')).toHaveCSS("height", "30px");
+  const axis = await box(page.getByTestId("time-axis"));
+  const first = await box(page.locator('[data-period="1"]'));
+  const second = await box(page.locator('[data-period="2"]'));
+  expect(first.y - axis.y).toBeCloseTo(60, 0);
+  expect(second.y - (first.y + first.height)).toBeCloseTo(15, 0);
+
+  await page.getByRole("button", { name: "设置" }).click();
+  const secondDialog = page.getByRole("dialog", { name: "作息时间" });
+  await secondDialog.getByRole("button", { name: "添加节次" }).click();
+  await expect(secondDialog.getByTestId("period-row")).toHaveCount(12);
+  await secondDialog.getByRole("button", { name: "保存作息" }).click();
+  await expect(page.locator('[data-period="12"]')).toBeVisible();
+});
+
+test("invalid period settings are blocked and cancel keeps the previous schedule", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "设置" }).click();
+  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  await dialog.getByLabel("第1节结束时间").fill("09:00");
+  await dialog.getByRole("button", { name: "保存作息" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("时间重叠");
+  await dialog.getByRole("button", { name: "取消" }).click();
+  await expect(page.locator('[data-period="12"]')).toHaveCount(0);
+  await expect(page.locator('[data-period="1"]')).toHaveCSS("height", "45px");
+});
+
+test("failed schedule save keeps the old timeline", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command === "load_courses") return { courses: [], warnings: [] };
+          if (command === "load_period_times") {
+            return [
+              { period: 1, startTime: "08:00", endTime: "08:45" },
+              { period: 2, startTime: "08:50", endTime: "09:35" },
+            ];
+          }
+          if (command === "save_period_times") throw "保存作息失败，请稍后重试。";
+          throw "未预期的存储命令";
+        },
+      },
+    });
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "设置" }).click();
+  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  await dialog.getByLabel("第1节结束时间").fill("08:30");
+  await dialog.getByRole("button", { name: "保存作息" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("保存作息失败，请稍后重试。");
+  await expect(page.locator('[data-period="1"]')).toHaveCSS("height", "45px");
+});
+
 test("overlap chain is visible in two lanes", async ({ page }) => {
   const first = await box(page.locator('[data-course-id="tuesday-overlap-a"]'));
   const second = await box(page.locator('[data-course-id="tuesday-overlap-b"]'));
@@ -432,6 +498,7 @@ test("storage failures keep the original UI state and show a clear error", async
       value: {
         invoke: async (command: string) => {
           if (command === "load_courses") return { courses: [storedCourse], warnings: [] };
+          if (command === "load_period_times") return null;
           if (command === "update_course") throw "更新课程失败，请稍后重试。";
           if (command === "delete_course") throw "删除课程失败，请稍后重试。";
           throw "未预期的存储命令";
@@ -464,6 +531,7 @@ test("a failed insert does not create a course in the UI", async ({ page }) => {
       value: {
         invoke: async (command: string) => {
           if (command === "load_courses") return { courses: [], warnings: [] };
+          if (command === "load_period_times") return null;
           if (command === "insert_course") throw "保存课程失败，请稍后重试。";
           throw "未预期的存储命令";
         },
@@ -483,6 +551,7 @@ test("a stored course outside the current axis is skipped without crashing", asy
       configurable: true,
       value: {
         invoke: async (command: string) => {
+          if (command === "load_period_times") return null;
           if (command !== "load_courses") throw "未预期的存储命令";
           return {
             courses: [

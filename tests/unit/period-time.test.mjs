@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { TEST_PERIOD_TIMES } from "../../src/config/timetable.ts";
 import {
+  getTimelineBounds,
   periodRangeToTimeRange,
   periodToTime,
   timeRangeToPeriods,
@@ -99,5 +100,15 @@ test("normal breaks are kept while overlapping periods are rejected", () => {
         { period: 2, startTime: "08:40", endTime: "09:25" },
       ]),
     RangeError,
+  );
+});
+
+test("timeline bounds expand to whole hours around custom periods", () => {
+  assert.deepEqual(
+    getTimelineBounds({ startTime: "07:00", endTime: "22:00" }, [
+      { period: 1, startTime: "06:30", endTime: "07:15" },
+      { period: 2, startTime: "22:00", endTime: "22:30" },
+    ]),
+    { startTime: "06:00", endTime: "23:00" },
   );
 });

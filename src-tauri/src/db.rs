@@ -2,9 +2,9 @@ use std::{fmt, fs, path::Path, time::Duration};
 
 use rusqlite::{params, Connection, Row};
 
-use crate::models::Course;
+use crate::models::{validate_period_times, Course, PeriodTime};
 
-const CURRENT_SCHEMA_VERSION: i64 = 1;
+const CURRENT_SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug)]
 pub enum StorageError {
@@ -110,6 +110,21 @@ impl CourseDatabase {
             transaction.pragma_update(None, "user_version", 1)?;
             transaction.commit()?;
         }
+        let version: i64 = self
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version < 2 {
+            let transaction = self.connection.transaction()?;
+            transaction.execute_batch(
+                "CREATE TABLE period_times (
+                    period INTEGER PRIMARY KEY NOT NULL CHECK(period BETWEEN 1 AND 30),
+                    start_time TEXT NOT NULL CHECK(length(start_time) = 5),
+                    end_time TEXT NOT NULL CHECK(length(end_time) = 5)
+                );",
+            )?;
+            transaction.pragma_update(None, "user_version", 2)?;
+            transaction.commit()?;
+        }
         Ok(())
     }
 
@@ -209,6 +224,40 @@ impl CourseDatabase {
         }
         Ok(())
     }
+
+    pub fn load_period_times(&self) -> Result<Option<Vec<PeriodTime>>, StorageError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT period, start_time, end_time FROM period_times ORDER BY period")?;
+        let mut rows = statement.query([])?;
+        let mut periods = Vec::new();
+        while let Some(row) = rows.next()? {
+            periods.push(PeriodTime {
+                period: row.get(0)?,
+                start_time: row.get(1)?,
+                end_time: row.get(2)?,
+            });
+        }
+        if periods.is_empty() {
+            return Ok(None);
+        }
+        validate_period_times(&periods).map_err(StorageError::InvalidData)?;
+        Ok(Some(periods))
+    }
+
+    pub fn save_period_times(&self, periods: &[PeriodTime]) -> Result<(), StorageError> {
+        validate_period_times(periods).map_err(StorageError::InvalidData)?;
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute("DELETE FROM period_times", [])?;
+        for period in periods {
+            transaction.execute(
+                "INSERT INTO period_times (period, start_time, end_time) VALUES (?1, ?2, ?3)",
+                (&period.period, &period.start_time, &period.end_time),
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
 }
 
 fn row_to_course(row: &Row<'_>) -> Result<Course, StorageError> {
@@ -271,16 +320,16 @@ mod tests {
     #[test]
     fn empty_database_runs_versioned_migration() {
         let database = database();
-        assert_eq!(database.schema_version().expect("schema version"), 1);
+        assert_eq!(database.schema_version().expect("schema version"), 2);
         let table_count: i64 = database
             .connection
             .query_row(
-                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='courses'",
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('courses', 'period_times')",
                 [],
                 |row| row.get(0),
             )
             .expect("courses table");
-        assert_eq!(table_count, 1);
+        assert_eq!(table_count, 2);
     }
 
     #[test]
@@ -388,7 +437,7 @@ mod tests {
         let mut expected = course();
         {
             let database = CourseDatabase::open(&path).expect("create database file");
-            assert_eq!(database.schema_version().expect("new schema version"), 1);
+            assert_eq!(database.schema_version().expect("new schema version"), 2);
             assert!(database
                 .load_courses()
                 .expect("new database is empty")
@@ -439,13 +488,13 @@ mod tests {
             .execute_batch(
                 "CREATE TABLE sentinel(value TEXT NOT NULL);
                  INSERT INTO sentinel VALUES ('keep-me');
-                 PRAGMA user_version = 2;",
+                 PRAGMA user_version = 3;",
             )
             .expect("create future database");
         drop(connection);
         assert!(matches!(
             CourseDatabase::open(&path),
-            Err(StorageError::UnsupportedSchema(2))
+            Err(StorageError::UnsupportedSchema(3))
         ));
         let unchanged = Connection::open(&path).expect("reopen future database");
         let version: i64 = unchanged
@@ -457,10 +506,90 @@ mod tests {
         let value: String = unchanged
             .query_row("SELECT value FROM sentinel", [], |row| row.get(0))
             .expect("future data remains");
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
         assert_eq!(journal_mode, "delete");
         assert_eq!(value, "keep-me");
         drop(unchanged);
+        remove_database_files(&path);
+    }
+
+    #[test]
+    fn period_schedule_round_trips_and_invalid_save_keeps_previous_value() {
+        let database = database();
+        let periods = vec![
+            PeriodTime {
+                period: 1,
+                start_time: "08:00".into(),
+                end_time: "08:30".into(),
+            },
+            PeriodTime {
+                period: 2,
+                start_time: "08:45".into(),
+                end_time: "09:30".into(),
+            },
+        ];
+        database.save_period_times(&periods).expect("save schedule");
+        assert_eq!(
+            database.load_period_times().expect("load schedule"),
+            Some(periods.clone())
+        );
+        let invalid = vec![PeriodTime {
+            period: 1,
+            start_time: "25:00".into(),
+            end_time: "26:00".into(),
+        }];
+        assert!(database.save_period_times(&invalid).is_err());
+        assert_eq!(
+            database
+                .load_period_times()
+                .expect("load unchanged schedule"),
+            Some(periods)
+        );
+    }
+
+    #[test]
+    fn schema_one_migrates_without_losing_courses() {
+        let path = temporary_database_path();
+        remove_database_files(&path);
+        let connection = Connection::open(&path).expect("open legacy database");
+        connection
+            .execute_batch(
+                "CREATE TABLE courses (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    name TEXT NOT NULL,
+                    teacher TEXT NULL,
+                    classroom TEXT NULL,
+                    weekday INTEGER NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT NOT NULL,
+                    start_period INTEGER NULL,
+                    end_period INTEGER NULL,
+                    weeks TEXT NOT NULL
+                );
+                INSERT INTO courses VALUES ('legacy','旧课程',NULL,NULL,1,'08:00','08:45',NULL,NULL,'[1]');
+                PRAGMA user_version = 1;",
+            )
+            .expect("create schema one database");
+        drop(connection);
+        let database = CourseDatabase::open(&path).expect("migrate schema one");
+        assert_eq!(database.schema_version().expect("migrated version"), 2);
+        assert_eq!(
+            database
+                .load_courses()
+                .expect("legacy courses")
+                .courses
+                .len(),
+            1
+        );
+        let period_table: i64 = database
+            .connection
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='period_times'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("period table");
+        assert_eq!(period_table, 1);
         remove_database_files(&path);
     }
 

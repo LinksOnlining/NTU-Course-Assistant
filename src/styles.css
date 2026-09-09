@@ -110,7 +110,8 @@ button {
 }
 
 .add-course-button,
-.primary-button {
+.primary-button,
+.settings-button {
   border: 1px solid #266b5a;
   border-radius: 9px;
   background: #2f7b68;
@@ -125,8 +126,14 @@ button {
   box-shadow: 0 4px 12px rgb(36 94 78 / 16%);
 }
 
+.settings-button {
+  min-height: 38px;
+  padding: 0 13px;
+}
+
 .add-course-button:hover,
-.primary-button:hover {
+.primary-button:hover,
+.settings-button:hover {
   background: #286b5b;
 }
 
@@ -136,6 +143,7 @@ button:disabled {
 }
 
 .add-course-button:focus-visible,
+.settings-button:focus-visible,
 .primary-button:focus-visible,
 .secondary-button:focus-visible,
 .icon-button:focus-visible,
@@ -192,6 +200,14 @@ select:focus-visible {
 
 .storage-notice--ready {
   color: #775f39;
+}
+
+.schedule-notice {
+  flex: 0 0 auto;
+  margin: 0 auto 8px;
+  width: min(100%, 1600px);
+  color: #596d66;
+  font-size: 11px;
 }
 
 .timetable-scroll {
@@ -526,6 +542,70 @@ select:focus-visible {
   border-radius: 16px;
   background: #fbfdfc;
   box-shadow: 0 20px 65px rgb(19 48 39 / 25%);
+}
+
+.period-settings-dialog {
+  width: min(100%, 620px);
+}
+
+.period-settings-note {
+  margin: 5px 0 0;
+  color: #65756f;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.period-settings-list {
+  display: grid;
+  max-height: min(52vh, 430px);
+  gap: 7px;
+  overflow: auto;
+  padding: 2px 3px 3px 0;
+}
+
+.period-settings-row {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 5px 8px;
+  border: 1px solid #d7e2de;
+  border-radius: 9px;
+  background: #f7faf9;
+}
+
+.period-settings-row strong {
+  color: #315f52;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.period-settings-row input {
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 7px;
+  border: 1px solid #bdccc7;
+  border-radius: 7px;
+  background: #fff;
+  color: #19332d;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.period-settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .course-form-heading {

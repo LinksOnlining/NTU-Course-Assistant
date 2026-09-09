@@ -4,7 +4,7 @@ mod models;
 use std::sync::Mutex;
 
 use db::CourseDatabase;
-use models::Course;
+use models::{Course, PeriodTime};
 use serde::Serialize;
 use tauri::{Manager, State};
 
@@ -78,6 +78,21 @@ fn delete_course(state: State<'_, CourseState>, id: String) -> Result<(), String
     state.run("删除课程", |database| database.delete_course(&id))
 }
 
+#[tauri::command]
+fn load_period_times(state: State<'_, CourseState>) -> Result<Option<Vec<PeriodTime>>, String> {
+    state.run("读取作息", CourseDatabase::load_period_times)
+}
+
+#[tauri::command]
+fn save_period_times(
+    state: State<'_, CourseState>,
+    periods: Vec<PeriodTime>,
+) -> Result<(), String> {
+    state.run("保存作息", |database| {
+        database.save_period_times(&periods)
+    })
+}
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
@@ -122,7 +137,9 @@ pub fn run() {
             load_courses,
             insert_course,
             update_course,
-            delete_course
+            delete_course,
+            load_period_times,
+            save_period_times
         ])
         .run(tauri::generate_context!())
         .expect("启动课程表失败");

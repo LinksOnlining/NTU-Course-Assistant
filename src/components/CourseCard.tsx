@@ -1,24 +1,31 @@
 import type { PositionedCourse } from "../core/timetable-layout.ts";
 import type { Course } from "../types/course.ts";
+import { timeRangeToPeriods } from "../core/period-time.ts";
+import type { PeriodTime } from "../types/time.ts";
 
 interface CourseCardProps {
   readonly item: PositionedCourse;
   readonly pxPerMinute: number;
   readonly isUserCourse: boolean;
   readonly onEdit?: (course: Course) => void;
+  readonly periods: readonly PeriodTime[];
 }
 
-export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit }: CourseCardProps) {
+export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit, periods }: CourseCardProps) {
   const { course, lane, laneCount } = item;
   const laneWidth = 100 / laneCount;
   const density =
     item.durationMinutes <= 45 ? "compact" : item.durationMinutes < 75 ? "short" : "full";
-  const periodLabel =
+  const mappedPeriods =
     course.startPeriod === null || course.endPeriod === null
       ? null
-      : course.startPeriod === course.endPeriod
-        ? `第${course.startPeriod}节`
-        : `第${course.startPeriod}–${course.endPeriod}节`;
+      : timeRangeToPeriods(course, periods);
+  const periodLabel =
+    mappedPeriods === null
+      ? null
+      : mappedPeriods.startPeriod === mappedPeriods.endPeriod
+        ? `第${mappedPeriods.startPeriod}节`
+        : `第${mappedPeriods.startPeriod}–${mappedPeriods.endPeriod}节`;
   const timeLabel = `${periodLabel ? `${periodLabel} · ` : ""}${course.startTime}–${course.endTime}`;
   const title = [
     isUserCourse ? "用户添加" : "测试数据",

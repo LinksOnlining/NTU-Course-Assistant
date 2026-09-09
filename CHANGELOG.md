@@ -2,6 +2,12 @@
 
 ## 未发布 — 2026-09-09
 
+- **Phase 2.6 PASS**：新增比例节次时间轴和用户可配置作息。左侧节次块按真实分钟计算 top/height，课间、午休和课程真实时间保持不变；时间轴会按作息覆盖范围自动扩展到整点。
+- 新增“设置”作息对话框，可编辑时间、添加下一节、删除最后一节，严格校验第 1 节起连续编号、HH:mm、开始早于结束、最多 30 节和节间不重叠；没有作息时明确使用 test-only fallback，不宣称为南通大学正式作息。
+- SQLite schema 由 1 安全迁移到 2，新增 `period_times` 表和 `load_period_times`/`save_period_times` command；作息替换使用事务，失败保留上一份配置，已有 Course 的实际 startTime/endTime 不被改写。只有精确匹配当前作息的课程显示节次。
+- 73 项 TypeScript 单元、29 项架构、252 个 UI 场景（246 通过、6 项条件跳过）、12 项 Rust 测试及 typecheck、clippy、lint、format、build、verify 全部通过。真实 Tauri Windows 窗口完成设置保存、关闭重启恢复、比例几何和 0 门用户课程验收。
+- 本阶段没有进入 PDF、教务导入、提醒、自启动、托盘或 Phase 3。
+
 - **Phase 2.5 PASS**：新增 1–11 节 test-only 作息配置，左侧连续时间轴显示“第 N 节”和对应开始/结束时间；所有节次位置及高度均由真实分钟决定，课间与午休不压缩。
 - 新增纯 `PeriodTime` 校验及 period→time、period range→time range、精确 time range→period range 映射；拒绝非法/重复/乱序/重叠配置，不对手动课程猜测节次。
 - 课程卡片只在已有 `startPeriod/endPeriod` 时显示节次；清理与测试时间不一致的旧 fixture 节次字段，课程时间和几何保持不变。

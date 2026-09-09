@@ -1,6 +1,46 @@
 use serde::{Deserialize, Serialize};
 
 pub const MAX_TEACHING_WEEK: u8 = 30;
+pub const MAX_PERIOD: u16 = 30;
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PeriodTime {
+    pub period: u16,
+    pub start_time: String,
+    pub end_time: String,
+}
+
+pub fn validate_period_times(periods: &[PeriodTime]) -> Result<(), String> {
+    if periods.is_empty() {
+        return Err("至少需要一节课".into());
+    }
+    let mut previous_end = None;
+    for (index, period) in periods.iter().enumerate() {
+        if period.period != u16::try_from(index + 1).unwrap_or(u16::MAX)
+            || period.period == 0
+            || period.period > MAX_PERIOD
+        {
+            return Err("节次必须从第 1 节连续编号且不超过 30 节".into());
+        }
+        let start = parse_time(&period.start_time)?;
+        let end = parse_time(&period.end_time)?;
+        if end <= start {
+            return Err(format!("第 {} 节结束时间必须晚于开始时间", period.period));
+        }
+        if let Some(previous_end) = previous_end {
+            if start < previous_end {
+                return Err(format!(
+                    "第 {}、{} 节时间重叠",
+                    period.period - 1,
+                    period.period
+                ));
+            }
+        }
+        previous_end = Some(end);
+    }
+    Ok(())
+}
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -107,5 +147,28 @@ mod tests {
         course.weeks = vec![1, 2];
         course.end_time = "13:00".into();
         assert!(course.validate().is_err());
+    }
+
+    #[test]
+    fn period_schedule_validation_requires_contiguous_non_overlapping_rows() {
+        let valid = vec![
+            PeriodTime {
+                period: 1,
+                start_time: "08:00".into(),
+                end_time: "08:45".into(),
+            },
+            PeriodTime {
+                period: 2,
+                start_time: "08:50".into(),
+                end_time: "09:35".into(),
+            },
+        ];
+        assert!(validate_period_times(&valid).is_ok());
+        let mut gap = valid.clone();
+        gap[1].period = 3;
+        assert!(validate_period_times(&gap).is_err());
+        let mut overlap = valid;
+        overlap[1].start_time = "08:40".into();
+        assert!(validate_period_times(&overlap).is_err());
     }
 }

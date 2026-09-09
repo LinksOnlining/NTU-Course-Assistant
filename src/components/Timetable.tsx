@@ -55,6 +55,7 @@ export function Timetable({
             height={timelineHeight}
             pxPerMinute={pxPerMinute}
             userCourseIds={userCourseIds}
+            periods={periods}
             onEditCourse={onEditCourse}
           />
         ))}

@@ -1,6 +1,6 @@
 # 基础设计（Phase 0 提议）
 
-实施状态（2026-09-09）：Phase 1、Phase 2 和 Phase 2.5 已通过验收。课程添加、编辑和删除通过 Rust `rusqlite` 持久化；连续时间轴附加显示 test-only 节次和实际时间。导入、提醒等后续能力尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的正式作息配置。
+实施状态（2026-09-09）：Phase 1、Phase 2、Phase 2.5 和 Phase 2.6 已通过验收。课程添加、编辑和删除以及用户作息通过 Rust `rusqlite` 持久化；连续时间轴按真实分钟显示节次和实际时间。导入、提醒等后续能力尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的正式作息配置。
 
 ## 技术方案
 
@@ -8,13 +8,13 @@
 
 Rust 仅负责桌面宿主及必要系统 IO；不引入服务器、全局状态库、UI 大组件库或 ORM。相比 Electron，该选择符合复用系统 WebView 的方向；相比切换 C#/WinUI，保留用户优先评估的 Web UI 技术栈，避免同时改变语言和 UI 开发方式。代价是维护 TypeScript/Rust 两套工具链。
 
-Phase 2.3 使用 rusqlite 0.40.2 的 bundled SQLite，Rust 存储边界只提供 `load_courses`、`insert_course`、`update_course`、`delete_course` 四个受限 command；React 通过 `src/services/course-storage.ts` 调用，不接触 SQL。数据库路径由 Tauri `app_local_data_dir()` 解析，实际文件为该目录下 `courses.sqlite3`，不依赖安装目录、源码目录或当前工作目录。
+Phase 2.3/2.6 使用 rusqlite 0.40.2 的 bundled SQLite，Rust 存储边界提供课程 CRUD 以及 `load_period_times`、`save_period_times` 两个作息 command；React 通过 `src/services/course-storage.ts` 调用，不接触 SQL。数据库路径由 Tauri `app_local_data_dir()` 解析，实际文件为该目录下 `courses.sqlite3`，不依赖安装目录、源码目录或当前工作目录。
 
-首版 schema 只有 `courses` 表：id 为文本主键，教师、教室和节次允许 null，星期及节次含 CHECK 约束，时间固定存 HH:mm 文本，weeks 存排序去重数字数组的 JSON 文本。`PRAGMA user_version` 记录 schema 版本；0→1 migration 在事务中建表并更新版本，遇到高于程序支持的版本时拒绝打开且不修改数据库。数据库使用 3 秒 busy timeout、WAL 和外键检查，不引入 ORM。
+schema 2 包含 `courses` 和 `period_times` 表：id 为文本主键，教师、教室和节次允许 null，星期及节次含 CHECK 约束，时间固定存 HH:mm 文本，weeks 存排序去重数字数组的 JSON 文本；`period_times` 以 period 为主键保存严格校验后的作息。`PRAGMA user_version` 记录 schema 版本；0→1 建课程表、1→2 在事务中创建作息表并更新版本，遇到高于程序支持的版本时拒绝打开且不修改数据库。数据库使用 3 秒 busy timeout、WAL 和外键检查，不引入 ORM。
 
 Rust 在命令写入前再次校验 Course，读取时逐行解析 JSON 和校验字段。损坏记录被跳过、记录内部错误并向 UI 返回不含数据库细节的提示；原行不会修改或删除。初始化失败时应用仍打开并禁用添加入口，CRUD 失败时 UI 保留原状态。格式合法但超出当前 UI 时间轴的记录由启动加载边界跳过并提示，避免破坏布局，数据库内容同样保持不变。
 
-Phase 2.4 用独立数据库验证了首次建库和 schema 1、连接关闭后重开、合法记录与 JSON/星期/时间/字段类型坏记录混合加载、未来版本拒绝、3 秒 busy timeout 及失败写入不损坏原数据。未来 schema 会显示可操作的升级提示；其他初始化错误显示概括提示，SQLite 细节只写入 Rust 日志。React 只在 Rust 写入成功后提交状态，因此新增、编辑和删除失败均不会制造伪成功。
+Phase 2.4/2.6 用独立数据库验证了首次建库和 schema 2、1→2 migration、连接关闭后重开、合法记录与 JSON/星期/时间/字段类型坏记录混合加载、未来版本拒绝、3 秒 busy timeout 及失败写入不损坏原数据。作息保存先在 Rust 边界完成完整校验，再以事务替换 `period_times`；失败时保留上一份作息。未来 schema 会显示可操作的升级提示；其他初始化错误显示概括提示，SQLite 细节只写入 Rust 日志。React 只在 Rust 写入成功后提交状态，因此课程和作息写入失败均不会制造伪成功。
 
 PDF.js 是 Phase 3 文本型 PDF 提取候选，需真实南通大学样本验证；它不等于课程识别器。学校规则单独解析文本和位置。扫描件首版提示暂不支持，不假装识别成功。当前不安装 PDF 依赖。
 
@@ -60,6 +60,8 @@ Phase 2.3 将状态提交顺序改为“SQLite 成功后更新 React”。插入
 独立配置：TermConfig（第一教学周周一日期、总周数、时区 Asia/Shanghai），PeriodTime[]（节次、HH:mm 开始/结束）。尚未核实的学校作息绝不作为官方默认值。Phase 1 仅明确标注的测试配置和测试教学周。
 
 Phase 2.5 实现 `PeriodTime` 配置边界和 `periodToTime`、`periodRangeToTimeRange`、`timeRangeToPeriods` 纯函数。配置要求正整数且严格递增的唯一节次、严格 HH:mm、开始早于结束、相邻节次不重叠；正常课间保留。反向映射只有开始和结束均精确命中配置、且中间节次连续时才返回节次范围，否则返回 null，不做近似猜测。
+
+Phase 2.6 将 `PeriodTime[]` 作为用户可配置的作息：设置对话框复用同一份核心校验，允许编辑时间、添加下一节和删除最后一节，最多 30 节且必须从第 1 节连续编号。保存通过 Tauri `save_period_times` 事务完成；首次运行或未保存时使用 test-only fallback，保存后的配置由 `load_period_times` 恢复。`getTimelineBounds` 会将测试轴与作息覆盖范围合并并向整点扩展，TimeAxis 仍是连续分钟轴；课程的 `startTime/endTime` 永不因作息修改而改变，只有精确命中当前配置的原有节次才显示节次标签，不匹配时仅显示实际时间。
 
 `TEST_PERIOD_TIMES` 明确为 test-only，共 1–11 节，只用于当前原型和自动测试，不代表南通大学正式作息。TimeAxis 接收 `PeriodTime[]` 并按 `(startTime - axis.startTime) × pxPerMinute` 定位，每个标记高度也来自真实持续分钟。小时网格仍覆盖 07:00–22:00 连续时间轴。手动课程继续只填写时间并保存 null 节次；课程卡片仅在记录已有非 null 节次时显示节次。
 

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Course } from "../types/course.ts";
+import type { PeriodTime } from "../types/time.ts";
 
 export interface LoadCoursesResult {
   readonly courses: readonly Course[];
@@ -7,6 +8,7 @@ export interface LoadCoursesResult {
 }
 
 let developmentMemory: Course[] = [];
+let developmentPeriodTimes: PeriodTime[] | null = null;
 
 function usesDevelopmentMemory(): boolean {
   return import.meta.env.DEV && !("__TAURI_INTERNALS__" in window);
@@ -67,5 +69,28 @@ export async function deleteStoredCourse(id: string): Promise<void> {
     await invoke("delete_course", { id });
   } catch (error) {
     throw storageError(error, "删除课程失败，请稍后重试。");
+  }
+}
+
+export async function loadStoredPeriodTimes(): Promise<readonly PeriodTime[] | null> {
+  if (usesDevelopmentMemory()) {
+    return developmentPeriodTimes ? [...developmentPeriodTimes] : null;
+  }
+  try {
+    return await invoke<readonly PeriodTime[] | null>("load_period_times");
+  } catch (error) {
+    throw storageError(error, "无法读取作息设置，请重新启动应用。");
+  }
+}
+
+export async function saveStoredPeriodTimes(periods: readonly PeriodTime[]): Promise<void> {
+  if (usesDevelopmentMemory()) {
+    developmentPeriodTimes = [...periods];
+    return;
+  }
+  try {
+    await invoke("save_period_times", { periods });
+  } catch (error) {
+    throw storageError(error, "保存作息失败，请稍后重试。");
   }
 }
