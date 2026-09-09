@@ -16,6 +16,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
   await page.evaluate(() => new Promise(requestAnimationFrame));
   expect(errors).toEqual([]);
+  await expect(page.getByText("测试数据", { exact: true })).toBeVisible();
 });
 
 test("seven fixed days and teaching-week filter", async ({ page }) => {
@@ -77,6 +78,39 @@ test("long title stays inside its fixed-height card", async ({ page }) => {
   expect(overflow).toBe("hidden");
 });
 
+test("short cards reduce detail without changing real height", async ({ page }) => {
+  const card = page.locator('[data-course-id="wednesday-first"]');
+  await expect(card).toHaveAttribute("data-density", "compact");
+  await expect(card.locator(".course-name")).toBeVisible();
+  await expect(card.locator(".course-time")).toBeVisible();
+  await expect(card.locator(".course-classroom")).toBeHidden();
+  await expect(card.locator(".course-teacher")).toBeHidden();
+  expect((await box(card)).height).toBeCloseTo(45, 0);
+});
+
+test("overlap lanes have distinct fixed visual treatments", async ({ page }) => {
+  const first = page.locator('[data-course-id="tuesday-overlap-a"]');
+  const second = page.locator('[data-course-id="tuesday-overlap-b"]');
+  const colors = await Promise.all(
+    [first, second].map((card) =>
+      card.evaluate((element) => ({
+        background: getComputedStyle(element).backgroundColor,
+        border: getComputedStyle(element).borderLeftColor,
+      })),
+    ),
+  );
+  expect(colors[0]).not.toEqual(colors[1]);
+});
+
+test("first and last hour labels stay inside the time axis", async ({ page }) => {
+  const axis = await box(page.getByTestId("time-axis"));
+  const ticks = page.locator(".time-axis time");
+  const first = await box(ticks.first());
+  const last = await box(ticks.last());
+  expect(first.y).toBeGreaterThanOrEqual(axis.y);
+  expect(last.y + last.height).toBeLessThanOrEqual(axis.y + axis.height);
+});
+
 test("one scroll area keeps headers and time axis aligned", async ({ page }) => {
   const scroll = page.getByTestId("timetable-scroll");
   const before = await box(scroll);
@@ -100,6 +134,11 @@ test("one scroll area keeps headers and time axis aligned", async ({ page }) => 
   if (state.horizontal) expect(state.scrollLeft).toBeGreaterThan(0);
   else expect(state.scrollLeft).toBe(0);
   expect(state.vertical).toBe(true);
+  const pageOverflow = await page.evaluate(() => ({
+    horizontal: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    vertical: document.documentElement.scrollHeight > document.documentElement.clientHeight,
+  }));
+  expect(pageOverflow).toEqual({ horizontal: false, vertical: false });
 });
 
 test("small window scrolls horizontally instead of crushing cards", async ({ page }, testInfo) => {

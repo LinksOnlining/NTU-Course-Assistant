@@ -2,7 +2,7 @@
 
 面向大学生的 Windows 11 本地课程表与上课提醒程序，优先适配南通大学。
 
-Phase 1.1 桌面空壳及 Phase 1.2 最小课程模型/时间计算已 PASS。当前停止等待确认 Phase 1.3；尚无正式课程表 UI 或安装包。
+**Phase 1 PASS。** 当前是可在 Windows 11 独立运行的课程表桌面原型，具备七天时间轴、真实时间比例、空闲时段保留和重叠课程分栏。界面使用明确标注的测试课程与测试作息，尚不能录入、保存或导入用户真实课程。
 
 - [设计与数据模型](DESIGN.md)
 - [阶段状态](PROJECT_STATUS.md)
@@ -12,10 +12,17 @@ Phase 1.1 桌面空壳及 Phase 1.2 最小课程模型/时间计算已 PASS。�
 
 建议技术栈：Tauri 2、React、TypeScript、Rust、Vite、npm；SQLite 在 Phase 2 接入。各依赖在实际进入对应阶段时选择兼容版本并锁定。
 
-当前命令：`npm install` 安装依赖；`npm run build` 执行类型检查和前端构建；`npm run dev` 启动本机前端预览。三者均已执行成功。
+当前命令：
 
-桌面命令 `npm run tauri dev` 已实际运行成功，可打开独立 Windows 窗口。`npm run verify` 包含 typecheck/build 和单元、架构测试；也可分别运行 `npm run test:unit` 与 `npm run test:arch`。尚无 lint 命令，核心边界由严格类型和 AST 测试检查。
+- `npm install`：安装锁定依赖。
+- `npm run dev`：启动本机前端开发服务器。
+- `npm run tauri dev`：启动真实 Tauri Windows 桌面窗口。
+- `npm run build`：执行严格类型检查和 Vite 生产构建。
+- `npm run verify`：执行 typecheck、单元测试、架构测试、81 个 UI 场景、lint、格式检查和 build。
+- `npm run test:unit`、`npm run test:arch`、`npm run test:ui`、`npm run lint`、`npm run format:check`：分别运行对应检查。
+
+Phase 1 已在 1280×800、1000×700、900×600 与 100%/125%/150% 设备缩放矩阵中验证；真实 Tauri 窗口另在本机 Windows 200% DPI 下完成尺寸、滚动、sticky、最大化、最小化、恢复和关闭检查。浏览器测试没有替代 Desktop PASS。
 
 本次已安装用户级 Rust，未修改持久 PATH；终端需将用户 `.cargo/bin` 加入当前会话 PATH 后调用 Cargo。本机 C++ 桌面工具及 Windows SDK 已通过实际编译验证。
 
-详见 [真实 PDF 样本检查](docs/pdf-sample-review.md) 和 [Phase 1.1 验证](docs/phase-1-verification.md)。
+详见 [真实 PDF 样本检查](docs/pdf-sample-review.md) 和 [Phase 1 验证](docs/phase-1-verification.md)。进入 Phase 2 前等待用户确认。

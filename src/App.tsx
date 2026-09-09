@@ -6,9 +6,12 @@ export function App() {
   return (
     <main className="app-shell">
       <header className="app-header">
-        <div>
+        <div className="app-brand">
           <p className="eyebrow">NTU COURSE ASSISTANT</p>
-          <h1>大学课程表</h1>
+          <div className="title-row">
+            <h1>大学课程表</h1>
+            <span className="prototype-badge">桌面原型</span>
+          </div>
           <p className="subtitle">时间决定位置，空闲时段按真实比例保留</p>
         </div>
         <div className="week-status" aria-label={`当前为测试第 ${TEST_TIMETABLE.currentWeek} 周`}>
@@ -17,7 +20,10 @@ export function App() {
           <small>周一至周日</small>
         </div>
       </header>
-      <p className="fixture-notice">当前显示测试课程，不代表南通大学正式课表或作息。</p>
+      <p className="fixture-notice" role="status">
+        <strong>测试数据</strong>
+        当前课程和作息仅用于界面验证，不代表南通大学正式安排。
+      </p>
       <Timetable
         courses={TEST_COURSES}
         currentWeek={TEST_TIMETABLE.currentWeek}

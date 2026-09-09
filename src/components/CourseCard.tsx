@@ -8,6 +8,8 @@ interface CourseCardProps {
 export function CourseCard({ item, pxPerMinute }: CourseCardProps) {
   const { course, lane, laneCount } = item;
   const laneWidth = 100 / laneCount;
+  const density =
+    item.durationMinutes <= 45 ? "compact" : item.durationMinutes < 75 ? "short" : "full";
   const title = [
     course.name,
     `${course.startTime}–${course.endTime}`,
@@ -17,8 +19,10 @@ export function CourseCard({ item, pxPerMinute }: CourseCardProps) {
 
   return (
     <article
-      className="course-card"
+      className={`course-card course-card--${density}`}
       data-course-id={course.id}
+      data-density={density}
+      data-duration-minutes={item.durationMinutes}
       data-lane={lane}
       data-lane-count={laneCount}
       style={{

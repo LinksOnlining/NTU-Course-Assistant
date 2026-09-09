@@ -12,9 +12,18 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
-    { name: "1280-100", use: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 } },
-    { name: "1280-125", use: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1.25 } },
-    { name: "900-150", use: { viewport: { width: 900, height: 600 }, deviceScaleFactor: 1.5 } },
+    ...[1, 1.25, 1.5].map((deviceScaleFactor) => ({
+      name: `1280-${deviceScaleFactor * 100}`,
+      use: { viewport: { width: 1280, height: 800 }, deviceScaleFactor },
+    })),
+    ...[1, 1.25, 1.5].map((deviceScaleFactor) => ({
+      name: `1000-${deviceScaleFactor * 100}`,
+      use: { viewport: { width: 1000, height: 700 }, deviceScaleFactor },
+    })),
+    ...[1, 1.25, 1.5].map((deviceScaleFactor) => ({
+      name: `900-${deviceScaleFactor * 100}`,
+      use: { viewport: { width: 900, height: 600 }, deviceScaleFactor },
+    })),
   ],
   webServer: {
     command: "npm run dev",

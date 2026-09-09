@@ -1,6 +1,6 @@
 # 基础设计（Phase 0 提议）
 
-实施状态（2026-09-09）：Phase 1.2 已完成 Course 类型和纯分钟计算，桌面空壳回归通过，停止等待用户确认 Phase 1.3。时间轴 UI、存储和导入设计仍未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
+实施状态（2026-09-09）：Phase 1 已完成并通过总验收。Course 类型、纯分钟计算、七天时间轴 UI、真实时间比例、空闲时段和重叠分栏均已实现；Windows Tauri 独立窗口通过实机检查。存储和导入仍未实现，等待用户确认 Phase 2。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
 
 ## 技术方案
 
@@ -78,6 +78,6 @@ Windows 通知必须在实际安装的应用中验收；开发态不能代表正
 
 时间严格为 HH:mm（00:00–23:59）；非法钟点或结束不晚于开始抛 RangeError。offsetMinutes 可返回轴起点之前的负偏移，courseTiming 则拒绝越界并要求扩展轴；不静默裁剪。idleMinutes 表示按参数顺序的非负空闲量，重叠或逆序时为零；不能用它代替重叠判断。区间采用 [start,end)，相邻课程不重叠。coursesOverlap 还要求同星期及共同教学周。
 
-TEST_TIMETABLE 只有明确标为测试用的轴和两条节次，不代表学校作息，也没有默认接入 UI。完整课程运行时校验、正式学期和节次设置仍待后续阶段。
+TEST_TIMETABLE 明确标为测试用，包含测试轴、当前周、像素比例和两条节次样例；Phase 1 UI 只展示同样明确标注的测试课程。它们不代表学校作息。完整课程运行时校验、正式学期和节次设置仍待后续阶段。
 
-开发检查使用 Node 内置 node:test；oxc-parser 是仅用于 AST 架构守卫的开发依赖。tsconfig.core.json 不提供 DOM 或 Node 全局类型，类型反例测试纳入主 typecheck；所有 core/types/config 禁止 any。当前不引入完整 ESLint 框架。
+开发检查使用 Node 内置 node:test 和 Playwright；oxc-parser 仅用于 AST 架构守卫，oxlint 与 Prettier 负责静态及格式检查。tsconfig.core.json 不提供 DOM 或 Node 全局类型，类型反例测试纳入主 typecheck；所有 core/types/config 禁止 any。

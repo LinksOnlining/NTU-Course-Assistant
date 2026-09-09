@@ -1,3 +1,57 @@
+# Phase 1 总验收：PASS
+
+日期：2026-09-09。Phase 1.1–1.4 全部完成；停止等待用户确认 Phase 2。
+
+## Phase 1.4 UI 优化
+
+- 顶部区域明确区分应用名称、桌面原型、测试教学周和测试数据说明；界面不会把 fixture 课程表示为真实南通大学安排。
+- 课程位置和高度公式未改。正常卡片保持课程名、时间、教室、教师层级；少于 75 分钟隐藏教师，45 分钟及以下只显示课程名和时间，完整文本仍在 `title` 和 `aria-label`。
+- lane 核心算法未改。lane 0–2 使用三种固定、低饱和度色彩区分；卡片焦点、边界和阴影增强，未引入随机配色或主题系统。
+- 时间轴固定为稳定宽度；首末小时文字锚定在轴内；小时和半小时网格共同解释大段空闲。`.timetable-scroll` 仍是唯一滚动容器，页面本身无纵横溢出。
+- 小字号时间轴文字和卡片次要信息经 WCAG 对比度公式复核，分别约为 5.03:1 和 4.93:1；系统字体、键盘焦点、完整 `aria-label`/`title` 均保留。
+- Tauri 默认尺寸保持 1280×800；最小尺寸配置从 640×480 调整为 720×520，以容纳顶部信息和可操作的横向课程表。
+
+## 最终自动验证
+
+| 检查 | 结果 |
+| --- | --- |
+| npm run typecheck | PASS |
+| npm run test:unit | PASS，39 项，0 失败/跳过 |
+| npm run test:arch | PASS，23 项，0 失败/跳过 |
+| npm run test:ui | PASS，81 场景中 75 项通过，6 项只在非 900 宽度按条件跳过 |
+| 尺寸/缩放矩阵 | PASS，1280×800、1000×700、900×600 分别覆盖 deviceScaleFactor 1、1.25、1.5，共 9 组 |
+| UI 几何 | PASS，top、height、240 分钟空闲、七天固定列、周过滤、overlap lane、短课 45px、首末刻度、单滚动容器及 sticky 均有断言 |
+| npm run lint | PASS，oxlint `--deny-warnings` |
+| npm run format:check | PASS，Prettier 3.9.6 |
+| npm run build | PASS，TypeScript + Vite，24 个模块 |
+| npm run verify | PASS，包含全部 typecheck/test/lint/format/build |
+| cargo fmt --manifest-path src-tauri/Cargo.toml --check | PASS |
+
+## 真实 Windows Tauri 验收
+
+`npm run tauri dev` 完成 Rust dev 构建并运行 `src-tauri\\target\\debug\\ntu-course-assistant.exe`。本轮按类名 `Tauri Window` 和标题“大学课程表”精确定位真实窗口，避免把同进程的 `Tao Thread Event Target` 辅助窗口误作产品窗口。
+
+宿主 `GetDpiForWindow` 为 192，即 Windows 200% DPI。真实窗口客户区依次调整并读回为 1280×800、1000×700、900×600；三种尺寸均保持响应。最大化状态为 true，恢复后回到 900×600；最小化状态为 true，再恢复后回到 900×600。最终向真实 Tauri 窗口发送标准 `WM_CLOSE`，项目 exe 在 5 秒内正常退出，开发会话随之结束。
+
+本次仅对该进程设置 WebView2 本地调试端口并连接其唯一页面 `http://localhost:1420/`，直接验证真实桌面 WebView，而非另开浏览器代替。900×600、DPR 2 下得到：
+
+- CSS 视口 900×601，七个星期列存在，页面本身无双滚动条；
+- `.timetable-scroll` 为 1140×946 内容、862×444 客户区，纵横方向均可滚动；
+- 设置 `scrollTop=300`、`scrollLeft=220` 后读回一致；
+- sticky 星期表头纵向误差 0，sticky 时间轴横向误差 0；
+- 滚动前后截图确认标题无裁切、课程卡片无溢出、横向滚动可到周日、纵向滚动可到晚间课程；
+- 控制台和 pageerror 均为空，Vite 未出现 EBUSY。
+
+Rust 保留既有 `linker_messages` 非阻断警告；它只报告 MSVC 创建库/对象文件，编译与窗口运行正常。真实桌面检查过程中曾发现 Windows 进程辅助窗口会干扰 `MainWindowHandle`，最终证据均使用精确的 Tauri 窗口句柄重测，早期无效截图和错误断言未计为 PASS。
+
+## Phase 1 产品状态
+
+当前产品是可在 Windows 11 独立运行的课程表桌面原型，具备最小 Course 模型、严格时间计算、七天显示、07:00–22:00 时间轴、真实时间比例、空闲时段、重叠分栏、短课降级和小窗口滚动。当前课程及作息均为测试数据。
+
+尚不具备用户真实课程、保存、添加/修改/删除、PDF 或教务系统导入、提醒、自启动、托盘、云同步、账号系统和正式安装包。这些不属于 Phase 1，未以占位实现提前进入 Phase 2。
+
+---
+
 # Phase 1.3 七天课程表时间轴 UI：PASS
 
 日期：2026-09-09。仅完成 Phase 1.3；停止等待用户确认 Phase 1.4。
