@@ -1,8 +1,19 @@
+import { useMemo, useState } from "react";
+import { CourseForm } from "./components/CourseForm.tsx";
 import { Timetable } from "./components/Timetable.tsx";
 import { TEST_TIMETABLE } from "./config/timetable.ts";
 import { TEST_COURSES } from "./fixtures/courses.ts";
+import type { Course } from "./types/course.ts";
 
 export function App() {
+  const [userCourses, setUserCourses] = useState<readonly Course[]>([]);
+  const [isAdding, setIsAdding] = useState(false);
+  const courses = useMemo(() => [...TEST_COURSES, ...userCourses], [userCourses]);
+  const userCourseIds = useMemo(
+    () => new Set(userCourses.map((course) => course.id)),
+    [userCourses],
+  );
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -14,22 +25,38 @@ export function App() {
           </div>
           <p className="subtitle">时间决定位置，空闲时段按真实比例保留</p>
         </div>
-        <div className="week-status" aria-label={`当前为测试第 ${TEST_TIMETABLE.currentWeek} 周`}>
-          <span>测试教学周</span>
-          <strong>第 {TEST_TIMETABLE.currentWeek} 周</strong>
-          <small>周一至周日</small>
+        <div className="header-actions">
+          <button type="button" className="add-course-button" onClick={() => setIsAdding(true)}>
+            <span aria-hidden="true">＋</span> 添加课程
+          </button>
+          <div className="week-status" aria-label={`当前为测试第 ${TEST_TIMETABLE.currentWeek} 周`}>
+            <span>测试教学周</span>
+            <strong>第 {TEST_TIMETABLE.currentWeek} 周</strong>
+            <small>周一至周日</small>
+          </div>
         </div>
       </header>
       <p className="fixture-notice" role="status">
         <strong>测试数据</strong>
-        当前课程和作息仅用于界面验证，不代表南通大学正式安排。
+        测试课程仍用于自动化验证；新增课程会标记为“用户添加”，本阶段关闭应用后会丢失。
       </p>
       <Timetable
-        courses={TEST_COURSES}
+        courses={courses}
+        userCourseIds={userCourseIds}
         currentWeek={TEST_TIMETABLE.currentWeek}
         axis={TEST_TIMETABLE.axis}
         pxPerMinute={TEST_TIMETABLE.pxPerMinute}
       />
+      {isAdding && (
+        <CourseForm
+          axis={TEST_TIMETABLE.axis}
+          onAdd={(course) => {
+            setUserCourses((current) => [...current, course]);
+            setIsAdding(false);
+          }}
+          onCancel={() => setIsAdding(false)}
+        />
+      )}
     </main>
   );
 }

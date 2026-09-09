@@ -7,9 +7,17 @@ interface DayColumnProps {
   readonly items: readonly PositionedCourse[];
   readonly height: number;
   readonly pxPerMinute: number;
+  readonly userCourseIds: ReadonlySet<string>;
 }
 
-export function DayColumn({ weekday, label, items, height, pxPerMinute }: DayColumnProps) {
+export function DayColumn({
+  weekday,
+  label,
+  items,
+  height,
+  pxPerMinute,
+  userCourseIds,
+}: DayColumnProps) {
   return (
     <section
       className="day-column"
@@ -19,7 +27,12 @@ export function DayColumn({ weekday, label, items, height, pxPerMinute }: DayCol
       style={{ height }}
     >
       {items.map((item) => (
-        <CourseCard key={item.course.id} item={item} pxPerMinute={pxPerMinute} />
+        <CourseCard
+          key={item.course.id}
+          item={item}
+          pxPerMinute={pxPerMinute}
+          isUserCourse={userCourseIds.has(item.course.id)}
+        />
       ))}
     </section>
   );

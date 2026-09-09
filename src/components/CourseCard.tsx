@@ -3,14 +3,16 @@ import type { PositionedCourse } from "../core/timetable-layout.ts";
 interface CourseCardProps {
   readonly item: PositionedCourse;
   readonly pxPerMinute: number;
+  readonly isUserCourse: boolean;
 }
 
-export function CourseCard({ item, pxPerMinute }: CourseCardProps) {
+export function CourseCard({ item, pxPerMinute, isUserCourse }: CourseCardProps) {
   const { course, lane, laneCount } = item;
   const laneWidth = 100 / laneCount;
   const density =
     item.durationMinutes <= 45 ? "compact" : item.durationMinutes < 75 ? "short" : "full";
   const title = [
+    isUserCourse ? "用户添加" : "测试数据",
     course.name,
     `${course.startTime}–${course.endTime}`,
     course.classroom ?? "教室待定",
@@ -25,6 +27,7 @@ export function CourseCard({ item, pxPerMinute }: CourseCardProps) {
       data-duration-minutes={item.durationMinutes}
       data-lane={lane}
       data-lane-count={laneCount}
+      data-source={isUserCourse ? "user" : "fixture"}
       style={{
         top: item.offsetMinutes * pxPerMinute,
         height: item.durationMinutes * pxPerMinute,
@@ -35,6 +38,7 @@ export function CourseCard({ item, pxPerMinute }: CourseCardProps) {
       title={title}
       aria-label={title}
     >
+      {isUserCourse && <span className="course-origin">用户添加</span>}
       <strong className="course-name">{course.name}</strong>
       <span className="course-time">
         {course.startTime}–{course.endTime}

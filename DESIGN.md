@@ -1,6 +1,6 @@
 # 基础设计（Phase 0 提议）
 
-实施状态（2026-09-09）：Phase 1 已完成并通过总验收。Course 类型、纯分钟计算、七天时间轴 UI、真实时间比例、空闲时段和重叠分栏均已实现；Windows Tauri 独立窗口通过实机检查。存储和导入仍未实现，等待用户确认 Phase 2。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
+实施状态（2026-09-09）：Phase 1 和 Phase 2.1 已通过验收。已在不改变时间轴几何的前提下加入课程表单、周数解析和统一外部输入校验；用户课程暂存 React 内存，编辑、删除、SQLite 和导入尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
 
 ## 技术方案
 
@@ -33,8 +33,8 @@ interface Course {
   teacher: string | null;
   classroom: string | null;
   weekday: 1 | 2 | 3 | 4 | 5 | 6 | 7;
-  startPeriod: number;
-  endPeriod: number;
+  startPeriod: number | null;
+  endPeriod: number | null;
   startTime: string; // HH:mm，当地墙上时间
   endTime: string;   // HH:mm
   weeks: number[];  // 明确周数，例如 [1, 3, 5]
@@ -43,7 +43,9 @@ interface Course {
 
 一条 Course 表示同名课程的一个固定上课安排。同一课程星期、时段或教室不同则分成多条，不增加课程目录/教学班等实体。单双周归一化为明确周数。
 
-未来录入/导入边界的完整校验要求（本阶段尚未实现）：id 唯一、名称非空；节次为正整数且起始不大于结束；时间格式有效且开始早于结束；星期在 1–7；周数非空、正整数、去重排序，并在学期周数配置范围内。首版不支持跨午夜课程。教师/教室确实未知使用 null 并提示，不能编造；时间、星期、周数不确定则留在导入候选中。
+Phase 2.1 已实现共享 `validateCourseInput` 边界：名称 trim 后必填并限制 80 字符；星期限 1–7；时间复用严格 HH:mm 逻辑且开始必须早于结束；周数支持范围、离散和混合写法，归一化为 1–30 内的排序去重数组；教师和教室 trim 后为空时转为 null。当前表单还会明确阻止超出测试时间轴 07:00–22:00 的课程，不做裁切。ID 由浏览器标准 `crypto.randomUUID()` 生成，不增加依赖。
+
+普通用户只填写真实时间。因为尚无经确认的南通大学节次映射，手动新增记录的 `startPeriod`/`endPeriod` 为 null；fixture 可继续携带测试节次。统一校验成功前 UI 不产生 Course，未来导入器应复用同一边界，而不是自行构造正式记录。
 
 独立配置：TermConfig（第一教学周周一日期、总周数、时区 Asia/Shanghai），PeriodTime[]（节次、HH:mm 开始/结束）。尚未核实的学校作息绝不作为官方默认值。Phase 1 仅明确标注的测试配置和测试教学周。
 

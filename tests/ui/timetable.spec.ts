@@ -152,3 +152,75 @@ test("small window scrolls horizontally instead of crushing cards", async ({ pag
   const day = await box(page.locator('[data-weekday="1"]'));
   expect(day.width).toBeGreaterThanOrEqual(149);
 });
+
+test("course form opens, reports field errors and cancel makes no change", async ({ page }) => {
+  await page.getByRole("button", { name: "添加课程" }).click();
+  const dialog = page.getByRole("dialog", { name: "添加课程" });
+  await expect(dialog).toBeVisible();
+  await page.getByRole("button", { name: "保存课程" }).click();
+  await expect(page.getByText("课程名称不能为空")).toBeVisible();
+  await expect(page.getByText("请输入有效的开始时间")).toBeVisible();
+  await expect(page.getByText("请输入有效的结束时间")).toBeVisible();
+  await expect(page.getByText("上课周数不能为空")).toBeVisible();
+  await expect(page.locator('[data-source="user"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "取消" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('[data-source="user"]')).toHaveCount(0);
+});
+
+test("validated course appears on the correct day with real-time geometry", async ({ page }) => {
+  await page.getByRole("button", { name: "添加课程" }).click();
+  const dialog = page.getByRole("dialog", { name: "添加课程" });
+  await dialog.getByLabel("课程名称", { exact: true }).fill(" 机械设计基础 ");
+  await dialog.getByLabel("教师（可选）").fill("测试教师");
+  await dialog.getByLabel("教室（可选）").fill("JX02-407");
+  await dialog.getByLabel("星期").selectOption("3");
+  await dialog.getByLabel("开始时间").fill("14:00");
+  await dialog.getByLabel("结束时间").fill("15:30");
+  await dialog.getByLabel("上课周数").fill("1-16");
+  await page.getByRole("button", { name: "保存课程" }).click();
+
+  await expect(page.getByRole("dialog", { name: "添加课程" })).toHaveCount(0);
+  const card = page.locator('[data-weekday="3"] [data-source="user"]');
+  await expect(card).toHaveCount(1);
+  await expect(card).toContainText("机械设计基础");
+  await expect(card).toContainText("用户添加");
+  await expect(card).toHaveAttribute("data-duration-minutes", "90");
+  const day = await box(page.locator('[data-weekday="3"]'));
+  const cardBox = await box(card);
+  expect(cardBox.y - day.y).toBeCloseTo(420, 0);
+  expect(cardBox.height).toBeCloseTo(90, 0);
+});
+
+test("invalid course stays in the form with errors beside its fields", async ({ page }) => {
+  await page.getByRole("button", { name: "添加课程" }).click();
+  const dialog = page.getByRole("dialog", { name: "添加课程" });
+  await dialog.getByLabel("课程名称", { exact: true }).fill("测试课程");
+  await dialog.getByLabel("开始时间").fill("15:30");
+  await dialog.getByLabel("结束时间").fill("14:00");
+  await dialog.getByLabel("上课周数").fill("1-4,,7");
+  await page.getByRole("button", { name: "保存课程" }).click();
+  await expect(page.getByText("结束时间必须晚于开始时间，且不能跨午夜")).toBeVisible();
+  await expect(page.getByText("周数格式不正确，请使用 1-4,7,10-12")).toBeVisible();
+  await expect(page.locator('[data-source="user"]')).toHaveCount(0);
+});
+
+test("long Chinese user course name remains inside its real-height card", async ({ page }) => {
+  const longName = "高等工程数学与现代制造系统综合设计实验课程长名称可读性测试";
+  await page.getByRole("button", { name: "添加课程" }).click();
+  const dialog = page.getByRole("dialog", { name: "添加课程" });
+  await dialog.getByLabel("课程名称", { exact: true }).fill(longName);
+  await dialog.getByLabel("星期").selectOption("5");
+  await dialog.getByLabel("开始时间").fill("10:00");
+  await dialog.getByLabel("结束时间").fill("10:45");
+  await dialog.getByLabel("上课周数").fill("3");
+  await page.getByRole("button", { name: "保存课程" }).click();
+  const card = page.locator('[data-weekday="5"] [data-source="user"]');
+  await expect(card).toHaveAttribute("data-density", "compact");
+  const cardBox = await box(card);
+  const nameBox = await box(card.locator(".course-name"));
+  expect(cardBox.height).toBeCloseTo(45, 0);
+  expect(nameBox.x + nameBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width);
+  expect(nameBox.y + nameBox.height).toBeLessThanOrEqual(cardBox.y + cardBox.height);
+  await expect(card).toHaveAttribute("title", new RegExp(longName));
+});
