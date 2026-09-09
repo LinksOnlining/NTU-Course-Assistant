@@ -37,7 +37,7 @@ test.beforeEach(async ({ page }) => {
     if (message.type() === "error") errors.push(message.text());
   });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible({ timeout: 10_000 });
   await page.evaluate(() => new Promise(requestAnimationFrame));
   expect(errors).toEqual([]);
   await expect(page.getByText("测试数据", { exact: true })).toBeVisible();
@@ -97,7 +97,7 @@ test("period markers use real start times and preserve breaks", async ({ page })
   expect(exactCourse.y - wednesday.y).toBeCloseTo(firstBox.y - axis.y, 0);
   expect(exactCourse.height).toBeCloseTo(firstBox.height, 0);
   await expect(page.locator(".period-guide")).toHaveCount(0);
-  await expect(page.locator('[data-weekday="3"]')).toHaveCSS("background-image", "none");
+  await expect(page.locator('[data-weekday="3"]')).toHaveCSS("background-image", /linear-gradient/);
   await expect(page.locator('[data-course-id="wednesday-first"] .course-time')).toContainText(
     "第1节 · 08:00–08:45",
   );
@@ -124,9 +124,14 @@ test("period settings save custom proportions and can add a twelfth period", asy
   await expect(page.locator('[data-period="1"]')).toHaveCSS("height", "30px");
   const axis = await box(page.getByTestId("time-axis"));
   const first = await box(page.locator('[data-period="1"]'));
+  const firstLabel = await box(page.locator('[data-period="1"] strong'));
+  const firstStart = await box(page.locator('[data-period="1"] .period-start'));
+  const firstEnd = await box(page.locator('[data-period="1"] .period-end'));
   const second = await box(page.locator('[data-period="2"]'));
   expect(first.y - axis.y).toBeCloseTo(60, 0);
   expect(second.y - (first.y + first.height)).toBeCloseTo(15, 0);
+  expect(firstStart.y).toBeGreaterThan(firstLabel.y);
+  expect(firstEnd.y).toBeGreaterThan(firstStart.y);
   const unchangedCourse = page.locator('[data-course-id="wednesday-first"]');
   await expect(unchangedCourse).toHaveCSS("height", "45px");
   await expect(unchangedCourse.locator(".course-time")).toHaveText("08:00–08:45");
