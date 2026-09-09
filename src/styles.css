@@ -228,8 +228,8 @@ select:focus-visible {
 
 .timetable-grid {
   display: grid;
-  grid-template-columns: 76px repeat(7, minmax(152px, 1fr));
-  min-width: 1140px;
+  grid-template-columns: 116px repeat(7, minmax(152px, 1fr));
+  min-width: 1180px;
   width: 100%;
 }
 
@@ -293,9 +293,9 @@ select:focus-visible {
 
 .time-axis time {
   position: absolute;
-  right: 13px;
-  color: #5f7069;
-  font-size: 11px;
+  left: 5px;
+  color: #87938e;
+  font-size: 9px;
   font-variant-numeric: tabular-nums;
   transform: translateY(-50%);
 }
@@ -303,8 +303,8 @@ select:focus-visible {
 .time-axis time::after {
   position: absolute;
   top: 50%;
-  left: calc(100% + 7px);
-  width: 6px;
+  left: calc(100% + 4px);
+  width: 5px;
   height: 1px;
   background: #b9c7c2;
   content: "";
@@ -314,8 +314,37 @@ select:focus-visible {
   transform: translateY(0);
 }
 
-.time-axis time:last-child {
+.time-axis time:last-of-type {
   transform: translateY(-100%);
+}
+
+.period-marker {
+  position: absolute;
+  right: 4px;
+  left: 31px;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2px 4px;
+  border-top: 1px solid #bad0c8;
+  border-bottom: 1px solid #dbe6e2;
+  background: rgb(230 241 237 / 70%);
+  color: #315f52;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.period-marker strong {
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.period-marker span {
+  margin-top: 2px;
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .day-column {

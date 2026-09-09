@@ -13,10 +13,17 @@ export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit }: CourseCa
   const laneWidth = 100 / laneCount;
   const density =
     item.durationMinutes <= 45 ? "compact" : item.durationMinutes < 75 ? "short" : "full";
+  const periodLabel =
+    course.startPeriod === null || course.endPeriod === null
+      ? null
+      : course.startPeriod === course.endPeriod
+        ? `第${course.startPeriod}节`
+        : `第${course.startPeriod}–${course.endPeriod}节`;
+  const timeLabel = `${periodLabel ? `${periodLabel} · ` : ""}${course.startTime}–${course.endTime}`;
   const title = [
     isUserCourse ? "用户添加" : "测试数据",
     course.name,
-    `${course.startTime}–${course.endTime}`,
+    timeLabel,
     course.classroom ?? "教室待定",
     course.teacher ?? "教师待定",
   ].join(" · ");
@@ -52,9 +59,7 @@ export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit }: CourseCa
         </button>
       )}
       <strong className="course-name">{course.name}</strong>
-      <span className="course-time">
-        {course.startTime}–{course.endTime}
-      </span>
+      <span className="course-time">{timeLabel}</span>
       <span className="course-classroom">{course.classroom ?? "教室待定"}</span>
       <span className="course-teacher">{course.teacher ?? "教师待定"}</span>
     </article>

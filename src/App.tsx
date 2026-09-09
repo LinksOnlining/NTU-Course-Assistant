@@ -101,6 +101,7 @@ export function App() {
         currentWeek={TEST_TIMETABLE.currentWeek}
         axis={TEST_TIMETABLE.axis}
         pxPerMinute={TEST_TIMETABLE.pxPerMinute}
+        periods={TEST_TIMETABLE.periods}
         onEditCourse={(course) => setEditingCourse(course)}
       />
       {(isAdding || editingCourse) && (

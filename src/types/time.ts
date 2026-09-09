@@ -7,3 +7,8 @@ export interface TimeRange {
 export interface PeriodTime extends TimeRange {
   readonly period: number;
 }
+
+export interface PeriodRange {
+  readonly startPeriod: number;
+  readonly endPeriod: number;
+}

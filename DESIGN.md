@@ -1,6 +1,6 @@
 # 基础设计（Phase 0 提议）
 
-实施状态（2026-09-09）：Phase 1 和 Phase 2 已通过验收。课程添加、编辑和删除通过 Rust `rusqlite` 持久化到 Windows 用户应用数据目录，关闭重启后能够恢复；损坏行、未来 schema、数据库繁忙及写入失败已有验证边界。导入、提醒等后续能力尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的作息配置。
+实施状态（2026-09-09）：Phase 1、Phase 2 和 Phase 2.5 已通过验收。课程添加、编辑和删除通过 Rust `rusqlite` 持久化；连续时间轴附加显示 test-only 节次和实际时间。导入、提醒等后续能力尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的正式作息配置。
 
 ## 技术方案
 
@@ -58,6 +58,10 @@ Phase 2.2 复用同一个 `CourseForm`：传入已有 Course 时预填字段，�
 Phase 2.3 将状态提交顺序改为“SQLite 成功后更新 React”。插入、更新或删除失败时表单保持打开并显示明确错误，内存状态不提前变化。开发服务器且不在 Tauri 运行时使用进程内测试 adapter 维持 Playwright fixture 能力；正式生产构建不显示 fixture，Tauri 运行始终使用 SQLite。
 
 独立配置：TermConfig（第一教学周周一日期、总周数、时区 Asia/Shanghai），PeriodTime[]（节次、HH:mm 开始/结束）。尚未核实的学校作息绝不作为官方默认值。Phase 1 仅明确标注的测试配置和测试教学周。
+
+Phase 2.5 实现 `PeriodTime` 配置边界和 `periodToTime`、`periodRangeToTimeRange`、`timeRangeToPeriods` 纯函数。配置要求正整数且严格递增的唯一节次、严格 HH:mm、开始早于结束、相邻节次不重叠；正常课间保留。反向映射只有开始和结束均精确命中配置、且中间节次连续时才返回节次范围，否则返回 null，不做近似猜测。
+
+`TEST_PERIOD_TIMES` 明确为 test-only，共 1–11 节，只用于当前原型和自动测试，不代表南通大学正式作息。TimeAxis 接收 `PeriodTime[]` 并按 `(startTime - axis.startTime) × pxPerMinute` 定位，每个标记高度也来自真实持续分钟。小时网格仍覆盖 07:00–22:00 连续时间轴。手动课程继续只填写时间并保存 null 节次；课程卡片仅在记录已有非 null 节次时显示节次。
 
 节次仅作为来源信息；展示和提醒使用已确认的实际时间。仅有节次时通过已确认作息映射；来源同时给出节次与时间而冲突时提示用户核对，不静默覆盖。修改作息不暗中改动已有课程时间，后续需要显式预览受影响课程。
 

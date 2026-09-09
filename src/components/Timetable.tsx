@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { durationMinutes } from "../core/time.ts";
 import { layoutCourses } from "../core/timetable-layout.ts";
 import type { Course } from "../types/course.ts";
-import type { TimeRange } from "../types/time.ts";
+import type { PeriodTime, TimeRange } from "../types/time.ts";
 import { DayColumn } from "./DayColumn.tsx";
 import { TimeAxis } from "./TimeAxis.tsx";
 
@@ -14,6 +14,7 @@ interface TimetableProps {
   readonly currentWeek: number;
   readonly axis: TimeRange;
   readonly pxPerMinute: number;
+  readonly periods: readonly PeriodTime[];
   readonly onEditCourse?: (course: Course) => void;
 }
 
@@ -23,6 +24,7 @@ export function Timetable({
   currentWeek,
   axis,
   pxPerMinute,
+  periods,
   onEditCourse,
 }: TimetableProps) {
   if (!Number.isFinite(pxPerMinute) || pxPerMinute <= 0) {
@@ -43,7 +45,7 @@ export function Timetable({
             {day}
           </div>
         ))}
-        <TimeAxis axis={axis} height={timelineHeight} pxPerMinute={pxPerMinute} />
+        <TimeAxis axis={axis} height={timelineHeight} pxPerMinute={pxPerMinute} periods={periods} />
         {DAYS.map((day, index) => (
           <DayColumn
             key={day}

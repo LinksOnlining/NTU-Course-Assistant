@@ -2,6 +2,11 @@
 
 ## 未发布 — 2026-09-09
 
+- **Phase 2.5 PASS**：新增 1–11 节 test-only 作息配置，左侧连续时间轴显示“第 N 节”和对应开始/结束时间；所有节次位置及高度均由真实分钟决定，课间与午休不压缩。
+- 新增纯 `PeriodTime` 校验及 period→time、period range→time range、精确 time range→period range 映射；拒绝非法/重复/乱序/重叠配置，不对手动课程猜测节次。
+- 课程卡片只在已有 `startPeriod/endPeriod` 时显示节次；清理与测试时间不一致的旧 fixture 节次字段，课程时间和几何保持不变。
+- 72 项 TypeScript 单元、29 项架构、225 项 UI 场景（219 通过、6 项条件跳过）、9 项 Rust 测试及 typecheck、clippy、lint、format、build、verify 全部通过。真实 Tauri 200% DPI 窗口验证节次可读、5/20 分钟课间、sticky 与滚动正常。
+
 - **Phase 2 PASS**：完成 Phase 2.4 持久化健壮性、恢复验证与 Phase 2 总验收；没有进入 PDF、教务导入、提醒、自启动或 Phase 3。
 - 新增独立 SQLite 测试，覆盖数据库不存在时自动建库、关闭重开、混合坏记录隔离且原行保留、未来 `user_version` 拒绝且数据不变、3 秒 busy timeout 和写失败无数据损坏。
 - 数据库初始化失败继续打开应用并禁用写入；未来 schema 向用户显示升级提示，内部错误仅写日志。新增/编辑/删除失败均验证 UI 保留原状态。

@@ -74,6 +74,36 @@ test("actual minutes determine top, height and four-hour blank space", async ({ 
   expect(short.height).toBeCloseTo(45, 0);
 });
 
+test("period markers use real start times and preserve breaks", async ({ page }) => {
+  const axis = await box(page.getByTestId("time-axis"));
+  const first = page.locator('[data-period="1"]');
+  const second = page.locator('[data-period="2"]');
+  const third = page.locator('[data-period="3"]');
+  const sixth = page.locator('[data-period="6"]');
+  await expect(first).toContainText("第1节");
+  await expect(first).toContainText("08:00–08:45");
+  const firstBox = await box(first);
+  const secondBox = await box(second);
+  const thirdBox = await box(third);
+  const sixthBox = await box(sixth);
+  expect(firstBox.y - axis.y).toBeCloseTo(60, 0);
+  expect(secondBox.y - axis.y).toBeCloseTo(110, 0);
+  expect(secondBox.y - (firstBox.y + firstBox.height)).toBeCloseTo(5, 0);
+  expect(thirdBox.y - (secondBox.y + secondBox.height)).toBeCloseTo(20, 0);
+  expect(sixthBox.y - axis.y).toBeCloseTo(420, 0);
+  await expect(page.locator('[data-course-id="wednesday-first"] .course-time')).toContainText(
+    "第1节 · 08:00–08:45",
+  );
+});
+
+test("a user course without stored periods shows time without a fabricated period", async ({
+  page,
+}) => {
+  const card = await addUserCourse(page, { name: "无节次用户课程" });
+  await expect(card.locator(".course-time")).toHaveText("14:00–15:30");
+  await expect(card.locator(".course-time")).not.toContainText("节");
+});
+
 test("overlap chain is visible in two lanes", async ({ page }) => {
   const first = await box(page.locator('[data-course-id="tuesday-overlap-a"]'));
   const second = await box(page.locator('[data-course-id="tuesday-overlap-b"]'));
