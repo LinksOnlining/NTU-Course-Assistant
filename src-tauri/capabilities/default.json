@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "仅授予主窗口基本权限",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:default", "fs:default"]
 }

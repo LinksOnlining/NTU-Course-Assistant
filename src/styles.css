@@ -113,6 +113,7 @@ button {
 }
 
 .add-course-button,
+.pdf-import-button,
 .primary-button,
 .settings-button {
   border: 1px solid #266b5a;
@@ -129,6 +130,14 @@ button {
   box-shadow: 0 4px 12px rgb(36 94 78 / 16%);
 }
 
+.pdf-import-button {
+  min-height: 38px;
+  padding: 0 13px;
+  border-color: #8a9e96;
+  background: rgb(255 255 255 / 66%);
+  color: #315d50;
+}
+
 .settings-button {
   min-height: 38px;
   padding: 0 13px;
@@ -138,6 +147,11 @@ button {
 .primary-button:hover,
 .settings-button:hover {
   background: #286b5b;
+}
+
+.pdf-import-button:hover {
+  border-color: #5f8477;
+  background: #e5f0eb;
 }
 
 button:disabled {
@@ -211,6 +225,97 @@ select:focus-visible {
   width: min(100%, 1600px);
   color: #596d66;
   font-size: 11px;
+}
+
+.pdf-import-status {
+  flex: 0 0 auto;
+  margin: 0 auto 7px;
+  width: min(100%, 1600px);
+  color: #526c62;
+  font-size: 11px;
+}
+
+.pdf-import-status--success {
+  color: #356a59;
+}
+
+.pdf-import-status--error {
+  color: #9b403b;
+}
+
+.pdf-debug-preview {
+  flex: 0 0 auto;
+  margin: -2px auto 7px;
+  width: min(100%, 1600px);
+  color: #50675e;
+  font-size: 10px;
+}
+
+.pdf-debug-preview summary {
+  cursor: pointer;
+}
+
+.pdf-debug-preview ul {
+  max-height: 108px;
+  margin: 5px 0 0;
+  overflow: auto;
+  padding-left: 18px;
+}
+
+.pdf-candidate-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  margin-top: 7px;
+  padding: 7px 9px;
+  border: 1px solid #d7e2dd;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 64%);
+}
+
+.pdf-candidate-summary strong {
+  color: #244d40;
+}
+
+.pdf-debug-preview .pdf-candidate-list {
+  max-height: 240px;
+  display: grid;
+  gap: 6px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.pdf-candidate-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 9px;
+  padding: 7px 9px;
+  border-left: 3px solid #9dbdaf;
+  border-radius: 5px;
+  background: rgb(255 255 255 / 58%);
+}
+
+.pdf-candidate-list > li[data-candidate-status="blocking"] {
+  border-left-color: #c98c65;
+}
+
+.pdf-candidate-list > li > strong {
+  flex-basis: 100%;
+  color: #263f37;
+  font-size: 11px;
+}
+
+.pdf-debug-preview .pdf-candidate-issues {
+  flex-basis: 100%;
+  max-height: none;
+  margin-top: 2px;
+  padding-left: 15px;
+  overflow: visible;
+  color: #77543e;
+}
+
+.pdf-candidate-issues li[data-severity="blocking"] {
+  color: #8c4b33;
 }
 
 .timetable-scroll {
@@ -874,6 +979,525 @@ select:focus-visible {
   color: #fff;
 }
 
+.pdf-preview-backdrop {
+  position: fixed;
+  z-index: 25;
+  inset: 0;
+  display: grid;
+  padding: 20px;
+  place-items: center;
+  background: rgb(22 40 35 / 46%);
+  backdrop-filter: blur(6px);
+}
+
+.period-settings-backdrop {
+  z-index: 40;
+}
+
+.pdf-preview-dialog {
+  display: grid;
+  width: min(100%, 1420px);
+  height: min(100%, 880px);
+  min-height: 0;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto auto;
+  overflow: hidden;
+  border: 1px solid #bfd0ca;
+  border-radius: 18px;
+  background: #f7faf8;
+  box-shadow: 0 24px 80px rgb(13 43 34 / 31%);
+}
+
+.pdf-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px 13px;
+  border-bottom: 1px solid #d9e3df;
+  background: linear-gradient(115deg, #f5faf7 0%, #fbf8f0 100%);
+}
+
+.pdf-preview-header h2 {
+  margin: 2px 0 4px;
+  color: #203c33;
+  font-size: 22px;
+}
+
+.pdf-preview-header p:last-child {
+  margin: 0;
+  color: #64766f;
+  font-size: 12px;
+}
+
+.pdf-preview-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 22px;
+  border-bottom: 1px solid #e0e8e5;
+  white-space: nowrap;
+}
+
+.pdf-preview-stats strong,
+.pdf-preview-stats span {
+  padding: 5px 9px;
+  border: 1px solid #d1ded9;
+  border-radius: 999px;
+  background: #fff;
+  color: #435c53;
+  font-size: 11px;
+}
+
+.pdf-preview-stats strong {
+  border-color: #9ebeb2;
+  color: #245344;
+}
+
+.pdf-preview-stats span[data-status="ready"] {
+  border-color: #b7d9c5;
+  background: #edf8f1;
+}
+
+.pdf-preview-stats span[data-status="warning"] {
+  border-color: #e4d2a1;
+  background: #fff9e9;
+}
+
+.pdf-preview-stats span[data-status="blocking"] {
+  border-color: #e4b8b3;
+  background: #fff1ef;
+}
+
+.pdf-schedule-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 22px;
+  border-bottom: 1px solid #ecd9aa;
+  background: #fff8e7;
+  color: #735a20;
+  font-size: 12px;
+}
+
+.candidate-filters {
+  display: flex;
+  gap: 7px;
+  padding: 9px 22px;
+  border-bottom: 1px solid #dae5e1;
+}
+
+.candidate-filters button {
+  min-height: 31px;
+  padding: 0 11px;
+  border: 1px solid #cbd8d3;
+  border-radius: 8px;
+  background: #fff;
+  color: #4e625b;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.candidate-filters button.is-active {
+  border-color: #5b9483;
+  background: #e5f2ed;
+  color: #235445;
+}
+
+.pdf-preview-content {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(310px, 0.8fr) minmax(420px, 1.2fr);
+}
+
+.candidate-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  border-right: 1px solid #d9e3df;
+  background: #f0f5f2;
+}
+
+.candidate-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  border: 1px solid #c9d8d2;
+  border-left: 4px solid #87ae9f;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 2px 7px rgb(32 69 57 / 7%);
+}
+
+.candidate-card--ready {
+  border-left-color: #5d9b75;
+  background: #f9fdfa;
+}
+
+.candidate-card--warning {
+  border-left-color: #c59a3e;
+  background: #fffcf4;
+}
+
+.candidate-card--blocking {
+  border-left-color: #bf665e;
+  background: #fff9f8;
+}
+
+.candidate-card-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 4px 10px 10px;
+  border: 0;
+  background: transparent;
+  color: #51645d;
+  text-align: left;
+}
+
+.candidate-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #263f37;
+}
+
+.candidate-card-heading strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-card-heading small,
+.candidate-card-main > span:not(.candidate-card-heading) {
+  font-size: 10px;
+}
+
+.candidate-edit-button {
+  align-self: center;
+  min-height: 30px;
+  margin-right: 9px;
+  padding: 0 9px;
+  border: 1px solid #bdcec8;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 78%);
+  color: #315f51;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.candidate-card-main:hover,
+.candidate-edit-button:hover {
+  background: #eaf3ef;
+}
+
+.candidate-detail {
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 22px;
+  background: #fbfdfc;
+}
+
+.candidate-detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.candidate-detail-heading h3,
+.candidate-editor h3 {
+  margin: 8px 0 14px;
+  color: #243e35;
+  font-size: 20px;
+}
+
+.candidate-status {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.candidate-status--ready {
+  background: #ddf2e5;
+  color: #28623e;
+}
+
+.candidate-status--warning {
+  background: #faefca;
+  color: #745a14;
+}
+
+.candidate-status--blocking {
+  background: #f7dddd;
+  color: #863d38;
+}
+
+.candidate-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin: 0 0 15px;
+}
+
+.candidate-facts div {
+  padding: 9px 10px;
+  border: 1px solid #dbe5e1;
+  border-radius: 9px;
+  background: #f5f8f6;
+}
+
+.candidate-facts dt {
+  margin-bottom: 3px;
+  color: #76877f;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.candidate-facts dd {
+  margin: 0;
+  color: #354e45;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.candidate-issues {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.candidate-issues li {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #ead1cd;
+  border-radius: 8px;
+  background: #fff4f2;
+  color: #743f3a;
+  font-size: 11px;
+}
+
+.candidate-issues li[data-severity="warning"] {
+  border-color: #e7d7ad;
+  background: #fff9e9;
+  color: #715b24;
+}
+
+.candidate-ready-message {
+  padding: 9px 10px;
+  border: 1px solid #bdddc9;
+  border-radius: 8px;
+  background: #edf8f1;
+  color: #336b48;
+  font-size: 11px;
+}
+
+.candidate-source-text {
+  color: #64766f;
+  font-size: 10px;
+}
+
+.candidate-source-text summary {
+  cursor: pointer;
+}
+
+.candidate-source-text p {
+  padding: 8px;
+  border-radius: 8px;
+  background: #f1f5f3;
+  overflow-wrap: anywhere;
+}
+
+.candidate-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.candidate-field {
+  display: grid;
+  gap: 5px;
+  color: #4c625a;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.candidate-field--wide {
+  grid-column: 1 / -1;
+}
+
+.candidate-field input,
+.candidate-field select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #c8d4d0;
+  border-radius: 8px;
+  background: #fff;
+  color: #2f463e;
+  font: inherit;
+}
+
+.candidate-time-preview {
+  color: #687a73;
+  font-size: 10px;
+}
+
+.candidate-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.candidate-empty {
+  padding: 24px;
+  color: #75877f;
+  text-align: center;
+}
+
+.proposal-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 22px;
+  border-top: 1px solid #b9d9c5;
+  background: #eaf7ef;
+  color: #356347;
+  font-size: 11px;
+}
+
+.pdf-final-dialog {
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  width: min(100%, 1080px);
+}
+
+.final-course-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 22px;
+  background: #f2f7f4;
+}
+
+.final-course-card {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 9px;
+  padding: 11px 13px;
+  border: 1px solid #c9d9d2;
+  border-left: 4px solid #629b79;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.final-course-card--skipped {
+  border-left-color: #9aa9a3;
+  background: #f4f6f5;
+  opacity: 0.76;
+}
+
+.final-course-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.final-course-heading strong {
+  color: #29483e;
+  font-size: 13px;
+}
+
+.final-course-heading span {
+  color: #537066;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.final-course-card p,
+.final-course-card small {
+  margin: 0;
+  color: #62766e;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.final-course-card small {
+  color: #8a6724;
+}
+
+.final-import-error {
+  margin: 0;
+  padding: 9px 22px;
+  border-top: 1px solid #e3b4af;
+  background: #fff2f0;
+  color: #8b3f39;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.import-success-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid #b8d8c4;
+  border-radius: 9px;
+  background: #edf8f1;
+  color: #306547;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.import-success-notice button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 17px;
+}
+
+.pdf-preview-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 12px 22px;
+  border-top: 1px solid #d8e2de;
+  background: #f6f9f7;
+}
+
+.pdf-preview-footer > div {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  color: #4a6158;
+  font-size: 11px;
+}
+
+.pdf-preview-footer small {
+  color: #9a4b45;
+  font-size: 9px;
+}
+
+.candidate-card-main:focus-visible,
+.candidate-edit-button:focus-visible,
+.candidate-filters button:focus-visible {
+  outline: 3px solid #91bfb2;
+  outline-offset: 1px;
+}
+
 @media (max-width: 960px) {
   .app-shell {
     padding: 15px 13px 11px;
@@ -896,6 +1520,17 @@ select:focus-visible {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .pdf-preview-backdrop {
+    padding: 10px;
+  }
+  .pdf-preview-content {
+    grid-template-columns: minmax(270px, 0.85fr) minmax(350px, 1.15fr);
+  }
+  .pdf-preview-header,
+  .candidate-detail {
+    padding-right: 15px;
+    padding-left: 15px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -906,6 +1541,25 @@ select:focus-visible {
   .course-form-dialog {
     max-height: calc(100vh - 24px);
     padding: 17px;
+  }
+  .pdf-preview-dialog {
+    height: 100%;
+    border-radius: 12px;
+  }
+  .pdf-preview-header h2 {
+    font-size: 18px;
+  }
+  .pdf-preview-content {
+    grid-template-columns: minmax(230px, 0.8fr) minmax(300px, 1.2fr);
+  }
+  .pdf-preview-stats,
+  .candidate-filters,
+  .pdf-preview-footer {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+  .candidate-facts {
+    grid-template-columns: 1fr;
   }
   .form-row {
     grid-template-columns: 1fr;

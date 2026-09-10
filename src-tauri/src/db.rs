@@ -185,6 +185,39 @@ impl CourseDatabase {
         Ok(())
     }
 
+    pub fn import_courses(&self, courses: &[Course]) -> Result<Vec<Course>, StorageError> {
+        if courses.is_empty() {
+            return Err(StorageError::InvalidData("导入课程不能为空".into()));
+        }
+        for course in courses {
+            course.validate().map_err(StorageError::InvalidData)?;
+        }
+
+        let transaction = self.connection.unchecked_transaction()?;
+        for course in courses {
+            let weeks = serde_json::to_string(&course.weeks)?;
+            transaction.execute(
+                "INSERT INTO courses
+                 (id, name, teacher, classroom, weekday, start_time, end_time, start_period, end_period, weeks)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    &course.id,
+                    &course.name,
+                    &course.teacher,
+                    &course.classroom,
+                    course.weekday,
+                    &course.start_time,
+                    &course.end_time,
+                    course.start_period,
+                    course.end_period,
+                    weeks,
+                ],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(courses.to_vec())
+    }
+
     pub fn update_course(&self, course: &Course) -> Result<(), StorageError> {
         course.validate().map_err(StorageError::InvalidData)?;
         let weeks = serde_json::to_string(&course.weeks)?;
@@ -340,6 +373,92 @@ mod tests {
         let loaded = database.load_courses().expect("load courses");
         assert_eq!(loaded.warnings, Vec::<String>::new());
         assert_eq!(loaded.courses, vec![expected]);
+    }
+
+    #[test]
+    fn course_batch_import_commits_and_returns_every_course() {
+        let database = database();
+        let first = course();
+        let mut second = course();
+        second.id = "course-id-2".into();
+        second.name = "机械原理".into();
+        second.weekday = 4;
+        let expected = vec![first, second];
+        let inserted = database
+            .import_courses(&expected)
+            .expect("import valid course batch");
+        assert_eq!(inserted, expected);
+        let loaded = database.load_courses().expect("load imported courses");
+        assert_eq!(loaded.courses.len(), 2);
+        assert!(expected
+            .iter()
+            .all(|course| loaded.courses.contains(course)));
+    }
+
+    #[test]
+    fn empty_course_batch_is_rejected_without_writes() {
+        let database = database();
+        assert!(matches!(
+            database.import_courses(&[]),
+            Err(StorageError::InvalidData(_))
+        ));
+        assert!(database
+            .load_courses()
+            .expect("load after empty batch")
+            .courses
+            .is_empty());
+    }
+
+    #[test]
+    fn invalid_course_in_batch_leaves_database_unchanged() {
+        let database = database();
+        let first = course();
+        let mut invalid = course();
+        invalid.id = "invalid-course".into();
+        invalid.weekday = 9;
+        assert!(database.import_courses(&[first, invalid]).is_err());
+        assert!(database
+            .load_courses()
+            .expect("load after invalid batch")
+            .courses
+            .is_empty());
+    }
+
+    #[test]
+    fn duplicate_constraint_rolls_back_entire_course_batch() {
+        let database = database();
+        let first = course();
+        let duplicate = first.clone();
+        assert!(database.import_courses(&[first, duplicate]).is_err());
+        assert!(database
+            .load_courses()
+            .expect("load after rolled back batch")
+            .courses
+            .is_empty());
+    }
+
+    #[test]
+    fn imported_batch_survives_database_close_and_reopen_exactly() {
+        let path = temporary_database_path();
+        remove_database_files(&path);
+        let expected = vec![course(), {
+            let mut second = course();
+            second.id = "reopen-course".into();
+            second.weekday = 5;
+            second
+        }];
+        {
+            let database = CourseDatabase::open(&path).expect("open import database");
+            database
+                .import_courses(&expected)
+                .expect("import before close");
+        }
+        let reopened = CourseDatabase::open(&path).expect("reopen import database");
+        let loaded = reopened.load_courses().expect("load after reopen").courses;
+        assert_eq!(loaded.len(), expected.len());
+        assert!(expected.iter().all(|course| loaded.contains(course)));
+        drop(reopened);
+        remove_database_files(&path);
     }
 
     #[test]

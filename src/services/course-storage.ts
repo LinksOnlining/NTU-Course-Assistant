@@ -42,6 +42,27 @@ export async function insertStoredCourse(course: Course): Promise<void> {
   }
 }
 
+export async function importStoredCourses(courses: readonly Course[]): Promise<readonly Course[]> {
+  if (usesDevelopmentMemory()) {
+    if (courses.length === 0) throw new Error("导入课程不能为空。");
+    const existingIds = new Set(developmentMemory.map((course) => course.id));
+    const incomingIds = new Set<string>();
+    for (const course of courses) {
+      if (existingIds.has(course.id) || incomingIds.has(course.id)) {
+        throw new Error("批量导入失败：课程 ID 已存在。");
+      }
+      incomingIds.add(course.id);
+    }
+    developmentMemory = [...developmentMemory, ...courses];
+    return [...courses];
+  }
+  try {
+    return await invoke<readonly Course[]>("import_courses", { courses });
+  } catch (error) {
+    throw storageError(error, "批量导入失败，未保存任何课程，请稍后重试。");
+  }
+}
+
 export async function updateStoredCourse(course: Course): Promise<void> {
   if (usesDevelopmentMemory()) {
     if (!developmentMemory.some((item) => item.id === course.id)) {

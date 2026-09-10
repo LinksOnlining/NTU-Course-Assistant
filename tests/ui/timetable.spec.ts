@@ -16,6 +16,57 @@ interface CourseFields {
   readonly weeks?: string;
 }
 
+function createTextPdf(text = "Schedule"): Buffer {
+  const stream =
+    text === "" ? "BT /F1 12 Tf 20 160 Td ET" : `BT /F1 12 Tf 20 160 Td (${text}) Tj ET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${Buffer.byteLength(stream, "ascii")} >>\nstream\n${stream}\nendstream`,
+  ];
+  let source = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(source, "ascii"));
+    source += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = Buffer.byteLength(source, "ascii");
+  source += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    source += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  source += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return Buffer.from(source, "ascii");
+}
+
+async function selectPdf(page: Page, name: string, buffer: Buffer) {
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "导入 PDF" }).click();
+  await (await chooser).setFiles({ name, mimeType: "application/pdf", buffer });
+}
+
+async function selectPdfPath(page: Page, path: string) {
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "导入 PDF" }).click();
+  await (await chooser).setFiles(path);
+}
+
+async function openTimetable(page: Page) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.goto("/");
+    try {
+      await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible({
+        timeout: 10_000,
+      });
+      return;
+    } catch (error) {
+      if (attempt === 1) throw error;
+    }
+  }
+}
+
 async function addUserCourse(page: Page, fields: CourseFields) {
   await page.getByRole("button", { name: "添加课程" }).click();
   const dialog = page.getByRole("dialog", { name: "添加课程" });
@@ -30,14 +81,27 @@ async function addUserCourse(page: Page, fields: CourseFields) {
   return page.locator('[data-source="user"]').filter({ hasText: fields.name }).first();
 }
 
+async function completePracticeCandidates(preview: Locator) {
+  for (let index = 0; index < 3; index += 1) {
+    const practice = preview.locator('[data-candidate-kind="practice"]').nth(index);
+    await practice.getByRole("button", { name: /^编辑 /u }).click();
+    const editor = preview.locator(".candidate-editor");
+    await editor.getByLabel("教师").fill(`实践教师${index + 1}`);
+    await editor.getByLabel("教室").fill(`实训中心${index + 1}`);
+    await editor.getByLabel("星期").selectOption(String(index + 3));
+    await editor.getByLabel("开始节次").selectOption("6");
+    await editor.getByLabel("结束节次").selectOption("8");
+    await editor.getByRole("button", { name: "保存候选" }).click();
+  }
+}
+
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible({ timeout: 10_000 });
+  await openTimetable(page);
   await page.evaluate(() => new Promise(requestAnimationFrame));
   expect(errors).toEqual([]);
   await expect(page.getByText("测试数据", { exact: true })).toBeVisible();
@@ -58,6 +122,144 @@ test("seven fixed days and teaching-week filter", async ({ page }) => {
   await expect(page.locator('[data-course-id="other-week-hidden"]')).toHaveCount(0);
   await expect(page.locator('[data-weekday="5"] .course-card')).toHaveCount(0);
   await expect(page.locator('[data-weekday="6"] .course-card')).toHaveCount(0);
+});
+
+test("text PDF extraction keeps page dimensions and coordinate-bearing text in memory", async ({
+  page,
+}) => {
+  await selectPdf(page, "sample.pdf", createTextPdf("Schedule"));
+  const preview = page.getByRole("dialog", { name: "检查导入候选" });
+  await expect(preview).toContainText("sample.pdf · 1 页 · 当前只生成提案，不会写入课程表");
+  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("识别到 0 个候选");
+  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("固定安排 0");
+  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("非固定实践 0");
+  await expect(preview.getByRole("button", { name: "进入最终确认" })).toBeDisabled();
+  await preview.getByRole("button", { name: "取消本次导入", exact: true }).click();
+  await expect(preview).toHaveCount(0);
+  await expect(page.locator('[data-source="user"]')).toHaveCount(0);
+});
+
+test("invalid, damaged and textless PDFs report errors without changing courses", async ({
+  page,
+}) => {
+  await selectPdf(page, "not-pdf.pdf", Buffer.from("not a PDF", "utf8"));
+  await expect(page.getByRole("alert")).toHaveText("所选文件不是有效的 PDF。");
+  await selectPdf(page, "damaged.pdf", Buffer.from("%PDF-1.7\nbroken", "ascii"));
+  await expect(page.getByRole("alert")).toHaveText("无法解析该 PDF，请确认文件未损坏后重试。");
+  await selectPdf(page, "scan.pdf", createTextPdf(""));
+  await expect(page.getByRole("alert")).toHaveText("当前 PDF 可能是扫描版，首版暂不支持。");
+  await expect(page.locator('[data-source="user"]')).toHaveCount(0);
+});
+
+test("real PDF import supports final review, rollback-safe retry, duplicates and cancel", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "1280-100", "real sample interaction runs once");
+  const samplePath = process.env.NTU_COURSE_PDF_SAMPLE;
+  test.skip(!samplePath, "set NTU_COURSE_PDF_SAMPLE to the private local sample");
+
+  const initialCourseCount = await page.locator('[data-source="user"]').count();
+  await selectPdfPath(page, samplePath!);
+  const preview = page.getByRole("dialog", { name: "检查导入候选" });
+  await expect(preview).toBeVisible();
+  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("识别到 18 个候选");
+  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("固定安排 15");
+  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("非固定实践 3");
+  await expect(preview.locator('[data-candidate-kind="fixed"]')).toHaveCount(15);
+  await expect(preview.locator('[data-candidate-kind="practice"]')).toHaveCount(3);
+  await expect(preview.getByRole("button", { name: "进入最终确认" })).toBeDisabled();
+
+  const fixed = preview.locator('[data-candidate-kind="fixed"]').first();
+  const originalName = await fixed.locator(".candidate-card-heading strong").textContent();
+  await fixed.getByRole("button", { name: /^编辑 /u }).click();
+  const editor = preview.locator(".candidate-editor");
+  await editor.getByLabel("课程名称").fill("不会保存的名称");
+  await editor.getByRole("button", { name: "取消修改" }).click();
+  await expect(fixed.locator(".candidate-card-heading strong")).toHaveText(originalName!);
+
+  await preview.getByRole("button", { name: "打开作息设置" }).click();
+  const settings = page.getByRole("dialog", { name: "作息时间" });
+  await expect(settings).toBeVisible();
+  await settings.getByRole("button", { name: "添加节次" }).click();
+  await settings.getByRole("button", { name: "保存作息" }).click();
+  await expect(settings).toHaveCount(0);
+  await expect(preview.getByRole("button", { name: "打开作息设置" })).toHaveCount(0);
+  await expect(preview.getByText(/已生成 15\/18 条课程提案/u)).toBeVisible();
+
+  await completePracticeCandidates(preview);
+  await expect(preview.getByText(/已生成 18\/18 条课程提案/u)).toBeVisible();
+  await expect(preview.getByRole("button", { name: "进入最终确认" })).toBeEnabled();
+  await preview.getByRole("button", { name: "进入最终确认" }).click();
+  let finalReview = page.getByRole("dialog", { name: "确认导入课程" });
+  await expect(finalReview).toBeVisible();
+  await expect(page.getByTestId("pdf-final-summary")).toContainText("提案 18");
+  await finalReview.getByRole("button", { name: "返回修改" }).click();
+  await expect(preview.locator('[data-candidate-kind="practice"]')).toHaveCount(3);
+  await expect(preview.getByText(/已生成 18\/18 条课程提案/u)).toBeVisible();
+  await preview.getByRole("button", { name: "进入最终确认" }).click();
+  finalReview = page.getByRole("dialog", { name: "确认导入课程" });
+  await finalReview.getByRole("button", { name: "取消本次导入", exact: true }).click();
+  await expect(finalReview).toHaveCount(0);
+  await expect(page.locator('[data-source="user"]')).toHaveCount(initialCourseCount);
+
+  await selectPdfPath(page, samplePath!);
+  const secondPreview = page.getByRole("dialog", { name: "检查导入候选" });
+  await completePracticeCandidates(secondPreview);
+  await secondPreview.getByRole("button", { name: "进入最终确认" }).click();
+  finalReview = page.getByRole("dialog", { name: "确认导入课程" });
+  await expect(page.getByTestId("pdf-final-summary")).toContainText("重复 0");
+
+  await page.evaluate(() => {
+    const host = window as Window & { __rejectCourseImport?: () => void };
+    let attempts = 0;
+    let rejectImport: ((reason: string) => void) | undefined;
+    host.__rejectCourseImport = () => rejectImport?.("模拟批量写入失败，数据库已回滚。");
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: (command: string, args: { courses?: unknown }) => {
+          if (command !== "import_courses") throw new Error(`未预期的命令：${command}`);
+          attempts += 1;
+          if (attempts === 1) {
+            return new Promise((_, reject) => {
+              rejectImport = reject;
+            });
+          }
+          return Promise.resolve(args.courses);
+        },
+      },
+    });
+  });
+  await finalReview.getByRole("button", { name: "确认导入 18 条课程" }).click();
+  await expect(finalReview.getByRole("button", { name: "返回修改" })).toBeDisabled();
+  await expect(
+    finalReview.getByRole("button", { name: "取消本次导入", exact: true }),
+  ).toBeDisabled();
+  await expect(finalReview.getByRole("button", { name: "正在导入…" })).toBeDisabled();
+  await page.evaluate(() => {
+    (window as Window & { __rejectCourseImport?: () => void }).__rejectCourseImport?.();
+  });
+  await expect(finalReview.getByRole("alert")).toContainText("模拟批量写入失败");
+  await expect(page.locator('[data-source="user"]')).toHaveCount(initialCourseCount);
+  await finalReview.getByRole("button", { name: "确认导入 18 条课程" }).click();
+  await expect(finalReview).toHaveCount(0);
+  await expect(page.getByText("已导入 18 条课程安排，跳过 0 条重复课程。")).toBeVisible();
+  const importedVisibleCount = await page.locator('[data-source="user"]').count();
+  expect(importedVisibleCount).toBeGreaterThan(initialCourseCount);
+  await page.evaluate(() => {
+    delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  });
+
+  await selectPdfPath(page, samplePath!);
+  const duplicatePreview = page.getByRole("dialog", { name: "检查导入候选" });
+  await completePracticeCandidates(duplicatePreview);
+  await duplicatePreview.getByRole("button", { name: "进入最终确认" }).click();
+  finalReview = page.getByRole("dialog", { name: "确认导入课程" });
+  await expect(page.getByTestId("pdf-final-summary")).toContainText("重复 18");
+  await expect(finalReview.locator('[data-plan-action="skip-duplicate"]')).toHaveCount(18);
+  await finalReview.getByRole("button", { name: "确认导入 0 条课程" }).click();
+  await expect(page.getByText("已导入 0 条课程安排，跳过 18 条重复课程。")).toBeVisible();
+  await expect(page.locator('[data-source="user"]')).toHaveCount(importedVisibleCount);
 });
 
 test("actual minutes determine top, height and four-hour blank space", async ({ page }) => {

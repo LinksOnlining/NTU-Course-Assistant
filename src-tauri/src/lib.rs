@@ -69,6 +69,16 @@ fn insert_course(state: State<'_, CourseState>, course: Course) -> Result<(), St
 }
 
 #[tauri::command]
+fn import_courses(
+    state: State<'_, CourseState>,
+    courses: Vec<Course>,
+) -> Result<Vec<Course>, String> {
+    state.run("批量导入课程", |database| {
+        database.import_courses(&courses)
+    })
+}
+
+#[tauri::command]
 fn update_course(state: State<'_, CourseState>, course: Course) -> Result<(), String> {
     state.run("更新课程", |database| database.update_course(&course))
 }
@@ -95,6 +105,8 @@ fn save_period_times(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             let storage = match app.path().app_local_data_dir() {
                 Ok(directory) => {
@@ -136,6 +148,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_courses,
             insert_course,
+            import_courses,
             update_course,
             delete_course,
             load_period_times,

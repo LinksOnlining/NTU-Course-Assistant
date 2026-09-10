@@ -1,6 +1,6 @@
 # 基础设计（Phase 0 提议）
 
-实施状态（2026-09-09）：Phase 1、Phase 2、Phase 2.5、Phase 2.6 和 Phase 2.7 已通过验收。课程添加、编辑和删除以及用户作息通过 Rust `rusqlite` 持久化；连续时间轴按真实分钟显示节次、实际时间和课程位置。导入、提醒等后续能力尚未实现。真实 PDF 检查见 docs/pdf-sample-review.md；该文件没有实际钟点，需要经确认的正式作息配置。
+实施状态（2026-09-10）：Phase 1、Phase 2、Phase 2.5–2.7 和 Phase 3 已通过验收。课程、用户作息和正式 PDF 导入通过 Rust `rusqlite` 持久化；连续时间轴按真实分钟显示节次、实际时间和课程位置。真实 PDF 检查见 docs/pdf-sample-review.md；PDF 本身没有可靠实际钟点，导入前仍必须使用用户确认的作息配置。
 
 ## 技术方案
 
@@ -16,13 +16,25 @@ Rust 在命令写入前再次校验 Course，读取时逐行解析 JSON 和校�
 
 Phase 2.4/2.6 用独立数据库验证了首次建库和 schema 2、1→2 migration、连接关闭后重开、合法记录与 JSON/星期/时间/字段类型坏记录混合加载、未来版本拒绝、3 秒 busy timeout 及失败写入不损坏原数据。作息保存先在 Rust 边界完成完整校验，再以事务替换 `period_times`；失败时保留上一份作息。未来 schema 会显示可操作的升级提示；其他初始化错误显示概括提示，SQLite 细节只写入 Rust 日志。React 只在 Rust 写入成功后提交状态，因此课程和作息写入失败均不会制造伪成功。
 
-PDF.js 是 Phase 3 文本型 PDF 提取候选，需真实南通大学样本验证；它不等于课程识别器。学校规则单独解析文本和位置。扫描件首版提示暂不支持，不假装识别成功。当前不安装 PDF 依赖。
+Phase 3.1 使用 PDF.js 6 的文字型 PDF 提取能力，并在构建前从受锁定依赖生成被忽略的 CMap 静态资源，以支持中文字体映射。`src/services/pdf-import.ts` 是唯一的 PDF/Tauri 文件适配器：Tauri 使用 Dialog 选择 `.pdf` 并通过受作用域限制的 FS API 读取；浏览器开发测试使用原生临时 file input。解析器懒加载，不增加主界面首次加载的 PDF.js 代码。它返回 `PdfExtraction`（文件名、页码、页面宽高及保留文本/x/y/宽高的 `PdfTextItem`），结果只在 React 内存中存在。学校规则、Course 和 SQLite 不属于此层。扫描件、加密件、损坏件或非 PDF 明确失败，不假装识别成功。
+
+Phase 3.2 的 `src/importers/ntu-pdf/parse.ts` 独立消费 `PdfExtraction`，只产出允许缺字段的 `ImportCandidate[]` 与结构化 `ImportIssue[]`；它不依赖 React、Tauri 或存储。解析器要求至少三个唯一星期表头形成明确坐标证据，再自动选择 x 或 y 星期轴；证据不足时返回未知星期，经确认的首页面布局可供续页使用。星期归属使用表头相对位置，课程分组使用节次锚点、来源顺序和按文本高度推导的容差，不硬编码页面尺寸、绝对坐标或课程名称。
+
+固定安排从节次锚点相邻的连续标题块、字段标记和坐标簇提取课程名、教师、教室、节次与周数。没有节次且包含通用实践结构的独立文本块会先从星期桶分离，按原始来源顺序生成候选；可识别名称和周数保留，星期、节次和时间保持 null 并带 blocking issue。候选 ID 由来源派生且可重复生成，固定安排按页码、星期、节次、来源位置排序，实践按原始出现顺序排列。issues 以 code+field 去重并携带 severity。只有用户确认的 PeriodTime 才能生成 resolvedTime；test-only 作息只产生 blocking issue。候选保留来源页、文本块和边界，只有后续确认流程才能调用统一 Course 校验。
+
+Phase 3.3 的 `src/core/import-proposal.ts` 接收原始候选加用户覆盖值、当前 PeriodTime 和现有课程，动态推导 ready/warning/blocking，不把状态作为第二份业务真相存储。`prepareCourseProposal` 只在作息已确认且必填字段完整时映射实际时间，并强制调用 `validateCourseInput`；返回的 CourseProposal 只有 candidateId 和不含 id 的课程数据，正式 UUID 延后到确认写入。候选编辑只修改内存覆盖层，取消单条编辑或整批预览不会改变 parser 结果、课程状态或 SQLite。
+
+重复判断要求名称、星期、实际开始/结束时间和周数完全相同；同名但时段或周数不同保持独立。时间冲突复用既有 `coursesOverlap`，覆盖现有课程与候选间冲突，均为可审查 warning，不自动合并、删除或拒绝。首版要求所有候选没有 blocking 才能进入最终摘要；warning 可以继续。保存用户作息会基于同一批原始候选立即重算，不重新读取 PDF。
+
+Phase 3.4 的 `prepareImportPlan` 在任何正式 ID 产生前，以稳定输入顺序决定待写入项、现有/批内精确重复及时间冲突。只有待写入提案在最终确认阶段调用 `crypto.randomUUID()`，并再次通过统一 `validateCourseInput`；失败重试复用同一次确认生成的 ID，返回修改后才丢弃该批正式对象。确认页打开后所有写入控件在请求期间禁用，失败保留计划和修改，成功或取消才清空 PDF 会话。
+
+前端只调用一次 `importStoredCourses`。Tauri `import_courses` command 把完整 `Vec<Course>` 交给 Rust，Rust 逐条执行与普通 CRUD 相同的 Course 校验，再在一个 SQLite transaction 中插入所有记录；空批明确拒绝，任一 JSON、约束或写入错误使整个事务回滚。成功返回实际写入的 `Course[]`，React 此后才合并状态。纯重复计划可在前端以零写入成功结束。该设计没有修改 schema，`user_version` 保持 2。
 
 ## 职责和数据流
 
 React UI → 纯课程/时间轴逻辑；需要外部能力时通过 adapters → Tauri Rust → 本地存储/系统功能。
 
-未来导入：PDFImporter / NTUImporter → ImportCandidate[] + 字段异常 → 统一校验 → 预览及修正 → 用户确认 → Course[] → 存储事务。
+导入流程：PDFImporter / NTUImporter → ImportCandidate[] + 字段异常 → 预览及修正 → CourseProposal[] + 统一校验 → ImportPlan 重复/冲突决策 → 用户最终确认 → Course[] + UUID → Rust/SQLite 单事务写入。该流程已在 Phase 3 完整实现。
 
 ImportCandidate 可以缺字段，携带原文、来源位置和问题列表；Course 是已通过校验的正式记录。取消预览不写库，存在阻断异常的行不得静默写入。首版拟只允许全部待导入行通过后确认；部分导入需用户显式选择有效行。
 
@@ -101,3 +113,59 @@ Windows 通知必须在实际安装的应用中验收；开发态不能代表正
 TEST_TIMETABLE 明确标为测试用，包含测试轴、当前周、像素比例和两条节次样例；Phase 1 UI 只展示同样明确标注的测试课程。它们不代表学校作息。完整课程运行时校验、正式学期和节次设置仍待后续阶段。
 
 开发检查使用 Node 内置 node:test 和 Playwright；oxc-parser 仅用于 AST 架构守卫，oxlint 与 Prettier 负责静态及格式检查。tsconfig.core.json 不提供 DOM 或 Node 全局类型，类型反例测试纳入主 typecheck；所有 core/types/config 禁止 any。
+# Version 2.0 预留：日程功能
+
+Version 1.0 不实现日程功能，继续按照当前开发路线完成：
+
+PDF 导入
+→ 南通大学教务系统导入
+→ 课程提醒
+→ 开机自启动
+→ 托盘/发布
+→ Version 1.0
+
+Version 2.0 再增加“日程”能力。
+
+预期日程模型与 Course 独立，不把普通日程强行转换为 Course。
+
+未来可能包含：
+
+- 一次性日程
+- 重复日程
+- 开始/结束时间
+- 全天事件
+- 地点
+- 备注
+- 提醒
+- 修改单次重复事件
+- 删除单次重复事件
+- 软删除/归档
+- 与课程时间冲突检测
+- 在课程表/日历中联合显示
+
+架构原则：
+
+Course
+和
+ScheduleEvent
+
+属于不同领域实体。
+
+但可以共享：
+
+- TimeRange
+- 时间解析
+- overlap / conflict 检测
+- reminder 基础设施
+- SQLite migration 体系
+- Windows 通知能力
+
+Version 1.0 期间：
+
+- 不创建 schedules/events 数据库表
+- 不增加日程 UI
+- 不增加日程 CRUD
+- 不提前实现 recurrence
+- 不影响当前 Phase 3–6 开发流程
+
+只保留设计扩展点，避免未来架构被 Course 单一模型锁死。

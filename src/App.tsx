@@ -1,13 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { CourseForm } from "./components/CourseForm.tsx";
+import { PdfImportPreview } from "./components/PdfImportPreview.tsx";
 import { PeriodSettings } from "./components/PeriodSettings.tsx";
 import { Timetable } from "./components/Timetable.tsx";
 import { TEST_TIMETABLE } from "./config/timetable.ts";
+import {
+  applyImportCandidateEdit,
+  evaluateImportCandidates,
+  materializeImportCourses,
+  prepareImportPlan,
+} from "./core/import-proposal.ts";
 import { getTimelineBounds } from "./core/period-time.ts";
 import { courseTiming } from "./core/timetable-layout.ts";
+import { parseNtuPdfTimetable } from "./importers/ntu-pdf/parse.ts";
 import { TEST_COURSES } from "./fixtures/courses.ts";
+import { choosePdfFile, extractPdfText, PdfImportError } from "./services/pdf-import.ts";
 import {
   deleteStoredCourse,
+  importStoredCourses,
   insertStoredCourse,
   loadStoredCourses,
   loadStoredPeriodTimes,
@@ -15,7 +25,20 @@ import {
   saveStoredPeriodTimes,
 } from "./services/course-storage.ts";
 import type { Course } from "./types/course.ts";
+import type { ImportCandidate, ImportCandidateEdit } from "./types/import-candidate.ts";
+import type { ImportPlan } from "./types/import-proposal.ts";
+import type { PdfExtraction } from "./types/pdf.ts";
 import type { PeriodTime } from "./types/time.ts";
+
+type PdfImportState =
+  | { readonly kind: "idle" }
+  | { readonly kind: "reading"; readonly fileName: string }
+  | {
+      readonly kind: "success";
+      readonly document: PdfExtraction;
+      readonly candidates: readonly ImportCandidate[];
+    }
+  | { readonly kind: "error"; readonly message: string };
 
 export function App() {
   const [userCourses, setUserCourses] = useState<readonly Course[]>([]);
@@ -27,12 +50,34 @@ export function App() {
   const [periodMessage, setPeriodMessage] = useState("");
   const [storageStatus, setStorageStatus] = useState<"loading" | "ready" | "error">("loading");
   const [storageMessage, setStorageMessage] = useState("");
+  const [pdfImport, setPdfImport] = useState<PdfImportState>({ kind: "idle" });
+  const [candidateEdits, setCandidateEdits] = useState<
+    Readonly<Record<string, ImportCandidateEdit>>
+  >({});
+  const [importPlan, setImportPlan] = useState<ImportPlan | null>(null);
+  const [pendingImportCourses, setPendingImportCourses] = useState<readonly Course[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [importSuccess, setImportSuccess] = useState("");
   const fixtureCourses = import.meta.env.DEV ? TEST_COURSES : [];
   const courses = useMemo(() => [...fixtureCourses, ...userCourses], [fixtureCourses, userCourses]);
   const axis = useMemo(() => getTimelineBounds(TEST_TIMETABLE.axis, periods), [periods]);
   const userCourseIds = useMemo(
     () => new Set(userCourses.map((course) => course.id)),
     [userCourses],
+  );
+  const effectiveCandidates = useMemo(
+    () =>
+      pdfImport.kind === "success"
+        ? pdfImport.candidates.map((candidate) =>
+            applyImportCandidateEdit(candidate, candidateEdits[candidate.id]),
+          )
+        : [],
+    [candidateEdits, pdfImport],
+  );
+  const importEvaluation = useMemo(
+    () => evaluateImportCandidates(effectiveCandidates, periods, isUsingTestSchedule, userCourses),
+    [effectiveCandidates, isUsingTestSchedule, periods, userCourses],
   );
 
   useEffect(() => {
@@ -71,6 +116,81 @@ export function App() {
     };
   }, []);
 
+  async function importPdf() {
+    try {
+      const file = await choosePdfFile();
+      if (file === null) return;
+      setImportPlan(null);
+      setPendingImportCourses([]);
+      setImportError("");
+      setImportSuccess("");
+      setPdfImport({ kind: "reading", fileName: file.fileName });
+      const document = await extractPdfText(file);
+      const candidates = parseNtuPdfTimetable(document, {
+        periods,
+        isUsingTestSchedule,
+      });
+      setCandidateEdits({});
+      setPdfImport({ kind: "success", document, candidates });
+    } catch (error) {
+      const message =
+        error instanceof PdfImportError ? error.message : "无法读取该 PDF，请确认文件后重试。";
+      setPdfImport({ kind: "error", message });
+    }
+  }
+
+  function cancelPdfImport() {
+    if (isImporting) return;
+    setPdfImport({ kind: "idle" });
+    setCandidateEdits({});
+    setImportPlan(null);
+    setPendingImportCourses([]);
+    setImportError("");
+  }
+
+  function enterFinalImportReview() {
+    if (!importEvaluation.canContinue) return;
+    const proposals = importEvaluation.candidates.flatMap((entry) =>
+      entry.proposal === null ? [] : [entry.proposal],
+    );
+    const plan = prepareImportPlan(proposals, userCourses);
+    try {
+      const courses = materializeImportCourses(plan, () => crypto.randomUUID());
+      setImportPlan(plan);
+      setPendingImportCourses(courses);
+      setImportError("");
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "无法准备最终导入课程。");
+    }
+  }
+
+  async function confirmPdfImport() {
+    if (isImporting || importPlan === null || !importEvaluation.canContinue) return;
+    setIsImporting(true);
+    setImportError("");
+    try {
+      const inserted =
+        pendingImportCourses.length === 0 ? [] : await importStoredCourses(pendingImportCourses);
+      if (inserted.length !== pendingImportCourses.length) {
+        throw new Error("数据库返回的课程数量不一致，界面未更新，请重试。");
+      }
+      setUserCourses((current) => [...current, ...inserted]);
+      setImportSuccess(
+        `已导入 ${inserted.length} 条课程安排，跳过 ${importPlan.summary.skippedDuplicates} 条重复课程。`,
+      );
+      setPdfImport({ kind: "idle" });
+      setCandidateEdits({});
+      setImportPlan(null);
+      setPendingImportCourses([]);
+    } catch (error) {
+      setImportError(
+        error instanceof Error ? error.message : "批量导入失败，未保存任何课程，请稍后重试。",
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -83,6 +203,15 @@ export function App() {
           <p className="subtitle">时间决定位置，空闲时段按真实比例保留</p>
         </div>
         <div className="header-actions">
+          <button
+            type="button"
+            className="pdf-import-button"
+            onClick={() => void importPdf()}
+            disabled={pdfImport.kind === "reading"}
+            aria-label="导入 PDF"
+          >
+            导入 PDF
+          </button>
           <button
             type="button"
             className="add-course-button"
@@ -126,6 +255,24 @@ export function App() {
           {periodMessage}
         </p>
       )}
+      {pdfImport.kind === "reading" && (
+        <p className="pdf-import-status" role="status">
+          正在读取 {pdfImport.fileName}…
+        </p>
+      )}
+      {pdfImport.kind === "error" && (
+        <p className="pdf-import-status pdf-import-status--error" role="alert">
+          {pdfImport.message}
+        </p>
+      )}
+      {importSuccess && (
+        <p className="import-success-notice" role="status">
+          <span>{importSuccess}</span>
+          <button type="button" onClick={() => setImportSuccess("")} aria-label="关闭导入结果">
+            ×
+          </button>
+        </p>
+      )}
       <Timetable
         courses={courses}
         userCourseIds={userCourseIds}
@@ -135,6 +282,33 @@ export function App() {
         periods={periods}
         onEditCourse={(course) => setEditingCourse(course)}
       />
+      {pdfImport.kind === "success" && (
+        <PdfImportPreview
+          document={pdfImport.document}
+          evaluation={importEvaluation}
+          periods={periods}
+          isUsingTestSchedule={isUsingTestSchedule}
+          plan={importPlan}
+          isImporting={isImporting}
+          importError={importError}
+          onSaveEdit={(candidateId, edit) => {
+            setCandidateEdits((current) => ({ ...current, [candidateId]: edit }));
+            setImportPlan(null);
+            setPendingImportCourses([]);
+            setImportError("");
+          }}
+          onOpenPeriodSettings={() => setIsPeriodSettingsOpen(true)}
+          onEnterFinalReview={enterFinalImportReview}
+          onReturnToEdit={() => {
+            if (isImporting) return;
+            setImportPlan(null);
+            setPendingImportCourses([]);
+            setImportError("");
+          }}
+          onConfirmImport={() => void confirmPdfImport()}
+          onCancelImport={cancelPdfImport}
+        />
+      )}
       {(isAdding || editingCourse) && (
         <CourseForm
           axis={axis}

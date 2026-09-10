@@ -7,7 +7,8 @@
     "node": ">=24.2.0"
   },
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "prepare:pdf-assets": "node scripts/copy-pdf-assets.mjs",
+    "dev": "npm run prepare:pdf-assets && vite --host 127.0.0.1",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.core.json",
     "test:unit": "node --test tests/unit/*.test.mjs",
     "test:arch": "node --test tests/architecture/*.test.mjs",
@@ -17,11 +18,14 @@
     "format": "prettier \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,mjs}\" \"*.{ts,json}\" --write",
     "format:check": "prettier \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,mjs}\" \"*.{ts,json}\" --check",
     "verify": "npm run typecheck && npm test && npm run lint && npm run format:check && npm run build",
-    "build": "npm run typecheck && vite build",
+    "build": "npm run typecheck && npm run prepare:pdf-assets && vite build",
     "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-dialog": "2.7.3",
+    "@tauri-apps/plugin-fs": "2.5.2",
+    "pdfjs-dist": "6.3.289",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

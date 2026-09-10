@@ -71,7 +71,7 @@ export function PeriodSettings({
   }
 
   return (
-    <div className="course-form-backdrop" role="presentation">
+    <div className="course-form-backdrop period-settings-backdrop" role="presentation">
       <section
         className="course-form-dialog period-settings-dialog"
         role="dialog"
