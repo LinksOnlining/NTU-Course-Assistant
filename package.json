@@ -16,7 +16,7 @@
     "test": "npm run test:unit && npm run test:arch && npm run test:ui",
     "lint": "oxlint src tests vite.config.ts playwright.config.ts --deny-warnings",
     "format": "prettier \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,mjs}\" \"*.{ts,json}\" --write",
-    "format:check": "prettier \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,mjs}\" \"*.{ts,json}\" --check",
+    "format:check": "prettier \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,mjs}\" \"*.{ts,json}\" --check --end-of-line auto",
     "verify": "npm run typecheck && npm test && npm run lint && npm run format:check && npm run build",
     "build": "npm run typecheck && npm run prepare:pdf-assets && vite build",
     "tauri": "tauri"
