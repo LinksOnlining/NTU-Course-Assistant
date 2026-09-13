@@ -376,6 +376,83 @@ test("term and reminder settings validate and persist with the schedule", async 
   await expect(reopened.getByLabel("提前提醒分钟")).toHaveValue("60");
 });
 
+test("Windows 登录启动开关默认关闭且能立即启用或关闭", async ({ page }) => {
+  await page.getByRole("button", { name: "设置" }).click();
+  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  const toggle = dialog.getByLabel("登录 Windows 后自动启动应用");
+  await expect(dialog.getByText("启动设置")).toBeVisible();
+  await expect(toggle).toBeEnabled();
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect(toggle).not.toBeChecked();
+});
+
+test("Windows 登录启动失败和系统状态不一致不会显示伪成功", async ({ page }) => {
+  await page.addInitScript(() => {
+    let enabled = false;
+    let enableAttempts = 0;
+    let disableAttempts = 0;
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command === "load_courses") return { courses: [], warnings: [] };
+          if (command === "load_period_times") return null;
+          if (command === "load_reminder_configuration") {
+            return {
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            };
+          }
+          if (command === "load_handled_reminder_keys") return [];
+          if (command === "refresh_reminder_schedule") return undefined;
+          if (command === "plugin:autostart|is_enabled") return enabled;
+          if (command === "plugin:autostart|enable") {
+            enableAttempts += 1;
+            if (enableAttempts === 1) throw "开启失败";
+            if (enableAttempts === 2) {
+              enabled = true;
+              return undefined;
+            }
+            return undefined;
+          }
+          if (command === "plugin:autostart|disable") {
+            disableAttempts += 1;
+            if (disableAttempts === 1) throw "关闭失败";
+            enabled = false;
+            return undefined;
+          }
+          throw "未预期的命令";
+        },
+      },
+    });
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "设置" }).click();
+  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  const toggle = dialog.getByLabel("登录 Windows 后自动启动应用");
+  await expect(toggle).not.toBeChecked();
+
+  await toggle.click();
+  await expect(dialog.getByRole("alert")).toContainText("开启失败");
+  await expect(toggle).not.toBeChecked();
+
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await toggle.click();
+  await expect(dialog.getByRole("alert")).toContainText("关闭失败");
+  await expect(toggle).toBeChecked();
+
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await expect(dialog.getByRole("alert")).toContainText("系统未确认已开启");
+  await expect(toggle).not.toBeChecked();
+});
+
 test("invalid period settings are blocked and cancel keeps the previous schedule", async ({
   page,
 }) => {
@@ -410,6 +487,7 @@ test("failed schedule save keeps the old timeline", async ({ page }) => {
             };
           }
           if (command === "save_app_settings") throw "保存设置失败，请稍后重试。";
+          if (command === "plugin:autostart|is_enabled") return false;
           throw "未预期的存储命令";
         },
       },

@@ -832,6 +832,14 @@ select:focus-visible {
   padding-top: 22px;
 }
 
+.settings-section > .settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #315f52;
+  font-size: 12px;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

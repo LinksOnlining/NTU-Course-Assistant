@@ -93,7 +93,7 @@ Phase 2.7 只调整桌面表现。TimeAxis 的每个节次块把节次、开始�
 
 Phase 5.1 落地纯逻辑时间模型：`TermConfig` 保存第 1 教学周星期一、总周数和固定 `Asia/Shanghai`；`ReminderSettings` 保存开关和 0–180 分钟提前量，默认关闭、15 分钟。核心根据 Course 的 weeks、weekday 和真实 HH:mm 生成稳定课程实例 key、提醒时刻，并只返回 future/catch-up/none 决策。Phase 5.2 将这些结果转换为 `{ occurrenceKey, triggerAtMilliseconds, courseStartMilliseconds }`：其中时刻是明确的 UTC epoch 毫秒。Phase 5.3 在同一计划附加最小展示 payload（课程名、开始时间、可选教室）。React 在启动、正式数据变化和窗口恢复时从 TypeScript core 重建计划，先排除 SQLite 已 handled key，再经 Tauri 刷新 Rust 单实例 scheduler；Rust 不读 Course、不重算教学周或日期，只以 channel 等待、替换计划、批量报告相同 trigger，并在会话中按 key 去重。due 后由独立 `WindowsNotificationAdapter` 经官方 Tauri plugin 发送系统通知；无论通知尝试成功或失败，scheduler 都会记录 handled，保持 at-most-once delivery attempt。若 handled 写入失败，当前运行仍去重并记录内部错误，下一次重启存在重复风险。scheduler 每分钟复核绝对 wall-clock，补足休眠和明显系统时间跳变；窗口恢复事件也会请求 TypeScript 重新计算。handled 记录在写入时清理超过 400 天的数据，因为已处理 occurrence 不会再成为未来课程。
 
-Windows 通知必须在实际安装的应用中验收；开发态不能代表正式身份及图标。自启动 Phase 6 默认关闭，用户启用后按当前用户登录启动，读取系统实际注册状态；不创建系统服务。
+Windows 通知必须在实际安装的应用中验收；开发态不能代表正式身份及图标。Phase 6 使用官方 `tauri-plugin-autostart`：React 仅经 `src/services/autostart.ts` 调用 `isEnabled`、`enable`、`disable`，设置弹窗打开和重新聚焦时读取系统实际状态，用户切换后立即复读。它不写 SQLite、不增加 migration，默认关闭；系统 API 失败或复读状态与请求不一致时 UI 保留实际已知状态并显示错误。能力仅授予 `autostart:default`（读取、启用、关闭），按当前用户启动，不创建 Windows Service。官方 `tauri-plugin-single-instance` 注册在应用初始化最前面；第二次启动会显示并聚焦已有 `main` 窗口，因此不会创建第二个 reminder scheduler。
 
 Phase 4（教务系统导入）已由用户取消，不继续实现相关功能。
 

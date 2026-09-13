@@ -2,6 +2,10 @@
 
 ## 未发布 — 2026-09-13
 
+- **Phase 6 PASS**：使用官方 Tauri autostart plugin 实现当前用户登录后的自动启动。设置中的独立“启动设置”默认关闭，打开/返回设置时查询系统实际状态，启用或关闭后立即复读；失败与状态不一致不会显示伪成功。未修改 SQLite schema（仍为 4），未添加后台服务、托盘或隐藏窗口。
+- 为防止自动启动和手动启动并发产生重复提醒，新增官方 single-instance plugin；后续启动显示并聚焦现有主窗口。新增浏览器 adapter UI 回归，覆盖 enable/disable 成功、两类失败以及复读不一致。
+- 本机 Windows 安装态验证：NSIS 包成功安装；开关真实创建并清除当前用户启动项；重复启动仍只有一个应用进程。验收后自动启动恢复为关闭，测试安装已卸载；未强制注销或重启开发机。
+
 - **Phase 5 PASS / Phase 5.4 PASS**：提醒计划会在启动、数据变化和窗口恢复时由 TypeScript core 重建。新增 schema 3→4 migration 的最小 `handled_reminders` 表，在 notification delivery attempt 后记录 occurrence key 与时间，跨重启排除已处理提醒；写入失败不会使 scheduler 停止，当前 session 仍保持去重。scheduler 每分钟复核绝对 wall-clock，覆盖应用存活期间的休眠恢复和明显系统时间跳变。
 - 0→4、1→4、2→4、3→4 迁移链、未来版本拒绝、handled 保留清理、restart/catch-up/already-started、same-trigger 和持久状态失败均有回归覆盖。Phase 5 总验收通过：105 项 TypeScript 单元、39 项架构、282/297 UI（15 条既有条件 skip）、28 项 Rust、typecheck、lint、format、build、verify、fmt 与 clippy 均 PASS。
 - **Phase 4 CANCELLED BY USER**：不再继续教务系统导入或相关调查。

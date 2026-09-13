@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { validatePeriodTimes } from "../core/period-time.ts";
 import {
   SHANGHAI_TIMEZONE,
@@ -6,6 +6,7 @@ import {
   validateTermConfig,
 } from "../core/reminder.ts";
 import { minutesToTime, timeToMinutes } from "../core/time.ts";
+import { loadAutostartEnabled, saveAutostartEnabled } from "../services/autostart.ts";
 import type { ReminderConfiguration, ReminderSettings, TermConfig } from "../types/reminder.ts";
 import type { PeriodTime } from "../types/time.ts";
 
@@ -43,6 +44,36 @@ export function PeriodSettings({
   );
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [autostartEnabled, setAutostartEnabled] = useState<boolean | null>(null);
+  const [autostartError, setAutostartError] = useState("");
+  const [isUpdatingAutostart, setIsUpdatingAutostart] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const enabled = await loadAutostartEnabled();
+        if (active) {
+          setAutostartEnabled(enabled);
+          setAutostartError("");
+        }
+      } catch (caught: unknown) {
+        if (active) {
+          setAutostartError(
+            caught instanceof Error
+              ? caught.message
+              : "无法读取 Windows 登录启动状态，请稍后重试。",
+          );
+        }
+      }
+    };
+    void refresh();
+    window.addEventListener("focus", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
 
   function update(index: number, field: "startTime" | "endTime", value: string) {
     setDraft((current) =>
@@ -105,6 +136,32 @@ export function PeriodSettings({
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "保存作息失败，请稍后重试。");
       setIsSaving(false);
+    }
+  }
+
+  async function updateAutostart(enabled: boolean) {
+    const previous = autostartEnabled;
+    setIsUpdatingAutostart(true);
+    setAutostartError("");
+    try {
+      const actual = await saveAutostartEnabled(enabled);
+      setAutostartEnabled(actual);
+      if (actual !== enabled) {
+        setAutostartError(
+          enabled ? "系统未确认已开启登录后自动启动。" : "系统未确认已关闭登录后自动启动。",
+        );
+      }
+    } catch (caught: unknown) {
+      try {
+        setAutostartEnabled(await loadAutostartEnabled());
+      } catch {
+        setAutostartEnabled(previous);
+      }
+      setAutostartError(
+        caught instanceof Error ? caught.message : "无法更新 Windows 登录启动状态，请稍后重试。",
+      );
+    } finally {
+      setIsUpdatingAutostart(false);
     }
   }
 
@@ -182,7 +239,7 @@ export function PeriodSettings({
         <section className="settings-section" aria-labelledby="reminder-settings-title">
           <div>
             <h3 id="reminder-settings-title">学期与课程提醒</h3>
-            <p>提醒目前只保存并计算时间，不会发送 Windows 系统通知。</p>
+            <p>运行中的应用会在到期时发送 Windows 系统通知。</p>
           </div>
           <div className="settings-fields">
             <label>
@@ -227,6 +284,29 @@ export function PeriodSettings({
               />
             </label>
           </div>
+        </section>
+        <section className="settings-section" aria-labelledby="autostart-settings-title">
+          <div>
+            <h3 id="autostart-settings-title">启动设置</h3>
+            <p>登录 Windows 后自动启动应用。默认关闭，可随时修改。</p>
+          </div>
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={autostartEnabled ?? false}
+              disabled={autostartEnabled === null || isUpdatingAutostart}
+              onChange={(event) => void updateAutostart(event.target.checked)}
+              aria-label="登录 Windows 后自动启动应用"
+            />
+            <span>
+              {autostartEnabled === null ? "正在读取启动状态…" : "登录 Windows 后自动启动应用"}
+            </span>
+          </label>
+          {autostartError && (
+            <p className="form-error" role="alert">
+              {autostartError}
+            </p>
+          )}
         </section>
         {error && (
           <p className="form-error" role="alert">
