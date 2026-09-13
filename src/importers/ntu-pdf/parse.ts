@@ -417,7 +417,7 @@ function buildIssues(
         code: "test-schedule",
         field: "time",
         severity: "blocking",
-        message: "当前使用测试作息，需要确认正式作息。",
+        message: "尚未确认作息，需要先在设置中保存实际作息。",
       });
   }
   return issues;

@@ -225,7 +225,7 @@ export function PeriodSettings({
             <h2 id="period-settings-title">作息时间</h2>
             <p className="period-settings-note">
               {isUsingTestSchedule
-                ? "当前使用测试作息，请设置并保存你的实际作息时间。"
+                ? "请设置并保存你的实际作息时间。"
                 : "修改后只影响时间轴和后续节次映射，不会改动已有课程时间。"}
             </p>
           </div>

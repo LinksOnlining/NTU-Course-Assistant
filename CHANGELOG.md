@@ -1,6 +1,9 @@
 # 变更记录
 
-## 未发布 — 2026-09-13
+## 1.0.0 Release Candidate — 2026-09-13
+
+- **Phase 10 PASS**：统一 `1.0.0` 版本、正式产品名称和 Windows bundle metadata；生产界面不再展示 fixture、原型或测试数据。新增正式 README、MIT LICENSE、发布清理与 RC 验证记录；完成 EXE、MSI、NSIS 构建和卸载/重装烟雾验收。
+- **Phase 9 PASS**：移除正式课程卡片的“用户添加”来源标记；课程内容随可用空间缩小字体；课程表主体上移。实际课表 PDF 的文字层导入复核通过。
 
 - **Phase 8 PASS**：使用 `assets/branding/app-icon-source.png` 生成正式应用图标、包含 16/24/32/48/64/128/256 图层的 `.ico` 与同品牌简化 Tray 图标；release EXE、MSI、NSIS 和 Start Menu 快捷方式均使用正式资源。
 - 新增官方 Tauri Tray：主窗口 × 改为隐藏，Tray 可恢复主窗口、显示/隐藏唯一桌面小组件，且“退出程序”才结束应用。单实例、单 scheduler、schema 4 与 autostart 保持不变。

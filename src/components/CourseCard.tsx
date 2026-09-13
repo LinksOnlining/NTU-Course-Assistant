@@ -33,6 +33,7 @@ function textDensity(course: Course, durationMinutes: number, laneCount: number)
   }
   if (durationMinutes < 75 && laneCount > 1) return "micro";
   if (durationMinutes < 75 || laneCount > 1) return "small";
+  if (durationMinutes <= 105 && contentLength > 32) return contentLength > 58 ? "micro" : "small";
   return "regular";
 }
 
@@ -53,7 +54,6 @@ export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit, periods }:
         : `第${mappedPeriods.startPeriod}–${mappedPeriods.endPeriod}节`;
   const timeLabel = `${periodLabel ? `${periodLabel} · ` : ""}${course.startTime}–${course.endTime}`;
   const title = [
-    isUserCourse ? "用户添加" : "测试数据",
     course.name,
     timeLabel,
     course.classroom ?? "教室待定",
@@ -96,7 +96,6 @@ export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit, periods }:
           : undefined
       }
     >
-      {isUserCourse && <span className="course-origin">用户添加</span>}
       <strong className="course-name">{course.name}</strong>
       <span className="course-time">{timeLabel}</span>
       <span className="course-classroom">{course.classroom ?? "教室待定"}</span>

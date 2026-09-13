@@ -62,6 +62,7 @@ type PdfImportState =
   | { readonly kind: "error"; readonly message: string };
 
 export function App() {
+  const showDevelopmentFixtures = import.meta.env.DEV && !("__TAURI_INTERNALS__" in window);
   const [userCourses, setUserCourses] = useState<readonly Course[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
@@ -85,7 +86,7 @@ export function App() {
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState("");
   const [importSuccess, setImportSuccess] = useState("");
-  const fixtureCourses = import.meta.env.DEV ? TEST_COURSES : [];
+  const fixtureCourses = showDevelopmentFixtures ? TEST_COURSES : [];
   const courses = useMemo(() => [...fixtureCourses, ...userCourses], [fixtureCourses, userCourses]);
   const axis = useMemo(() => getTimelineBounds(TEST_TIMETABLE.axis, periods), [periods]);
   const userCourseIds = useMemo(
@@ -145,7 +146,9 @@ export function App() {
         setPeriods(activePeriods);
         setIsUsingTestSchedule(storedPeriods === null);
         setPeriodMessage(
-          storedPeriods === null ? "当前使用测试作息，请在设置中确认。" : "已使用自定义作息。",
+          storedPeriods === null
+            ? "尚未确认作息时间，请在设置中保存你的实际作息。"
+            : "已使用自定义作息。",
         );
         const displayAxis = getTimelineBounds(TEST_TIMETABLE.axis, activePeriods);
         const warnings = [...result.warnings, ...storedReminderConfiguration.warnings];
@@ -268,7 +271,7 @@ export function App() {
           <p className="eyebrow">NTU COURSE ASSISTANT</p>
           <div className="title-row">
             <h1>大学课程表</h1>
-            <span className="prototype-badge">桌面原型</span>
+            {showDevelopmentFixtures && <span className="prototype-badge">开发预览</span>}
           </div>
           <p className="subtitle">时间决定位置，空闲时段按真实比例保留</p>
         </div>
@@ -300,17 +303,19 @@ export function App() {
           >
             设置
           </button>
-          <div className="week-status" aria-label={`当前为测试第 ${TEST_TIMETABLE.currentWeek} 周`}>
-            <span>测试教学周</span>
+          <div className="week-status" aria-label={`当前显示第 ${TEST_TIMETABLE.currentWeek} 周`}>
+            <span>当前显示周</span>
             <strong>第 {TEST_TIMETABLE.currentWeek} 周</strong>
-            <small>周一至周日</small>
+            <small>{isUsingTestSchedule ? "请在设置中确认" : "周一至周日"}</small>
           </div>
         </div>
       </header>
-      <p className="fixture-notice" role="status">
-        <strong>测试数据</strong>
-        开发模式显示 fixture；用户课程单独保存在 Windows 应用数据目录。
-      </p>
+      {showDevelopmentFixtures && (
+        <p className="fixture-notice" role="status">
+          <strong>开发数据</strong>
+          浏览器预览显示 fixture；用户课程单独保存在 Windows 应用数据目录。
+        </p>
+      )}
       {storageStatus === "loading" && <p className="storage-notice">正在读取本地课程…</p>}
       {storageMessage && (
         <p

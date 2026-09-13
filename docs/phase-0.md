@@ -14,7 +14,7 @@
 - Node v24.19.0、npm 11.17.0、Git 可用；PATH 未发现 cargo/rustc，用户默认 cargo 路径也不存在；标准位置未发现 vswhere。不能认定所有自定义安装位置都没有工具。Phase 1 先检查/补齐 Rust MSVC、C++ Build Tools 和 WebView2；本轮不安装。
 - 模板历史测试成绩没有在本轮复跑，不能算本项目 PASS。
 
-结论：新建 D:\AI_Workspace\Projects\NTU-Course-Assistant，选择性沿用模板规范，独立 Git。当前仅创建文档和基础文本配置，不实现 Phase 1。
+结论：在 `<workspace-root>/NTU-Course-Assistant` 新建项目，选择性沿用模板规范，独立 Git。当前仅创建文档和基础文本配置，不实现 Phase 1。
 
 ## 开发顺序与阶段边界
 

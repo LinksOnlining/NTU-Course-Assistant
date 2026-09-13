@@ -109,7 +109,7 @@ test.beforeEach(async ({ page }) => {
   await openTimetable(page);
   await page.evaluate(() => new Promise(requestAnimationFrame));
   expect(errors).toEqual([]);
-  await expect(page.getByText("测试数据", { exact: true })).toBeVisible();
+  await expect(page.getByText("开发数据", { exact: true })).toBeVisible();
 });
 
 test("widget settings default to disabled and save the requested mode and lock", async ({
@@ -728,7 +728,7 @@ test("validated course appears on the correct day with real-time geometry", asyn
   const card = page.locator('[data-weekday="3"] [data-source="user"]');
   await expect(card).toHaveCount(1);
   await expect(card).toContainText("机械设计基础");
-  await expect(card).toContainText("用户添加");
+  await expect(card).not.toContainText("用户添加");
   await expect(card).toHaveAttribute("data-duration-minutes", "90");
   const day = await box(page.locator('[data-weekday="3"]'));
   const cardBox = await box(card);

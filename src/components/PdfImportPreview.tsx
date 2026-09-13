@@ -406,7 +406,7 @@ export function PdfImportPreview({
         <div className="pdf-preview-toolbar">
           {isUsingTestSchedule && (
             <div className="pdf-schedule-warning" role="alert">
-              <span>当前仍是测试作息，固定课程暂时不能生成正式时间。</span>
+              <span>请先在设置中确认作息，固定课程才能生成正式时间。</span>
               <button type="button" className="secondary-button" onClick={onOpenPeriodSettings}>
                 打开作息设置
               </button>

@@ -1,42 +1,54 @@
 # NTU Course Assistant
 
-面向大学生的 Windows 11 本地课程表与上课提醒程序，优先适配南通大学。
+Windows 11 本地课程表：管理课程、导入已支持的南通大学课表 PDF，并在上课前发送提醒。
 
-**Phase 8 PASS；Phase 4 已由用户取消。** 真实 PDF 可提取并识别为 15 条固定安排和 3 条非固定实践候选；用户修正并最终确认后，应用使用单个 SQLite 事务原子写入课程。运行中的 Windows 应用会在课程 due 时发送系统通知，并在应用重启或窗口恢复后重建提醒计划；完全退出时不提供后台提醒。正式图标、系统托盘和桌面小组件已完成：主窗口关闭后应用保持在 tray 中，提醒继续有效，Tray 可恢复课程表、显示/隐藏小组件或真正退出。
+## 主要功能
 
-- [设计与数据模型](DESIGN.md)
-- [阶段状态](PROJECT_STATUS.md)
-- [Phase 0 检查、路线与验收计划](docs/phase-0.md)
-- [Phase 2 验证](docs/phase-2-verification.md)
-- [Phase 2.5 验证](docs/phase-2-5-verification.md)
-- [Phase 2.6 验证](docs/phase-2-6-verification.md)
-- [Phase 2.7 验证](docs/phase-2-7-verification.md)
-- [Phase 3.1 验证](docs/phase-3-1-verification.md)
-- [Phase 3.2 验证](docs/phase-3-2-verification.md)
-- [Phase 3.3 验证](docs/phase-3-3-verification.md)
-- [Phase 3.4 / Phase 3 总验收](docs/phase-3-4-verification.md)
-- [Phase 5.1 验证记录](docs/phase-5-1-verification.md)
-- [Phase 5.2 验证记录](docs/phase-5-2-verification.md)
-- [Phase 5.3 验证记录](docs/phase-5-3-verification.md)
-- [Phase 5.4 / Phase 5 总验收](docs/phase-5-4-verification.md)
-- [Phase 6 验证记录](docs/phase-6-verification.md)
-- [Phase 8 验证记录](docs/phase-8-verification.md)
-- [开发规则](CODEX.md)
+- 七天课程表按真实开始、结束时间显示，保留课间、午休和空闲时段。
+- 本地添加、编辑、删除课程；数据保存在本机 SQLite 数据库。
+- 导入当前支持结构的南通大学课表 PDF，预览、修正后再确认写入。
+- 上课前 Windows 通知；主窗口关闭到系统托盘后提醒继续运行。
+- 可选桌面小组件，支持今日/本周、锁定、位置与尺寸恢复。
+- 可选登录后自动启动，以及单实例保护。
+
+## 系统要求与安装
+
+- Windows 11 是当前主要支持平台。
+- 安装最新版 `NTU Course Assistant_1.0.0_x64-setup.exe`，按安装向导完成安装后，从开始菜单启动应用。
+- 首次使用请在“设置”中确认作息时间、学期首周和提醒选项。
+
+## 使用说明
+
+### 课程与 PDF
+
+可手动添加课程，也可选择“导入 PDF”。PDF 导入仅在本机处理，先显示候选与问题，再由你确认写入课程表。当前导入器针对已验证的南通大学课表结构；扫描版 PDF、其他学校或不同版式可能需要手动添加或修正。
+
+### 提醒、托盘与小组件
+
+课程提醒只在应用进程存活时工作。关闭主窗口会隐藏到系统托盘，提醒、小组件和已启用的应用功能会继续运行；在托盘菜单选择“退出程序”才会完全退出。小组件是一个始终位于普通窗口下方的桌面式窗口，并非嵌入 Windows 壁纸。
+
+## 隐私
+
+课程数据和导入的 PDF 均在本机处理。课程数据保存于 Tauri 应用本地数据目录的 SQLite 数据库；应用没有账号系统、云同步或服务器上传功能。
+
+## 已知限制
+
+- 学校作息与学期日期需要由用户确认后保存。
+- 不支持扫描版 PDF，也未实现教务系统直接导入、云同步、自动更新或日程管理。
+- 应用完全退出后不会继续发送提醒。
+
+## 本地开发
+
+```powershell
+npm install
+npm run tauri dev
+```
+
+完整验证使用 `npm run verify`，Rust 检查在 `src-tauri` 目录执行。
+
+## 项目资料
+
+- [设计说明](DESIGN.md)
+- [当前状态](PROJECT_STATUS.md)
 - [变更记录](CHANGELOG.md)
-
-建议技术栈：Tauri 2、React、TypeScript、Rust、Vite、npm；SQLite 在 Phase 2 接入。各依赖在实际进入对应阶段时选择兼容版本并锁定。
-
-当前命令：
-
-- `npm install`：安装锁定依赖。
-- `npm run dev`：启动本机前端开发服务器。
-- `npm run tauri dev`：启动真实 Tauri Windows 桌面窗口。
-- `npm run build`：执行严格类型检查和 Vite 生产构建。
-- `npm run verify`：执行 typecheck、单元测试、架构测试、UI 场景、lint、格式检查和 build。
-- `npm run test:unit`、`npm run test:arch`、`npm run test:ui`、`npm run lint`、`npm run format:check`：分别运行对应检查。
-
-Phase 2 的持久化 CRUD、故障恢复及原有时间轴已在 1280×800、1000×700、900×600 与 100%/125%/150% 设备缩放矩阵中验证；真实 Tauri 窗口另在本机 Windows 200% DPI 下从数据库不存在开始，完成自动建库、四轮启动以及添加、编辑、删除的 SQLite 恢复检查。浏览器测试没有替代 Desktop PASS。
-
-本次已安装用户级 Rust，未修改持久 PATH；终端需将用户 `.cargo/bin` 加入当前会话 PATH 后调用 Cargo。本机 C++ 桌面工具及 Windows SDK 已通过实际编译验证。
-
-详见 [真实 PDF 样本检查](docs/pdf-sample-review.md)、[Phase 1 验证](docs/phase-1-verification.md)、[Phase 2 验证](docs/phase-2-verification.md)、[Phase 2.5 验证](docs/phase-2-5-verification.md)、[Phase 2.6 验证](docs/phase-2-6-verification.md)、[Phase 2.7 验证](docs/phase-2-7-verification.md)、[Phase 3.1 验证](docs/phase-3-1-verification.md)、[Phase 3.2 验证](docs/phase-3-2-verification.md)、[Phase 3.3 验证](docs/phase-3-3-verification.md) 和 [Phase 3.4 / Phase 3 总验收](docs/phase-3-4-verification.md)。
+- [许可证](LICENSE)

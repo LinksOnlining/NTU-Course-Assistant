@@ -40,7 +40,7 @@
 
 开始工作之前，首先检查：
 
-`D:\AI_Workspace\Projects\AI_Project_Template`
+`<workspace-root>/AI_Project_Template`
 
 如果模板存在：
 
@@ -57,7 +57,7 @@
 
 如果已经存在以前的：
 
-`D:\AI_Workspace\Projects\NTU-Course-Assistant`
+`<workspace-root>/NTU-Course-Assistant`
 
 不要直接覆盖。
 
@@ -897,10 +897,10 @@ Git 提交
 完成以下内容：
 
 1. 检查
-   `D:\AI_Workspace\Projects\AI_Project_Template`
+   `<workspace-root>/AI_Project_Template`
 
 2. 检查是否存在
-   `D:\AI_Workspace\Projects\NTU-Course-Assistant`
+   `<workspace-root>/NTU-Course-Assistant`
 
 3. 阅读现有项目规则和文档。
 

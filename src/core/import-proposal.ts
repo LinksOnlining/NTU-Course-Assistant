@@ -118,10 +118,7 @@ export function prepareCourseProposal(
         issue("period-not-mapped", "time", "blocking", "当前作息无法映射这段节次。"),
       );
     } else if (isUsingTestSchedule) {
-      appendIssue(
-        issues,
-        issue("test-schedule", "time", "blocking", "当前仍是测试作息，请先确认并保存实际作息。"),
-      );
+      appendIssue(issues, issue("test-schedule", "time", "blocking", "请先确认并保存实际作息。"));
     }
   }
   if (candidate.weeks === null || candidate.weeks.length === 0) {

@@ -179,3 +179,7 @@ Version 1.0 期间：
 - 不影响当前 Phase 3–6 开发流程
 
 只保留设计扩展点，避免未来架构被 Course 单一模型锁死。
+
+## Version 1.0 发布边界
+
+Release Candidate 使用稳定 identifier `com.ntu-course-assistant.desktop`、schema `4` 和单一 Tauri 进程。生产 bundle 不包含 fixture 课程或开发态标签；没有保存作息时，默认时间轴仅作为待确认的编辑起点，不能被表述为学校正式作息。应用完全退出后不运行 scheduler；关闭主窗口到 Tray 时则保持现有提醒、Tray 与可选 Widget 生命周期。正式发布不引入后台服务、自动更新或云端能力。

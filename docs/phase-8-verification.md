@@ -20,7 +20,7 @@
 ## Windows 人工与安装态验收
 
 - 已实际观察：正式 App Icon 与简化 Tray Icon 清晰；Tray 菜单正确；主窗口 × 后隐藏且 tray 保留；Tray 恢复主窗口；Tray 显示/隐藏 widget；重复启动维持单实例；Windows 测试提醒实际显示（PASS）。
-- NSIS 已静默安装到 `C:\Users\LinYu\AppData\Local\NTU Course Assistant`，安装态 EXE 成功启动且不依赖 localhost。Start Menu 快捷方式存在，目标为安装态 EXE；release EXE、MSI、NSIS 均已生成。
+- NSIS 已静默安装到用户级 LocalAppData 的应用目录，安装态 EXE 成功启动且不依赖 localhost。Start Menu 快捷方式存在，目标为安装态 EXE；release EXE、MSI、NSIS 均已生成。
 - 未单独执行：安装态下对每个 Explorer/Taskbar/Alt+Tab 图标尺寸逐项肉眼复查，以及 Tray “退出程序”单独人工点击。它们不构成 V1 阻断：同一 bundle 图标配置已用于 EXE/MSI/NSIS，快捷方式已验证指向安装态 EXE；退出项走官方 Tauri `app.exit(0)` 路径并由架构测试覆盖。
 
 ## 边界
