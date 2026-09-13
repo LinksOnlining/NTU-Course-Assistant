@@ -16,7 +16,9 @@ Rust 在命令写入前再次校验 Course，读取时逐行解析 JSON 和校�
 
 Phase 2.4/2.6 用独立数据库验证了首次建库、迁移、连接关闭后重开、合法记录与 JSON/星期/时间/字段类型坏记录混合加载、未来版本拒绝、3 秒 busy timeout 及失败写入不损坏原数据。作息、学期和提醒设置先在 Rust 边界完成完整校验，再以单一事务写入；失败时保留上一份设置。未来 schema 会显示可操作的升级提示；其他初始化错误显示概括提示，SQLite 细节只写入 Rust 日志。React 只在 Rust 写入成功后提交状态，因此课程和设置写入失败均不会制造伪成功。
 
-Phase 3.1 使用 PDF.js 6 的文字型 PDF 提取能力，并在构建前从受锁定依赖生成被忽略的 CMap 静态资源，以支持中文字体映射。`src/services/pdf-import.ts` 是唯一的 PDF/Tauri 文件适配器：Tauri 使用 Dialog 选择 `.pdf` 并通过受作用域限制的 FS API 读取；浏览器开发测试使用原生临时 file input。解析器懒加载，不增加主界面首次加载的 PDF.js 代码。它返回 `PdfExtraction`（文件名、页码、页面宽高及保留文本/x/y/宽高的 `PdfTextItem`），结果只在 React 内存中存在。学校规则、Course 和 SQLite 不属于此层。扫描件、加密件、损坏件或非 PDF 明确失败，不假装识别成功。
+Phase 3.1 使用 PDF.js 6 的文字型 PDF 提取能力，并在构建前从受锁定依赖生成被忽略的 CMap 静态资源，以支持中文字体映射。`src/services/pdf-import.ts` 是唯一的 PDF/Tauri 文件适配器：Tauri 使用 Dialog 选择 `.pdf` 并通过受作用域限制的 FS API 读取；浏览器开发测试使用原生临时 file input。解析器懒加载，不增加主界面首次加载的 PDF.js 代码。它返回 `PdfExtraction`（文件名、页码、页面宽高及保留文本/x/y/宽高的 `PdfTextItem`），结果只在 React 内存中存在。学校规则、Course 和 SQLite 不属于此层。文字层不足时逐页渲染并使用随应用打包的 Tesseract `chi_sim` / `eng` 资源做离线 OCR，再回到相同的 `PdfTextItem` 边界；识别结果不足、加密件、损坏件或非 PDF 明确失败，不假装识别成功。
+
+NTU 解析器只把同时具有实践语义和“（共 N 周）”结构标记的无固定时段文本视为实践候选，避免课程元数据中的“训练/学时”等普通字段产生伪候选。真实三页样本的稳定结果为 17 条固定安排和 3 条非固定实践。
 
 Phase 3.2 的 `src/importers/ntu-pdf/parse.ts` 独立消费 `PdfExtraction`，只产出允许缺字段的 `ImportCandidate[]` 与结构化 `ImportIssue[]`；它不依赖 React、Tauri 或存储。解析器要求至少三个唯一星期表头形成明确坐标证据，再自动选择 x 或 y 星期轴；证据不足时返回未知星期，经确认的首页面布局可供续页使用。星期归属使用表头相对位置，课程分组使用节次锚点、来源顺序和按文本高度推导的容差，不硬编码页面尺寸、绝对坐标或课程名称。
 
@@ -76,6 +78,8 @@ Phase 2.5 实现 `PeriodTime` 配置边界和 `periodToTime`、`periodRangeToTim
 Phase 2.6 将 `PeriodTime[]` 作为用户可配置的作息：设置对话框复用同一份核心校验，允许编辑时间、添加下一节和删除最后一节，最多 30 节且必须从第 1 节连续编号。保存通过 Tauri `save_period_times` 事务完成；首次运行或未保存时使用 test-only fallback，保存后的配置由 `load_period_times` 恢复。`getTimelineBounds` 会将测试轴与作息覆盖范围合并并向整点扩展，TimeAxis 仍是连续分钟轴；课程的 `startTime/endTime` 永不因作息修改而改变，只有精确命中当前配置的原有节次才显示节次标签，不匹配时仅显示实际时间。
 
 v1.1.0 在同一 `PeriodTime[]` 上提供纯 `adjustPeriodSchedule`：编辑一节的开始时间时保留其原时长；编辑结束时间时使用输入的结束时间。后续节次整体按当前节结束时间差移动，保留后续时长与原课间，前置节次和所有 Course 的真实时间不变。主课表的 selectedWeek 与 5/7 天视图是 React 会话状态，不写入 SQLite；当前周和星期只由既有 TermConfig 与 Asia/Shanghai 计算，当前时间线和自动定位复用同一 minute-to-Y 几何。
+
+v1.1.0 RC2 的设置写入以 Rust 事务结果和数据库回读为准；小组件更新使用字段级 patch，防止延迟的 move/resize 保存覆盖更新后的 enabled、mode 或 locked。统一单节时长只转换设置页当前草稿，不新增 schema，也不改写现有 Course。
 
 Phase 2.7 只调整桌面表现。TimeAxis 的每个节次块把节次、开始和结束时间分层显示；即使是 30 分钟的第一节，完整时间段也置于节次下方。课程与对应节次继续使用同一分钟计算，课程区不绘制小时、半小时、节次或列分隔网格。课程卡片始终由 `courseTiming` 提供 top/height，不使用离散 grid 行；普通卡片采用 10–12px 内边距和低饱和稳定色，短课和重叠 lane 会依据可用高度/宽度缩小文字，但不隐藏课程名称、时间、教室或教师，也不以省略号替代字段。
 

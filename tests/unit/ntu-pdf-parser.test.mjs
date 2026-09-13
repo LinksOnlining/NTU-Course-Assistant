@@ -80,6 +80,7 @@ test("three non-fixed practice lines remain separate reviewable candidates", () 
     practices.map((candidate) => candidate.name),
     ["生产实习", "综合训练B", "劳动教育（二）"],
   );
+  assert(!practices.some((candidate) => candidate.name === "训练"));
   assert.deepEqual(
     practices.map((candidate) => candidate.weeks),
     [[17], [1, 2], Array.from({ length: 17 }, (_, index) => index + 1)],

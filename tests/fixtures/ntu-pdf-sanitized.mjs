@@ -48,7 +48,7 @@ export const xAxisExtraction = {
 export const yAxisExtraction = {
   fileName: "sanitized-y-axis.pdf",
   pageCount: 1,
-  textItemCount: 13,
+  textItemCount: 14,
   pages: [
     {
       page: 1,
@@ -62,6 +62,7 @@ export const yAxisExtraction = {
         item(1, "(1-2节)1-16周", 112, 100),
         item(1, "场地:JX03-303/教师:教师丁", 124, 100),
         item(1, "/职称:讲师", 136, 100),
+        item(1, "训练/2/教学班组成:匿名班级", 160, 100, 150),
         item(1, "其他课程：生产实习匿名教师(共1周)/17周/无;", 440, 20, 240),
         item(1, "综合训练B匿名教师(共2周)/1-2周/无;", 440, 200, 210),
         item(1, "劳动教育（二）匿名教师(共17周)/1-17周/无;", 440, 300, 240),

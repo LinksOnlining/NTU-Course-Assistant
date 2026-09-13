@@ -117,7 +117,7 @@ function closestWeekday(item: PdfTextItem, layout: PageLayout | null): Weekday |
 }
 
 function isNonFixedPractice(text: string): boolean {
-  return PRACTICE_PATTERN.test(text);
+  return /[（(]\s*共\s*\d+\s*周\s*[）)]/u.test(text) && PRACTICE_PATTERN.test(text);
 }
 
 function clusterColumnItems(
