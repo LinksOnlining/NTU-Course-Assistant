@@ -16,7 +16,7 @@ import { parseNtuPdfTimetable } from "./importers/ntu-pdf/parse.ts";
 import { TEST_COURSES } from "./fixtures/courses.ts";
 import { choosePdfFile, extractPdfText, PdfImportError } from "./services/pdf-import.ts";
 import { subscribeReminderResume } from "./services/reminder-lifecycle.ts";
-import { openWidgetPrototype } from "./services/widget-window.ts";
+import { notifyWidgetDataChanged, openWidgetPrototype } from "./services/widget-window.ts";
 import {
   deleteStoredCourse,
   importStoredCourses,
@@ -232,6 +232,7 @@ export function App() {
         throw new Error("数据库返回的课程数量不一致，界面未更新，请重试。");
       }
       setUserCourses((current) => [...current, ...inserted]);
+      notifyWidgetDataChanged();
       setImportSuccess(
         `已导入 ${inserted.length} 条课程安排，跳过 ${importPlan.summary.skippedDuplicates} 条重复课程。`,
       );
@@ -386,9 +387,11 @@ export function App() {
               setUserCourses((current) =>
                 current.map((item) => (item.id === editingCourse.id ? course : item)),
               );
+              notifyWidgetDataChanged();
             } else {
               await insertStoredCourse(course);
               setUserCourses((current) => [...current, course]);
+              notifyWidgetDataChanged();
             }
             setIsAdding(false);
             setEditingCourse(null);
@@ -396,6 +399,7 @@ export function App() {
           onDelete={async (id) => {
             await deleteStoredCourse(id);
             setUserCourses((current) => current.filter((course) => course.id !== id));
+            notifyWidgetDataChanged();
             setEditingCourse(null);
           }}
           onCancel={() => {
@@ -414,6 +418,7 @@ export function App() {
             setPeriods([...nextPeriods]);
             setIsUsingTestSchedule(false);
             setReminderConfiguration({ termConfig, reminderSettings });
+            notifyWidgetDataChanged();
             setPeriodMessage("已使用自定义作息。");
             setIsPeriodSettingsOpen(false);
           }}

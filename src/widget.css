@@ -1,9 +1,9 @@
 .widget-prototype {
-  display: grid;
+  display: flex;
   min-height: 100%;
-  align-content: center;
-  gap: 8px;
-  padding: 28px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
   color: #17352b;
   background:
     radial-gradient(circle at 10% 0%, rgb(206 234 220 / 82%), transparent 43%),
@@ -11,8 +11,8 @@
 }
 
 .widget-prototype__eyebrow,
-.widget-prototype__phase,
-.widget-prototype__note {
+.widget-prototype__date,
+.widget-prototype__state {
   margin: 0;
 }
 
@@ -23,18 +23,100 @@
   letter-spacing: 0.14em;
 }
 
-.widget-prototype h1 {
-  margin: 0;
-  font-size: 27px;
-  letter-spacing: -0.04em;
+.widget-prototype__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-.widget-prototype__phase {
+.widget-prototype__header strong {
   font-size: 15px;
-  font-weight: 650;
 }
 
-.widget-prototype__note {
+.widget-prototype__open,
+.widget-prototype__tabs button {
+  border: 1px solid #b9d2c7;
+  border-radius: 8px;
+  color: #285849;
+  background: rgb(255 255 255 / 72%);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.widget-prototype__open {
+  padding: 6px 8px;
+}
+
+.widget-prototype__tabs {
+  display: flex;
+  gap: 5px;
+}
+
+.widget-prototype__tabs button {
+  padding: 4px 10px;
+}
+
+.widget-prototype__tabs button[aria-selected="true"] {
+  color: #fff;
+  background: #397763;
+}
+
+.widget-prototype__list,
+.widget-prototype__week {
+  display: grid;
+  min-height: 0;
+  gap: 6px;
+  overflow: auto;
+}
+
+.widget-prototype__date,
+.widget-prototype__state {
   color: #587168;
-  font-size: 13px;
+  font-size: 12px;
+}
+
+.widget-course {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid #d0e0d7;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 62%);
+}
+
+.widget-course strong {
+  font-size: 14px;
+}
+
+.widget-course span,
+.widget-course small,
+.widget-prototype__week span {
+  color: #587168;
+  font-size: 12px;
+}
+
+.widget-course--ended {
+  opacity: 0.56;
+}
+
+.widget-course--current,
+.widget-course--next {
+  border-color: #74af98;
+  background: #e3f3ea;
+}
+
+.widget-prototype__week article {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 3px 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgb(99 137 121 / 20%);
+}
+
+.widget-prototype__week article strong {
+  grid-row: span 4;
+  font-size: 12px;
 }

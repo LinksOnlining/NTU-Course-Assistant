@@ -173,7 +173,7 @@ fn open_widget(app: tauri::AppHandle) -> Result<(), String> {
 
     WebviewWindowBuilder::new(&app, "widget", WebviewUrl::App("index.html?widget".into()))
         .title("课程小组件")
-        .inner_size(320.0, 180.0)
+        .inner_size(360.0, 430.0)
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
@@ -187,6 +187,17 @@ fn open_widget(app: tauri::AppHandle) -> Result<(), String> {
             eprintln!("Widget window creation failed: {error}");
             "无法打开桌面课程小组件原型。".to_string()
         })
+}
+
+#[tauri::command]
+fn open_main(app: tauri::AppHandle) -> Result<(), String> {
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "无法找到课程表窗口。".to_string())?;
+    main.show()
+        .map_err(|_| "无法显示课程表窗口。".to_string())?;
+    main.set_focus()
+        .map_err(|_| "无法聚焦课程表窗口。".to_string())
 }
 
 pub fn run() {
@@ -259,7 +270,8 @@ pub fn run() {
             save_app_settings,
             refresh_reminder_schedule,
             reminder_scheduler_status,
-            open_widget
+            open_widget,
+            open_main
         ])
         .on_window_event(|window, event| {
             if window.label() == "widget" {

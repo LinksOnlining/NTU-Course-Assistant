@@ -97,6 +97,8 @@ Windows 通知必须在实际安装的应用中验收；开发态不能代表正
 
 Phase 7.1 将小组件限定为同一 Tauri 进程内一个 label 为 `widget` 的独立顶级窗口。创建由 Rust `open_widget` command 负责：已有窗口只调用 `show()`，不调用 `set_focus()`；新窗口加载 `index.html?widget`，使用 `always_on_bottom(true)`、`focused(false)`、无装饰、跳过任务栏和固定 320×180 原型尺寸。窗口可被用户正常点击，但创建与重用不抢主窗口焦点；关闭请求改为隐藏，主窗口生命周期不变。`WidgetPrototype` 只有静态原型文本，不读 Course、SQLite 或 reminder scheduler，也不提供课程内容、今日/本周筛选、设置、位置/尺寸持久化、托盘或通知。这些数据与交互边界留给后续 Phase 7 小阶段。
 
+Phase 7.2 将 Widget 内容限定为现有正式领域数据的纯展示派生：`Course[] + TermConfig → CourseOccurrence[] → WidgetViewModel`。ViewModel 使用 `getTeachingWeek` 判断当前 Shanghai 日期，不自行按天数推算教学周；Today 只保留当天 occurrence 并按开始时间排序，Week 只保留当前教学周的实际 occurrence。两个 WebView 不共享 React state：main 在正式写入成功后发出无 payload refresh event，widget 收到后经已有 service 重新读取；它每分钟更新展示时钟，但不重建或控制 reminder scheduler。模式只保留在运行时 React state；窗口状态与设置仍留给后续阶段。
+
 Phase 4（教务系统导入）已由用户取消，不继续实现相关功能。
 
 ## 选型依据（2026-09-08 核查）

@@ -2,6 +2,8 @@
 
 ## 未发布 — 2026-09-13
 
+- **Phase 7.2 PASS**：Widget 新增默认“今日”和可切换“本周”课程展示，复用 TermConfig、教学周核心和 CourseOccurrence；Today 按开始时间排序并省略空教室，学期外、未配置学期和无课均有明确状态。主窗口成功写入后只发送 refresh 事件，widget 经既有 service 重读数据；每分钟刷新 Shanghai 时间，不增加 scheduler、通知、SQLite schema 或 Widget 状态持久化。
+
 - **Phase 7.1 PASS**：新增同一 Tauri 应用内唯一的底层小组件原型窗口。官方 `WebviewWindowBuilder` 以无装饰、跳过任务栏、固定大小、`always_on_bottom(true)` 与 `focused(false)` 创建；重复打开只显示已有窗口且不抢焦点，关闭请求隐藏小组件并保留主窗口。原型只显示静态文本，不读课程/SQLite/提醒，也没有托盘、今日/本周、窗口状态持久化或第二进程。
 - 新增窗口 service、静态原型入口、架构与 UI 回归。真实 Windows 开发窗口验证主窗口与普通窗口覆盖小组件、重复触发保持单一小组件和单一进程、关闭小组件不退出主应用。
 

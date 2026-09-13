@@ -28,11 +28,16 @@ test("only service adapters import frontend Tauri APIs", () => {
 test("widget window stays outside course storage and reminder scheduling", () => {
   const widgetService = source("src/services/widget-window.ts");
   const widgetUi = source("src/components/WidgetPrototype.tsx");
+  const widgetCore = source("src/core/widget-view.ts");
   const rust = source("src-tauri/src/lib.rs");
 
   assert.match(widgetService, /invoke\("open_widget"\)/);
   assert.doesNotMatch(widgetService, /course-storage|sqlite|reminder/i);
-  assert.doesNotMatch(widgetUi, /course-storage|sqlite|reminder|@tauri-apps/i);
+  assert.doesNotMatch(
+    widgetUi,
+    /course-storage|sqlite|ReminderScheduler|notification|@tauri-apps/i,
+  );
+  assert.doesNotMatch(widgetCore, /(?:react|@tauri-apps|sqlite|\binvoke\s*\()/i);
   assert.match(rust, /get_webview_window\("widget"\)/);
   assert.match(rust, /always_on_bottom\(true\)/);
   assert.equal((rust.match(/ReminderScheduler::new/g) ?? []).length, 1);
