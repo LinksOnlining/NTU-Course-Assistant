@@ -1,7 +1,7 @@
 # 项目状态
 
 - 最后更新：2026-09-14
-- 当前阶段：**v1.1.0 RC2 — SOURCE AND TAURI DESKTOP ACCEPTANCE PASS; INSTALLER REBUILD DEFERRED**。Phase 10 PASS；Phase 9、Phase 8、Phase 7.1–7.4、Phase 7、Phase 5 与 Phase 6 均为 PASS；Phase 1、Phase 2、Phase 2.5–2.7、Phase 3.1–3.4 均为 PASS；Phase 4 已由用户取消。
+- 当前阶段：**v1.1.0 RC2 — LOCAL RELEASE BUILD PASS; GITHUB RELEASE IN PROGRESS**。Phase 10 PASS；Phase 9、Phase 8、Phase 7.1–7.4、Phase 7、Phase 5 与 Phase 6 均为 PASS；Phase 1、Phase 2、Phase 2.5–2.7、Phase 3.1–3.4 均为 PASS；Phase 4 已由用户取消。
 - 阶段门禁：Phase 7.4 离屏恢复、保存回归修复、自动验证、开发态/安装态启动和 Windows 人工验收均已完成。双显示器移除与 DPI 切换未单独执行，保留为已有 physical geometry fallback 自动覆盖的 documented limitation，不阻断 V1。
 - 已完成：Phase 0；Phase 1 全部；Phase 2 全部；Phase 2.5 节次显示；Phase 2.6 用户可配置作息；Phase 2.7 桌面时间轴与自适应课程文字。
 - 核心规则：严格 HH:mm；课程 top/height 只由实际时间及 pxPerMinute 决定；07:00–22:00 轴保留真实空闲比例；重叠链由纯布局函数分配横向 lane；星期列始终为周一至周日。
@@ -36,7 +36,7 @@
 - Phase 3.4 状态：纯 `prepareImportPlan` 在生成 ID 前稳定计算写入、现有/批内重复跳过及时间冲突；正式确认时仅为待写入项生成一次 UUID 并再次通过统一校验。Rust `import_courses` 在单个 SQLite transaction 中再次校验并批量插入，任一失败整体回滚；React 只在成功返回后合并课程。
 - Phase 3.4 Desktop 验收：备份真实 AppData 数据库后，在 Tauri 独立窗口补齐 3 条实践并将 18 条课程一次写入；`load_courses` 返回 18，当前周立即显示 12 张用户卡片。正常关闭重启后仍恢复 18；再次导入同一 PDF 得到重复 18、写入 0，数据库保持 18。全过程 `period_times=12`、`user_version=2`、integrity=ok，页面/控制台无错误；验收后已恢复原始数据库为 courses=0。
 - v1.1.0 RC2：新增作息后续节次联动、教学周切换、5/7 天视图、当前星期高亮、分钟级当前时间线、首次当前时间定位、离线 OCR 和统一单节时长。设置写入采用数据库回读，小组件采用字段级 patch；用户已确认设置保存问题修复。真实三页 PDF 经当前源码及生产前端构建均得到 3 页、260 个文本块、17 条固定安排和 3 条非固定实践，且不再把课程元数据中的“训练”误判为实践。schema 保持 4。
-- 下一步：**用户已确认最新 Tauri 开发版中的设置保存与 PDF 导入修复；按用户要求暂不重建安装包、不推送 GitHub，等待后续指令。**
+- 下一步：**用户已确认最新 Tauri 开发版中的设置保存与 PDF 导入修复；v1.1.0 EXE、NSIS、MSI 已重新构建并通过本地检查，继续推送 GitHub 并生成 v1.1.0 Draft Release。**
 - 验证详情：docs/phase-1-verification.md、docs/phase-2-verification.md、docs/phase-2-5-verification.md、docs/phase-2-6-verification.md、docs/phase-2-7-verification.md、docs/phase-3-1-verification.md、docs/phase-3-2-verification.md、docs/phase-3-3-verification.md、docs/phase-3-4-verification.md、docs/phase-5-1-verification.md、docs/phase-5-2-verification.md、docs/phase-5-3-verification.md、docs/phase-5-4-verification.md、docs/phase-6-verification.md、docs/phase-7-1-verification.md、docs/phase-7-2-verification.md、docs/phase-7-3-verification.md、docs/phase-7-4-verification.md、docs/phase-8-verification.md、docs/phase-9-verification.md、docs/phase-10-verification.md。
 - Git：Phase 3.1–3.4 的改动按特别规则合并为一个稳定提交；未创建 tag，未 push。
 
