@@ -5,6 +5,7 @@ export interface PdfTextItem {
   readonly y: number;
   readonly width: number;
   readonly height: number;
+  readonly confidence?: number;
 }
 
 export interface PdfPageText {
@@ -19,4 +20,5 @@ export interface PdfExtraction {
   readonly pageCount: number;
   readonly textItemCount: number;
   readonly pages: readonly PdfPageText[];
+  readonly extractionMode: "text" | "ocr";
 }

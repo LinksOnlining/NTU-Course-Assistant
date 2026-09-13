@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { adjustPeriodSchedule, validatePeriodTimes } from "../core/period-time.ts";
+import {
+  adjustPeriodSchedule,
+  applyUniformPeriodDuration,
+  validatePeriodTimes,
+} from "../core/period-time.ts";
 import {
   SHANGHAI_TIMEZONE,
   validateReminderSettings,
   validateTermConfig,
 } from "../core/reminder.ts";
-import { minutesToTime, timeToMinutes } from "../core/time.ts";
+import { durationMinutes, minutesToTime, timeToMinutes } from "../core/time.ts";
 import { loadAutostartEnabled, saveAutostartEnabled } from "../services/autostart.ts";
 import { sendTestCourseNotification } from "../services/reminder-notification.ts";
 import type { ReminderConfiguration, ReminderSettings, TermConfig } from "../types/reminder.ts";
@@ -22,7 +26,7 @@ interface PeriodSettingsProps {
     termConfig: TermConfig | null,
     reminderSettings: ReminderSettings,
   ) => Promise<void>;
-  readonly onSaveWidgetSettings: (settings: WidgetSettings) => Promise<void>;
+  readonly onSaveWidgetSettings: (patch: Partial<WidgetSettings>) => Promise<WidgetSettings>;
   readonly onCancel: () => void;
 }
 
@@ -36,6 +40,9 @@ export function PeriodSettings({
   onCancel,
 }: PeriodSettingsProps) {
   const [draft, setDraft] = useState<PeriodTime[]>(() => periods.map((period) => ({ ...period })));
+  const [uniformDuration, setUniformDuration] = useState(() =>
+    periods[0] ? String(durationMinutes(periods[0])) : "45",
+  );
   const [firstWeekMonday, setFirstWeekMonday] = useState(
     reminderConfiguration.termConfig?.firstWeekMonday ?? "",
   );
@@ -127,6 +134,15 @@ export function PeriodSettings({
     setError("");
   }
 
+  function applyDuration() {
+    try {
+      setDraft((current) => [...applyUniformPeriodDuration(current, Number(uniformDuration))]);
+      setError("");
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "无法应用单节课时长。");
+    }
+  }
+
   async function save() {
     try {
       validatePeriodTimes(draft);
@@ -198,12 +214,14 @@ export function PeriodSettings({
     setIsSavingWidget(true);
     setWidgetError("");
     try {
-      await onSaveWidgetSettings({
-        ...widgetSettings,
+      const saved = await onSaveWidgetSettings({
         enabled: widgetEnabled,
         displayMode: widgetMode,
         locked: widgetLocked,
       });
+      setWidgetEnabled(saved.enabled);
+      setWidgetMode(saved.displayMode);
+      setWidgetLocked(saved.locked);
     } catch (caught: unknown) {
       setWidgetError(caught instanceof Error ? caught.message : "保存小组件设置失败，请稍后重试。");
     } finally {
@@ -282,6 +300,34 @@ export function PeriodSettings({
             删除最后一节
           </button>
         </div>
+        <section className="settings-section" aria-labelledby="period-duration-title">
+          <div>
+            <h3 id="period-duration-title">单节课时长</h3>
+            <p>应用后仅更新当前预览；保存作息后才会写入本地数据。</p>
+          </div>
+          <div className="settings-fields">
+            <label>
+              <span>分钟</span>
+              <input
+                type="number"
+                min="20"
+                max="120"
+                step="1"
+                value={uniformDuration}
+                onChange={(event) => setUniformDuration(event.target.value)}
+                aria-label="单节课时长分钟"
+              />
+            </label>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={applyDuration}
+              disabled={isSaving}
+            >
+              应用到全部节次
+            </button>
+          </div>
+        </section>
         <section className="settings-section" aria-labelledby="reminder-settings-title">
           <div>
             <h3 id="reminder-settings-title">学期与课程提醒</h3>

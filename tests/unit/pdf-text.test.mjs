@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { countPdfTextItems, hasPdfText, normalizePdfText } from "../../src/core/pdf-text.ts";
+import {
+  countPdfTextItems,
+  hasPdfText,
+  hasUsablePdfText,
+  normalizePdfText,
+} from "../../src/core/pdf-text.ts";
 
 test("PDF text cleanup removes non-semantic timetable markers and preserves meaningful text", () => {
   assert.equal(normalizePdfText("大学英语\u0000 ■ ▲ ◆ @ (一)-1"), "大学英语 @ (一)-1");
@@ -24,4 +29,14 @@ test("PDF text helpers preserve page item boundaries", () => {
   assert.equal(countPdfTextItems(pages), 2);
   assert.equal(hasPdfText(pages.flatMap((page) => page.items)), true);
   assert.equal(hasPdfText([{ page: 1, text: "  ", x: 0, y: 0, width: 0, height: 0 }]), false);
+  assert.equal(
+    hasUsablePdfText([{ page: 1, text: "周一", x: 0, y: 0, width: 0, height: 0 }]),
+    true,
+  );
+  assert.equal(
+    hasUsablePdfText([
+      { page: 1, text: "大学课程表 周一 第1节 工程力学", x: 0, y: 0, width: 0, height: 0 },
+    ]),
+    true,
+  );
 });

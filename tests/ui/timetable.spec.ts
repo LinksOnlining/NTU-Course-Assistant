@@ -190,7 +190,7 @@ test("invalid, damaged and textless PDFs report errors without changing courses"
   await expect(page.getByRole("alert")).toHaveText("无法解析该 PDF，请确认文件未损坏后重试。");
   await selectPdf(page, "scan.pdf", createTextPdf(""));
   await expect(page.getByRole("alert")).toHaveText(
-    "未检测到可读取的文字层。该 PDF 可能是扫描版或图片型 PDF，当前版本暂不支持。",
+    "未能从扫描页面中识别出足够文字，请尝试更清晰的 PDF。",
   );
   await expect(page.locator('[data-source="user"]')).toHaveCount(0);
 });

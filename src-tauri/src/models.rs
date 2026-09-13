@@ -30,6 +30,37 @@ pub struct WidgetSettings {
     pub height: Option<u32>,
 }
 
+/// A field-level update prevents delayed geometry events from replacing newer preferences.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetSettingsPatch {
+    pub enabled: Option<bool>,
+    pub display_mode: Option<String>,
+    pub locked: Option<bool>,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+pub fn merge_widget_settings(
+    current: &WidgetSettings,
+    patch: &WidgetSettingsPatch,
+) -> WidgetSettings {
+    WidgetSettings {
+        enabled: patch.enabled.unwrap_or(current.enabled),
+        display_mode: patch
+            .display_mode
+            .clone()
+            .unwrap_or_else(|| current.display_mode.clone()),
+        locked: patch.locked.unwrap_or(current.locked),
+        x: patch.x.or(current.x),
+        y: patch.y.or(current.y),
+        width: patch.width.or(current.width),
+        height: patch.height.or(current.height),
+    }
+}
+
 pub fn default_widget_settings() -> WidgetSettings {
     WidgetSettings {
         enabled: false,

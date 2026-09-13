@@ -1,12 +1,12 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { countPdfTextItems, hasPdfText, normalizePdfText } from "../core/pdf-text.ts";
+import { countPdfTextItems, hasUsablePdfText, normalizePdfText } from "../core/pdf-text.ts";
 import type { PdfExtraction, PdfPageText, PdfTextItem } from "../types/pdf.ts";
 import type { PDFPageProxy, TextItem } from "pdfjs-dist/types/src/display/api";
 
 export type PdfImportErrorCode =
-  "invalid-file" | "encrypted" | "no-text" | "unsupported-structure" | "unreadable";
+  "invalid-file" | "encrypted" | "ocr-failed" | "unsupported-structure" | "unreadable";
 
 export class PdfImportError extends Error {
   readonly code: PdfImportErrorCode;
@@ -20,6 +20,11 @@ export class PdfImportError extends Error {
 interface SelectedPdfFile {
   readonly fileName: string;
   readonly bytes: Uint8Array;
+}
+
+export interface PdfImportProgress {
+  readonly page: number;
+  readonly pageCount: number;
 }
 
 function runningInTauri(): boolean {
@@ -132,6 +137,78 @@ async function loadPdfJs() {
   return pdfJs;
 }
 
+async function extractOcrPage(
+  page: PDFPageProxy,
+  report: (page: number) => void,
+): Promise<PdfPageText> {
+  const viewport = page.getViewport({ scale: 2 });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const context = canvas.getContext("2d");
+  if (!context) throw new PdfImportError("ocr-failed", "无法准备扫描页面识别。");
+  await page.render({ canvas, canvasContext: context, viewport }).promise;
+  report(page.pageNumber);
+  const { createWorker } = await import("tesseract.js");
+  const worker = await createWorker(["chi_sim", "eng"], 1, {
+    workerPath: "/ocr/worker.min.js",
+    corePath: "/ocr/core",
+    langPath: "/ocr/lang",
+    workerBlobURL: false,
+  });
+  try {
+    const result = await worker.recognize(canvas, {}, { blocks: true, tsv: true });
+    const pageViewport = page.getViewport({ scale: 1 });
+    const words =
+      result.data.blocks?.flatMap((block) =>
+        block.paragraphs.flatMap((paragraph) => paragraph.lines.flatMap((line) => line.words)),
+      ) ?? [];
+    const items = words.flatMap((word) => {
+      const text = normalizePdfText(word.text);
+      const { x0, y0, x1, y1 } = word.bbox;
+      if (!text.trim() || x1 <= x0 || y1 <= y0) return [];
+      const scale = 2;
+      return [
+        {
+          page: page.pageNumber,
+          text,
+          x: x0 / scale,
+          y: pageViewport.height - y1 / scale,
+          width: (x1 - x0) / scale,
+          height: (y1 - y0) / scale,
+          confidence: word.confidence,
+        },
+      ];
+    });
+    if (items.length === 0 && result.data.tsv) {
+      for (const row of result.data.tsv.split("\n").slice(1)) {
+        const [level, , , , , , x, y, width, height, confidence, ...textParts] = row.split("\t");
+        if (level !== "5") continue;
+        const text = normalizePdfText(textParts.join("\t"));
+        const [left, top, itemWidth, itemHeight, score] = [x, y, width, height, confidence].map(
+          Number,
+        );
+        if (!text.trim() || ![left, top, itemWidth, itemHeight, score].every(Number.isFinite))
+          continue;
+        items.push({
+          page: page.pageNumber,
+          text,
+          x: left / 2,
+          y: pageViewport.height - (top + itemHeight) / 2,
+          width: itemWidth / 2,
+          height: itemHeight / 2,
+          confidence: score,
+        });
+      }
+    }
+    return { page: page.pageNumber, width: pageViewport.width, height: pageViewport.height, items };
+  } finally {
+    canvas.width = 1;
+    canvas.height = 1;
+    await worker.terminate();
+  }
+}
+
 function parseError(error: unknown): PdfImportError {
   if (error instanceof PdfImportError) return error;
   if (
@@ -145,7 +222,10 @@ function parseError(error: unknown): PdfImportError {
   return new PdfImportError("unreadable", "无法解析该 PDF，请确认文件未损坏后重试。");
 }
 
-export async function extractPdfText(file: SelectedPdfFile): Promise<PdfExtraction> {
+export async function extractPdfText(
+  file: SelectedPdfFile,
+  onOcrProgress?: (progress: PdfImportProgress) => void,
+): Promise<PdfExtraction> {
   ensurePdfName(file.fileName);
   if (!isPdfBytes(file.bytes)) {
     throw new PdfImportError("invalid-file", "所选文件不是有效的 PDF。");
@@ -164,17 +244,41 @@ export async function extractPdfText(file: SelectedPdfFile): Promise<PdfExtracti
       ),
     );
     const items = pages.flatMap((page) => page.items);
-    if (!hasPdfText(items)) {
+    if (hasUsablePdfText(items)) {
+      return {
+        fileName: file.fileName,
+        pageCount: document.numPages,
+        textItemCount: countPdfTextItems(pages),
+        pages,
+        extractionMode: "text",
+      };
+    }
+    const ocrPages: PdfPageText[] = [];
+    try {
+      for (let page = 1; page <= document.numPages; page += 1) {
+        ocrPages.push(
+          await extractOcrPage(await document.getPage(page), (current) =>
+            onOcrProgress?.({ page: current, pageCount: document.numPages }),
+          ),
+        );
+      }
+    } catch (error) {
+      if (error instanceof PdfImportError) throw error;
+      throw new PdfImportError("ocr-failed", "无法运行本地文字识别，请确认安装文件完整后重试。");
+    }
+    const ocrItems = ocrPages.flatMap((page) => page.items);
+    if (!hasUsablePdfText(ocrItems)) {
       throw new PdfImportError(
-        "no-text",
-        "未检测到可读取的文字层。该 PDF 可能是扫描版或图片型 PDF，当前版本暂不支持。",
+        "ocr-failed",
+        "未能从扫描页面中识别出足够文字，请尝试更清晰的 PDF。",
       );
     }
     return {
       fileName: file.fileName,
       pageCount: document.numPages,
-      textItemCount: countPdfTextItems(pages),
-      pages,
+      textItemCount: countPdfTextItems(ocrPages),
+      pages: ocrPages,
+      extractionMode: "ocr",
     };
   } catch (error) {
     throw parseError(error);

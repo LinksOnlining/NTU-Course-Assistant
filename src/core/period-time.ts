@@ -65,6 +65,40 @@ export function adjustPeriodSchedule(
   }
 }
 
+/** Rebuilds all periods with one duration while retaining the first start and each original break. */
+export function applyUniformPeriodDuration(
+  periods: readonly PeriodTime[],
+  duration: number,
+): readonly PeriodTime[] {
+  validatePeriodTimes(periods);
+  if (!Number.isInteger(duration) || duration < 20 || duration > 120) {
+    throw new RangeError("单节课时长必须是 20–120 分钟的整数");
+  }
+  try {
+    const next = periods.reduce<PeriodTime[]>((result, period, index) => {
+      const startMinutes =
+        index === 0
+          ? timeToMinutes(period.startTime)
+          : timeToMinutes(result[index - 1].endTime) +
+            timeToMinutes(period.startTime) -
+            timeToMinutes(periods[index - 1].endTime);
+      result.push({
+        period: period.period,
+        startTime: minutesToTime(startMinutes),
+        endTime: minutesToTime(startMinutes + duration),
+      });
+      return result;
+    }, []);
+    validatePeriodTimes(next);
+    return next;
+  } catch (error) {
+    if (error instanceof RangeError) {
+      throw new RangeError("调整后部分节次超出当天时间范围，请缩短单节课时长。");
+    }
+    throw error;
+  }
+}
+
 export function periodToTime(period: number, periods: readonly PeriodTime[]): PeriodTime | null {
   if (!Number.isInteger(period) || period <= 0) {
     throw new RangeError("节次必须是正整数");

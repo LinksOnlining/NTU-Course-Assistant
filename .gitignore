@@ -18,9 +18,11 @@ test-results/
 *.sqlite3-shm
 *.sqlite3-wal
 *.pdf
+*.traineddata
 *.log
 *.tmp
 *.bak
 
 .local/
 public/pdfjs/
+public/ocr/

@@ -3,9 +3,9 @@ use std::{fmt, fs, path::Path, time::Duration};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::models::{
-    default_widget_settings, validate_period_times, validate_reminder_settings,
-    validate_term_config, validate_widget_settings, Course, PeriodTime, ReminderSettings,
-    TermConfig, WidgetSettings,
+    default_widget_settings, merge_widget_settings, validate_period_times,
+    validate_reminder_settings, validate_term_config, validate_widget_settings, Course, PeriodTime,
+    ReminderSettings, TermConfig, WidgetSettings, WidgetSettingsPatch,
 };
 
 const CURRENT_SCHEMA_VERSION: i64 = 4;
@@ -384,6 +384,17 @@ impl CourseDatabase {
             [serde_json::to_string(settings)?],
         )?;
         Ok(())
+    }
+
+    pub fn patch_widget_settings(
+        &self,
+        patch: &WidgetSettingsPatch,
+    ) -> Result<WidgetSettings, StorageError> {
+        let current = self.load_widget_settings()?;
+        let next = merge_widget_settings(&current, patch);
+        validate_widget_settings(&next).map_err(StorageError::InvalidData)?;
+        self.save_widget_settings(&next)?;
+        self.load_widget_settings()
     }
 
     pub fn save_app_settings(
@@ -1079,6 +1090,49 @@ mod tests {
             before.term_config
         );
         assert_eq!(database.schema_version().expect("schema version"), 4);
+    }
+
+    #[test]
+    fn widget_patches_merge_geometry_and_preferences_without_losing_fields() {
+        let database = database();
+        let initial = WidgetSettings {
+            enabled: true,
+            display_mode: "today".into(),
+            locked: false,
+            x: Some(10),
+            y: Some(20),
+            width: Some(360),
+            height: Some(430),
+        };
+        database
+            .save_widget_settings(&initial)
+            .expect("seed widget");
+        let moved = database
+            .patch_widget_settings(&WidgetSettingsPatch {
+                enabled: None,
+                display_mode: None,
+                locked: None,
+                x: Some(80),
+                y: Some(90),
+                width: None,
+                height: None,
+            })
+            .expect("save geometry");
+        let locked = database
+            .patch_widget_settings(&WidgetSettingsPatch {
+                enabled: None,
+                display_mode: None,
+                locked: Some(true),
+                x: None,
+                y: None,
+                width: None,
+                height: None,
+            })
+            .expect("save preference");
+        assert_eq!(moved.x, Some(80));
+        assert_eq!(locked.x, Some(80));
+        assert_eq!(locked.y, Some(90));
+        assert!(locked.locked);
     }
 
     #[test]

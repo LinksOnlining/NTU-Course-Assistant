@@ -3,7 +3,7 @@ import { buildWidgetViewModel } from "../core/widget-view.ts";
 import {
   DEFAULT_WIDGET_SETTINGS,
   loadWidgetData,
-  saveWidgetSettings,
+  patchWidgetSettings,
 } from "../services/widget-data.ts";
 import {
   hideWidget,
@@ -76,10 +76,9 @@ export function WidgetPrototype() {
       if (settings.locked) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        const next = { ...settings, ...bounds };
-        void saveWidgetSettings(next)
-          .then(() => {
-            setSettings(next);
+        void patchWidgetSettings(bounds)
+          .then((saved) => {
+            setSettings(saved);
             notifyWidgetSettingsChanged();
           })
           .catch(() =>
@@ -94,10 +93,9 @@ export function WidgetPrototype() {
   }, [settings]);
 
   async function updateSettings(change: Partial<WidgetSettings>) {
-    const next = { ...settings, ...change };
     try {
-      await saveWidgetSettings(next);
-      setSettings(next);
+      const saved = await patchWidgetSettings(change);
+      setSettings(saved);
       setSettingsError("");
       notifyWidgetSettingsChanged();
     } catch {
@@ -106,10 +104,9 @@ export function WidgetPrototype() {
   }
 
   async function closeWidget() {
-    const next = { ...settings, enabled: false };
     try {
-      await saveWidgetSettings(next);
-      setSettings(next);
+      const saved = await patchWidgetSettings({ enabled: false });
+      setSettings(saved);
       notifyWidgetSettingsChanged();
       await hideWidget();
     } catch {

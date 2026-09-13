@@ -136,6 +136,11 @@ export async function saveStoredPeriodTimes(periods: readonly PeriodTime[]): Pro
   }
 }
 
+export interface SavedAppSettings {
+  readonly periods: readonly PeriodTime[];
+  readonly configuration: ReminderConfiguration;
+}
+
 export async function loadStoredReminderConfiguration(): Promise<
   ReminderConfiguration & { warnings: readonly string[] }
 > {
@@ -158,13 +163,15 @@ export async function loadStoredWidgetSettings(): Promise<WidgetSettings> {
   }
 }
 
-export async function saveStoredWidgetSettings(settings: WidgetSettings): Promise<void> {
+export async function patchStoredWidgetSettings(
+  patch: Partial<WidgetSettings>,
+): Promise<WidgetSettings> {
   if (usesDevelopmentMemory()) {
-    developmentWidgetSettings = { ...settings };
-    return;
+    developmentWidgetSettings = { ...developmentWidgetSettings, ...patch };
+    return { ...developmentWidgetSettings };
   }
   try {
-    await invoke("save_widget_settings", { settings });
+    return await invoke<WidgetSettings>("patch_widget_settings", { patch });
   } catch (error) {
     throw storageError(error, "保存小组件设置失败，请稍后重试。");
   }
@@ -183,14 +190,21 @@ export async function saveStoredAppSettings(
   periods: readonly PeriodTime[],
   termConfig: TermConfig | null,
   reminderSettings: ReminderSettings,
-): Promise<void> {
+): Promise<SavedAppSettings> {
   if (usesDevelopmentMemory()) {
     developmentPeriodTimes = [...periods];
     developmentReminderConfiguration = { termConfig, reminderSettings };
-    return;
+    return {
+      periods: [...developmentPeriodTimes],
+      configuration: { ...developmentReminderConfiguration },
+    };
   }
   try {
-    await invoke("save_app_settings", { periods, termConfig, reminderSettings });
+    return await invoke<SavedAppSettings>("save_app_settings", {
+      periods,
+      termConfig,
+      reminderSettings,
+    });
   } catch (error) {
     throw storageError(error, "保存设置失败，请稍后重试。");
   }

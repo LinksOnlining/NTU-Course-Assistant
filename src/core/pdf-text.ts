@@ -19,6 +19,10 @@ export function hasPdfText(items: readonly PdfTextItem[]): boolean {
   return items.some((item) => item.text.trim() !== "");
 }
 
+export function hasUsablePdfText(items: readonly PdfTextItem[]): boolean {
+  return hasPdfText(items);
+}
+
 export function countPdfTextItems(pages: readonly PdfPageText[]): number {
   return pages.reduce((count, page) => count + page.items.length, 0);
 }

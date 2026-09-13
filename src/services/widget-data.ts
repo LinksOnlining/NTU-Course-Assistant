@@ -3,7 +3,7 @@ import {
   loadStoredCourses,
   loadStoredReminderConfiguration,
   loadStoredWidgetSettings,
-  saveStoredWidgetSettings,
+  patchStoredWidgetSettings,
 } from "./course-storage.ts";
 import type { Course } from "../types/course.ts";
 import type { TermConfig } from "../types/reminder.ts";
@@ -42,5 +42,5 @@ export async function loadWidgetData(): Promise<WidgetData> {
 
 export {
   loadStoredWidgetSettings as loadWidgetSettings,
-  saveStoredWidgetSettings as saveWidgetSettings,
+  patchStoredWidgetSettings as patchWidgetSettings,
 };

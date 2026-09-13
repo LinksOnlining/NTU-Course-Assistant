@@ -34,7 +34,7 @@ import {
   loadStoredWidgetSettings,
   refreshStoredReminderSchedule,
   saveStoredAppSettings,
-  saveStoredWidgetSettings,
+  patchStoredWidgetSettings,
   updateStoredCourse,
 } from "./services/course-storage.ts";
 import { DEFAULT_WIDGET_SETTINGS } from "./services/widget-data.ts";
@@ -58,7 +58,11 @@ import type { WidgetSettings } from "./types/widget-settings.ts";
 
 type PdfImportState =
   | { readonly kind: "idle" }
-  | { readonly kind: "reading"; readonly fileName: string }
+  | {
+      readonly kind: "reading";
+      readonly fileName: string;
+      readonly ocrProgress?: { readonly page: number; readonly pageCount: number };
+    }
   | {
       readonly kind: "success";
       readonly document: PdfExtraction;
@@ -259,7 +263,9 @@ export function App() {
       setImportError("");
       setImportSuccess("");
       setPdfImport({ kind: "reading", fileName: file.fileName });
-      const document = await extractPdfText(file);
+      const document = await extractPdfText(file, (ocrProgress) =>
+        setPdfImport({ kind: "reading", fileName: file.fileName, ocrProgress }),
+      );
       const candidates = parseNtuPdfTimetable(document, {
         periods,
         isUsingTestSchedule,
@@ -443,7 +449,9 @@ export function App() {
       )}
       {pdfImport.kind === "reading" && (
         <p className="pdf-import-status" role="status">
-          正在读取 {pdfImport.fileName}…
+          {pdfImport.ocrProgress
+            ? `正在识别扫描版课表…第 ${pdfImport.ocrProgress.page} / ${pdfImport.ocrProgress.pageCount} 页`
+            : `正在读取 ${pdfImport.fileName}…`}
         </p>
       )}
       {pdfImport.kind === "error" && (
@@ -547,25 +555,28 @@ export function App() {
           reminderConfiguration={reminderConfiguration}
           widgetSettings={widgetSettings}
           onSave={async (nextPeriods, termConfig, reminderSettings) => {
-            await saveStoredAppSettings(nextPeriods, termConfig, reminderSettings);
-            setPeriods([...nextPeriods]);
+            const saved = await saveStoredAppSettings(nextPeriods, termConfig, reminderSettings);
+            setPeriods([...saved.periods]);
             setIsUsingTestSchedule(false);
-            setReminderConfiguration({ termConfig, reminderSettings });
+            setReminderConfiguration(saved.configuration);
             notifyWidgetDataChanged();
             setPeriodMessage("");
             setIsPeriodSettingsOpen(false);
           }}
-          onSaveWidgetSettings={async (nextSettings) => {
-            await saveStoredWidgetSettings(nextSettings);
+          onSaveWidgetSettings={async (patch) => {
+            const saved = await patchStoredWidgetSettings(patch);
             try {
-              if (nextSettings.enabled) await showWidget();
+              if (saved.enabled) await showWidget();
               else await hideWidget();
             } catch (error) {
-              await saveStoredWidgetSettings(widgetSettings).catch(() => undefined);
+              await patchStoredWidgetSettings({ enabled: widgetSettings.enabled }).catch(
+                () => undefined,
+              );
               throw error;
             }
-            setWidgetSettings(nextSettings);
+            setWidgetSettings(saved);
             notifyWidgetSettingsChanged();
+            return saved;
           }}
           onCancel={() => setIsPeriodSettingsOpen(false)}
         />

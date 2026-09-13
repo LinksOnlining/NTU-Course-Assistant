@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { TEST_PERIOD_TIMES } from "../../src/config/timetable.ts";
 import {
   adjustPeriodSchedule,
+  applyUniformPeriodDuration,
   getTimelineBounds,
   periodRangeToTimeRange,
   periodToTime,
@@ -44,6 +45,19 @@ test("period adjustment rejects a schedule that would exceed the day", () => {
         startTime: "23:30",
       }),
     /超出当天时间范围/u,
+  );
+});
+
+test("uniform duration preserves the first start and every original break", () => {
+  assert.deepEqual(applyUniformPeriodDuration(shortSchedule, 40), [
+    { period: 1, startTime: "08:00", endTime: "08:40" },
+    { period: 2, startTime: "08:45", endTime: "09:25" },
+    { period: 3, startTime: "09:45", endTime: "10:25" },
+  ]);
+  assert.throws(() => applyUniformPeriodDuration(shortSchedule, 19), /20–120/u);
+  assert.throws(
+    () => applyUniformPeriodDuration([{ period: 1, startTime: "23:00", endTime: "23:45" }], 60),
+    /超出当天/u,
   );
 });
 

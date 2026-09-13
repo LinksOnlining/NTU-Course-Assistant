@@ -6,7 +6,9 @@ mod scheduler;
 use std::sync::{Arc, Mutex};
 
 use db::CourseDatabase;
-use models::{Course, PeriodTime, ReminderSettings, TermConfig, WidgetSettings};
+use models::{
+    Course, PeriodTime, ReminderSettings, TermConfig, WidgetSettings, WidgetSettingsPatch,
+};
 use serde::Serialize;
 use tauri::{
     image::Image,
@@ -175,9 +177,12 @@ fn load_period_times(state: State<'_, CourseState>) -> Result<Option<Vec<PeriodT
 fn save_period_times(
     state: State<'_, CourseState>,
     periods: Vec<PeriodTime>,
-) -> Result<(), String> {
+) -> Result<Vec<PeriodTime>, String> {
     state.run("保存作息", |database| {
-        database.save_period_times(&periods)
+        database.save_period_times(&periods)?;
+        database
+            .load_period_times()?
+            .ok_or_else(|| db::StorageError::InvalidData("作息保存后无法读取。".into()))
     })
 }
 
@@ -199,11 +204,18 @@ fn save_app_settings(
     periods: Vec<PeriodTime>,
     term_config: Option<TermConfig>,
     reminder_settings: ReminderSettings,
-) -> Result<(), String> {
+) -> Result<SavedAppSettings, String> {
     state.run("保存应用设置", |database| {
         database.save_app_settings(&periods, term_config.as_ref(), &reminder_settings)
     })?;
-    Ok(())
+    state.run("读取已保存应用设置", |database| {
+        Ok(SavedAppSettings {
+            periods: database
+                .load_period_times()?
+                .ok_or_else(|| db::StorageError::InvalidData("作息保存后无法读取。".into()))?,
+            configuration: database.load_reminder_configuration()?,
+        })
+    })
 }
 
 #[tauri::command]
@@ -212,20 +224,27 @@ fn load_widget_settings(state: State<'_, CourseState>) -> Result<WidgetSettings,
 }
 
 #[tauri::command]
-fn save_widget_settings(
+fn patch_widget_settings(
     app: tauri::AppHandle,
     state: State<'_, CourseState>,
-    settings: WidgetSettings,
-) -> Result<(), String> {
-    state.run("保存小组件设置", |database| {
-        database.save_widget_settings(&settings)
+    patch: WidgetSettingsPatch,
+) -> Result<WidgetSettings, String> {
+    let settings = state.run("保存小组件设置", |database| {
+        database.patch_widget_settings(&patch)
     })?;
     if let Some(widget) = app.get_webview_window("widget") {
         widget
             .set_resizable(!settings.locked)
             .map_err(|_| "无法更新小组件锁定状态。".to_string())?;
     }
-    Ok(())
+    Ok(settings)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedAppSettings {
+    periods: Vec<PeriodTime>,
+    configuration: db::ReminderConfiguration,
 }
 
 #[tauri::command]
@@ -483,7 +502,7 @@ pub fn run() {
             load_handled_reminder_keys,
             save_app_settings,
             load_widget_settings,
-            save_widget_settings,
+            patch_widget_settings,
             refresh_reminder_schedule,
             reminder_scheduler_status,
             send_test_course_notification,
