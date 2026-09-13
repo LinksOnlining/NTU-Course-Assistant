@@ -26,6 +26,45 @@ export function validatePeriodTimes(periods: readonly PeriodTime[]): void {
   }
 }
 
+/** Applies one period edit and preserves every later period's duration and break. */
+export function adjustPeriodSchedule(
+  periods: readonly PeriodTime[],
+  index: number,
+  change: Readonly<Partial<Pick<PeriodTime, "startTime" | "endTime">>>,
+): readonly PeriodTime[] {
+  validatePeriodTimes(periods);
+  const original = periods[index];
+  if (!original) throw new RangeError("找不到需要调整的节次");
+  const originalDuration = durationMinutes(original);
+  try {
+    const startTime = change.startTime ?? original.startTime;
+    const endTime =
+      change.endTime ??
+      (change.startTime === undefined
+        ? original.endTime
+        : minutesToTime(timeToMinutes(startTime) + originalDuration));
+    const updated = { ...original, startTime, endTime };
+    durationMinutes(updated);
+    const delta = timeToMinutes(updated.endTime) - timeToMinutes(original.endTime);
+    const next = periods.map((period, periodIndex) => {
+      if (periodIndex < index) return { ...period };
+      if (periodIndex === index) return updated;
+      return {
+        ...period,
+        startTime: minutesToTime(timeToMinutes(period.startTime) + delta),
+        endTime: minutesToTime(timeToMinutes(period.endTime) + delta),
+      };
+    });
+    validatePeriodTimes(next);
+    return next;
+  } catch (error) {
+    if (error instanceof RangeError && /分钟数必须/u.test(error.message)) {
+      throw new RangeError("调整后部分节次超出当天时间范围，请缩短或提前作息时间。");
+    }
+    throw error;
+  }
+}
+
 export function periodToTime(period: number, periods: readonly PeriodTime[]): PeriodTime | null {
   if (!Number.isInteger(period) || period <= 0) {
     throw new RangeError("节次必须是正整数");

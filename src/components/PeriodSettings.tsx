@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { validatePeriodTimes } from "../core/period-time.ts";
+import { adjustPeriodSchedule, validatePeriodTimes } from "../core/period-time.ts";
 import {
   SHANGHAI_TIMEZONE,
   validateReminderSettings,
@@ -89,12 +89,12 @@ export function PeriodSettings({
   }, []);
 
   function update(index: number, field: "startTime" | "endTime", value: string) {
-    setDraft((current) =>
-      current.map((period, periodIndex) =>
-        periodIndex === index ? { ...period, [field]: value } : period,
-      ),
-    );
-    setError("");
+    try {
+      setDraft((current) => [...adjustPeriodSchedule(current, index, { [field]: value })]);
+      setError("");
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "无法调整节次时间。");
+    }
   }
 
   function addPeriod() {

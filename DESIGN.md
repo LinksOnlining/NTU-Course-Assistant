@@ -75,6 +75,8 @@ Phase 2.5 实现 `PeriodTime` 配置边界和 `periodToTime`、`periodRangeToTim
 
 Phase 2.6 将 `PeriodTime[]` 作为用户可配置的作息：设置对话框复用同一份核心校验，允许编辑时间、添加下一节和删除最后一节，最多 30 节且必须从第 1 节连续编号。保存通过 Tauri `save_period_times` 事务完成；首次运行或未保存时使用 test-only fallback，保存后的配置由 `load_period_times` 恢复。`getTimelineBounds` 会将测试轴与作息覆盖范围合并并向整点扩展，TimeAxis 仍是连续分钟轴；课程的 `startTime/endTime` 永不因作息修改而改变，只有精确命中当前配置的原有节次才显示节次标签，不匹配时仅显示实际时间。
 
+v1.1.0 在同一 `PeriodTime[]` 上提供纯 `adjustPeriodSchedule`：编辑一节的开始时间时保留其原时长；编辑结束时间时使用输入的结束时间。后续节次整体按当前节结束时间差移动，保留后续时长与原课间，前置节次和所有 Course 的真实时间不变。主课表的 selectedWeek 与 5/7 天视图是 React 会话状态，不写入 SQLite；当前周和星期只由既有 TermConfig 与 Asia/Shanghai 计算，当前时间线和自动定位复用同一 minute-to-Y 几何。
+
 Phase 2.7 只调整桌面表现。TimeAxis 的每个节次块把节次、开始和结束时间分层显示；即使是 30 分钟的第一节，完整时间段也置于节次下方。课程与对应节次继续使用同一分钟计算，课程区不绘制小时、半小时、节次或列分隔网格。课程卡片始终由 `courseTiming` 提供 top/height，不使用离散 grid 行；普通卡片采用 10–12px 内边距和低饱和稳定色，短课和重叠 lane 会依据可用高度/宽度缩小文字，但不隐藏课程名称、时间、教室或教师，也不以省略号替代字段。
 
 `TEST_PERIOD_TIMES` 明确为 test-only，共 1–11 节，只用于当前原型和自动测试，不代表南通大学正式作息。TimeAxis 接收 `PeriodTime[]` 并按 `(startTime - axis.startTime) × pxPerMinute` 定位，每个标记高度也来自真实持续分钟。时间轴保持 07:00–22:00 连续分钟空间，但不依赖背景网格表达时间。手动课程继续只填写时间并保存 null 节次；课程卡片仅在记录已有非 null 节次时显示节次。

@@ -157,24 +157,27 @@ test("seven fixed days and teaching-week filter", async ({ page }) => {
   await expect(page.locator('[data-weekday="6"] .course-card')).toHaveCount(0);
 });
 
-test("text PDF extraction keeps page dimensions and coordinate-bearing text in memory", async ({
+test("week navigation and 5-day view keep the timetable data intact", async ({ page }) => {
+  await expect(page.getByText("本周课表已上线，早七点五十人的苦难开启🔛")).toBeVisible();
+  await expect(page.getByText("已使用自定义作息。")).toHaveCount(0);
+  await page.getByRole("button", { name: "5天" }).click();
+  await expect(page.getByTestId("day-column")).toHaveCount(5);
+  await expect(page.getByRole("button", { name: /周末有 .* 节课/u })).toBeVisible();
+  await page.getByRole("button", { name: /周末有 .* 节课/u }).click();
+  await expect(page.getByTestId("day-column")).toHaveCount(7);
+  await page.getByRole("button", { name: "下一教学周" }).click();
+  await expect(page.getByText("第 4 周", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "回到本周" }).click();
+  await expect(page.getByText("第 3 周", { exact: true })).toBeVisible();
+});
+
+test("text PDF with an unsupported timetable structure is not mislabeled as a scan", async ({
   page,
 }) => {
   await selectPdf(page, "sample.pdf", createTextPdf("Schedule"));
-  const preview = page.getByRole("dialog", { name: "检查导入候选" });
-  await expect(preview).toContainText("sample.pdf · 1 页 · 当前只生成提案，不会写入课程表");
-  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("识别到 0 个候选");
-  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("固定安排 0");
-  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("非固定实践 0");
-  const finalReviewButton = preview.getByRole("button", { name: "进入最终确认" });
-  await expect(finalReviewButton).toBeDisabled();
-  await expect(finalReviewButton).toBeVisible();
-  const footer = await box(preview.locator(".pdf-preview-footer"));
-  expect(footer.y + footer.height).toBeLessThanOrEqual(
-    await page.evaluate(() => window.innerHeight),
+  await expect(page.getByRole("alert")).toHaveText(
+    "已读取 PDF 文字，但暂时无法识别该课表结构。请确认文件是否为受支持的南通大学课表格式。",
   );
-  await preview.getByRole("button", { name: "取消本次导入", exact: true }).click();
-  await expect(preview).toHaveCount(0);
   await expect(page.locator('[data-source="user"]')).toHaveCount(0);
 });
 
@@ -186,7 +189,9 @@ test("invalid, damaged and textless PDFs report errors without changing courses"
   await selectPdf(page, "damaged.pdf", Buffer.from("%PDF-1.7\nbroken", "ascii"));
   await expect(page.getByRole("alert")).toHaveText("无法解析该 PDF，请确认文件未损坏后重试。");
   await selectPdf(page, "scan.pdf", createTextPdf(""));
-  await expect(page.getByRole("alert")).toHaveText("当前 PDF 可能是扫描版，首版暂不支持。");
+  await expect(page.getByRole("alert")).toHaveText(
+    "未检测到可读取的文字层。该 PDF 可能是扫描版或图片型 PDF，当前版本暂不支持。",
+  );
   await expect(page.locator('[data-source="user"]')).toHaveCount(0);
 });
 
@@ -361,7 +366,7 @@ test("period settings save custom proportions and can add a twelfth period", asy
   await dialog.getByLabel("第2节开始时间").fill("08:45");
   await dialog.getByRole("button", { name: "保存作息" }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.getByTestId("schedule-notice")).toHaveText("已使用自定义作息。");
+  await expect(page.getByTestId("schedule-notice")).toHaveCount(0);
   await expect(page.locator('[data-period="1"]')).toHaveCSS("height", "30px");
   const axis = await box(page.getByTestId("time-axis"));
   const first = await box(page.locator('[data-period="1"]'));
@@ -515,14 +520,14 @@ test("Windows 登录启动失败和系统状态不一致不会显示伪成功", 
   await expect(toggle).not.toBeChecked();
 });
 
-test("invalid period settings are blocked and cancel keeps the previous schedule", async ({
+test("period end edits move only later periods and cancel keeps the previous schedule", async ({
   page,
 }) => {
   await page.getByRole("button", { name: "设置" }).click();
   const dialog = page.getByRole("dialog", { name: "作息时间" });
   await dialog.getByLabel("第1节结束时间").fill("09:00");
-  await dialog.getByRole("button", { name: "保存作息" }).click();
-  await expect(dialog.getByRole("alert")).toContainText("时间重叠");
+  await expect(dialog.getByLabel("第2节开始时间")).toHaveValue("09:05");
+  await expect(dialog.getByLabel("第2节结束时间")).toHaveValue("09:50");
   await dialog.getByRole("button", { name: "取消" }).click();
   await expect(page.locator('[data-period="12"]')).toHaveCount(0);
   await expect(page.locator('[data-period="1"]')).toHaveCSS("height", "45px");

@@ -95,6 +95,42 @@ h1 {
   box-shadow: 0 4px 15px rgb(37 69 59 / 6%);
 }
 
+.week-controls,
+.day-count-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.week-controls strong {
+  min-width: 58px;
+  color: #173c32;
+  font-size: 15px;
+  text-align: center;
+}
+
+.week-controls .secondary-button,
+.day-count-controls button,
+.weekend-notice {
+  min-height: 32px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.day-count-controls button {
+  border: 1px solid #c4d0cc;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 70%);
+  color: #476158;
+}
+
+.day-count-controls button.is-active {
+  border-color: #5a9382;
+  background: #e5f2ed;
+  color: #235445;
+  font-weight: 700;
+}
+
 .header-actions {
   display: flex;
   flex: 0 0 auto;
@@ -334,6 +370,15 @@ select:focus-visible {
   overscroll-behavior: contain;
 }
 
+.weekend-notice {
+  align-self: center;
+  margin: 7px 0 0;
+  border: 1px solid #e2d1a5;
+  border-radius: 8px;
+  background: #fff8e8;
+  color: #775b1d;
+}
+
 .timetable-scroll::-webkit-scrollbar {
   width: 11px;
   height: 11px;
@@ -373,6 +418,11 @@ select:focus-visible {
   backdrop-filter: blur(10px);
 }
 
+.day-header--today {
+  background: linear-gradient(135deg, #e8f5ef, #f7fbf8);
+  color: #21614e;
+}
+
 .week-corner {
   left: 0;
   z-index: 7;
@@ -388,7 +438,30 @@ select:focus-visible {
 .time-axis,
 .day-column {
   position: relative;
+  position: relative;
   background-image: none;
+}
+
+.current-time-line {
+  position: absolute;
+  z-index: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  border-top: 1px solid #5a9d8a;
+  pointer-events: none;
+}
+
+.current-time-line span {
+  position: absolute;
+  top: -10px;
+  right: 5px;
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: rgb(239 248 244 / 92%);
+  color: #357361;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
 }
 
 .time-axis {
@@ -1535,11 +1608,15 @@ select:focus-visible {
 }
 
 @media (max-width: 960px) {
+  .app-header {
+    flex-wrap: wrap;
+  }
   .app-shell {
     padding: 15px 13px 11px;
   }
   .subtitle {
-    display: none;
+    max-width: min(100%, 430px);
+    font-size: 11px;
   }
   .week-status {
     min-width: 132px;

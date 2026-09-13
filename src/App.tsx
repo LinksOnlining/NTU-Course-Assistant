@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CourseForm } from "./components/CourseForm.tsx";
 import { PdfImportPreview } from "./components/PdfImportPreview.tsx";
 import { PeriodSettings } from "./components/PeriodSettings.tsx";
@@ -11,7 +11,7 @@ import {
   prepareImportPlan,
 } from "./core/import-proposal.ts";
 import { getTimelineBounds } from "./core/period-time.ts";
-import { courseTiming } from "./core/timetable-layout.ts";
+import { courseTiming, layoutCourses } from "./core/timetable-layout.ts";
 import { parseNtuPdfTimetable } from "./importers/ntu-pdf/parse.ts";
 import { TEST_COURSES } from "./fixtures/courses.ts";
 import { choosePdfFile, extractPdfText, PdfImportError } from "./services/pdf-import.ts";
@@ -42,7 +42,12 @@ import {
   buildReminderPlans,
   DEFAULT_REMINDER_SETTINGS,
   excludeHandledReminderPlans,
+  getShanghaiDate,
+  getShanghaiTime,
+  getShanghaiWeekday,
+  getTeachingWeek,
 } from "./core/reminder.ts";
+import { timeToMinutes } from "./core/time.ts";
 import type { Course } from "./types/course.ts";
 import type { ImportCandidate, ImportCandidateEdit } from "./types/import-candidate.ts";
 import type { ImportPlan } from "./types/import-proposal.ts";
@@ -86,9 +91,31 @@ export function App() {
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState("");
   const [importSuccess, setImportSuccess] = useState("");
+  const [now, setNow] = useState(() => new Date());
+  const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
+  const [dayCount, setDayCount] = useState<5 | 7>(7);
+  const [scrollRequest, setScrollRequest] = useState(0);
+  const timetableScrollRef = useRef<HTMLDivElement>(null);
+  const initialScrollDone = useRef(false);
   const fixtureCourses = showDevelopmentFixtures ? TEST_COURSES : [];
   const courses = useMemo(() => [...fixtureCourses, ...userCourses], [fixtureCourses, userCourses]);
   const axis = useMemo(() => getTimelineBounds(TEST_TIMETABLE.axis, periods), [periods]);
+  const currentTeachingWeek = useMemo(() => {
+    const config = reminderConfiguration.termConfig;
+    return config
+      ? (getTeachingWeek(getShanghaiDate(now.getTime()), config) ?? 1)
+      : TEST_TIMETABLE.currentWeek;
+  }, [now, reminderConfiguration.termConfig]);
+  const maxTeachingWeek = reminderConfiguration.termConfig?.totalWeeks ?? 30;
+  const isViewingCurrentWeek = selectedWeek === currentTeachingWeek;
+  const todayWeekday = getShanghaiWeekday(getShanghaiDate(now.getTime()));
+  const nowTime = getShanghaiTime(now.getTime());
+  const visibleWeekdays =
+    dayCount === 5 ? ([1, 2, 3, 4, 5] as const) : ([1, 2, 3, 4, 5, 6, 7] as const);
+  const weekendOccurrenceCount = useMemo(
+    () => layoutCourses(courses, selectedWeek, axis).slice(5).flat().length,
+    [axis, courses, selectedWeek],
+  );
   const userCourseIds = useMemo(
     () => new Set(userCourses.map((course) => course.id)),
     [userCourses],
@@ -181,6 +208,41 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    let timeout: number | undefined;
+    let interval: number | undefined;
+    const refresh = () => setNow(new Date());
+    timeout = window.setTimeout(
+      () => {
+        refresh();
+        interval = window.setInterval(refresh, 60_000);
+      },
+      60_000 - (Date.now() % 60_000),
+    );
+    return () => {
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      if (interval !== undefined) window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    const shouldScroll =
+      isViewingCurrentWeek &&
+      (scrollRequest > 0 || (!initialScrollDone.current && storageStatus === "ready"));
+    if (!shouldScroll) return;
+    const frame = window.requestAnimationFrame(() => {
+      const scroll = timetableScrollRef.current;
+      if (!scroll) return;
+      const target = Math.max(
+        0,
+        (timeToMinutes(nowTime) - timeToMinutes(axis.startTime) - 45) * TEST_TIMETABLE.pxPerMinute,
+      );
+      scroll.scrollTop = Math.min(target, Math.max(0, scroll.scrollHeight - scroll.clientHeight));
+      initialScrollDone.current = true;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [axis.startTime, isViewingCurrentWeek, nowTime, scrollRequest, storageStatus]);
+
+  useEffect(() => {
     return subscribeWidgetSettingsChanged(() => {
       void loadStoredWidgetSettings()
         .then(setWidgetSettings)
@@ -202,6 +264,12 @@ export function App() {
         periods,
         isUsingTestSchedule,
       });
+      if (candidates.length === 0) {
+        throw new PdfImportError(
+          "unsupported-structure",
+          "已读取 PDF 文字，但暂时无法识别该课表结构。请确认文件是否为受支持的南通大学课表格式。",
+        );
+      }
       setCandidateEdits({});
       setPdfImport({ kind: "success", document, candidates });
     } catch (error) {
@@ -273,7 +341,7 @@ export function App() {
             <h1>大学课程表</h1>
             {showDevelopmentFixtures && <span className="prototype-badge">开发预览</span>}
           </div>
-          <p className="subtitle">时间决定位置，空闲时段按真实比例保留</p>
+          <p className="subtitle">本周课表已上线，早七点五十人的苦难开启🔛</p>
         </div>
         <div className="header-actions">
           <button
@@ -303,10 +371,53 @@ export function App() {
           >
             设置
           </button>
-          <div className="week-status" aria-label={`当前显示第 ${TEST_TIMETABLE.currentWeek} 周`}>
-            <span>当前显示周</span>
-            <strong>第 {TEST_TIMETABLE.currentWeek} 周</strong>
-            <small>{isUsingTestSchedule ? "请在设置中确认" : "周一至周日"}</small>
+          <div className="week-controls" aria-label="教学周切换">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setSelectedWeek((week) => Math.max(1, week - 1))}
+              disabled={selectedWeek <= 1}
+              aria-label="上一教学周"
+            >
+              ‹
+            </button>
+            <strong>第 {selectedWeek} 周</strong>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setSelectedWeek((week) => Math.min(maxTeachingWeek, week + 1))}
+              disabled={selectedWeek >= maxTeachingWeek}
+              aria-label="下一教学周"
+            >
+              ›
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                setSelectedWeek(currentTeachingWeek);
+                setScrollRequest((value) => value + 1);
+              }}
+              disabled={isViewingCurrentWeek}
+            >
+              回到本周
+            </button>
+          </div>
+          <div className="day-count-controls" aria-label="课表视图天数">
+            <button
+              type="button"
+              className={dayCount === 5 ? "is-active" : ""}
+              onClick={() => setDayCount(5)}
+            >
+              5天
+            </button>
+            <button
+              type="button"
+              className={dayCount === 7 ? "is-active" : ""}
+              onClick={() => setDayCount(7)}
+            >
+              7天
+            </button>
           </div>
         </div>
       </header>
@@ -325,7 +436,7 @@ export function App() {
           {storageMessage}
         </p>
       )}
-      {periodMessage && (
+      {periodMessage && isUsingTestSchedule && (
         <p className="schedule-notice" role="status" data-testid="schedule-notice">
           {periodMessage}
         </p>
@@ -351,12 +462,26 @@ export function App() {
       <Timetable
         courses={courses}
         userCourseIds={userCourseIds}
-        currentWeek={TEST_TIMETABLE.currentWeek}
+        currentWeek={selectedWeek}
         axis={axis}
         pxPerMinute={TEST_TIMETABLE.pxPerMinute}
         periods={periods}
+        visibleWeekdays={visibleWeekdays}
+        currentWeekday={isViewingCurrentWeek ? todayWeekday : null}
+        nowMinutes={
+          isViewingCurrentWeek && visibleWeekdays.some((weekday) => weekday === todayWeekday)
+            ? timeToMinutes(nowTime)
+            : null
+        }
+        nowTimeLabel={nowTime}
+        scrollRef={timetableScrollRef}
         onEditCourse={(course) => setEditingCourse(course)}
       />
+      {dayCount === 5 && weekendOccurrenceCount > 0 && (
+        <button type="button" className="weekend-notice" onClick={() => setDayCount(7)}>
+          周末有 {weekendOccurrenceCount} 节课，查看 7 天课表
+        </button>
+      )}
       {pdfImport.kind === "success" && (
         <PdfImportPreview
           document={pdfImport.document}
@@ -427,7 +552,7 @@ export function App() {
             setIsUsingTestSchedule(false);
             setReminderConfiguration({ termConfig, reminderSettings });
             notifyWidgetDataChanged();
-            setPeriodMessage("已使用自定义作息。");
+            setPeriodMessage("");
             setIsPeriodSettingsOpen(false);
           }}
           onSaveWidgetSettings={async (nextSettings) => {

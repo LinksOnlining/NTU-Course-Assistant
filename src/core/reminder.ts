@@ -15,6 +15,32 @@ const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1_000;
 export const SHANGHAI_TIMEZONE = "Asia/Shanghai" as const;
 export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = { enabled: false, advanceMinutes: 15 };
 
+export function getShanghaiDate(nowMilliseconds: number): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: SHANGHAI_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(nowMilliseconds);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value;
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+export function getShanghaiWeekday(date: string): number {
+  return ((dayNumber(date) + 3) % 7) + 1;
+}
+
+export function getShanghaiTime(nowMilliseconds: number): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: SHANGHAI_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(nowMilliseconds);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value;
+  return `${value("hour")}:${value("minute")}`;
+}
+
 function isLeapYear(year: number): boolean {
   return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
 }

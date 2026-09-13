@@ -5,7 +5,8 @@ import { countPdfTextItems, hasPdfText, normalizePdfText } from "../core/pdf-tex
 import type { PdfExtraction, PdfPageText, PdfTextItem } from "../types/pdf.ts";
 import type { PDFPageProxy, TextItem } from "pdfjs-dist/types/src/display/api";
 
-export type PdfImportErrorCode = "invalid-file" | "encrypted" | "no-text" | "unreadable";
+export type PdfImportErrorCode =
+  "invalid-file" | "encrypted" | "no-text" | "unsupported-structure" | "unreadable";
 
 export class PdfImportError extends Error {
   readonly code: PdfImportErrorCode;
@@ -164,7 +165,10 @@ export async function extractPdfText(file: SelectedPdfFile): Promise<PdfExtracti
     );
     const items = pages.flatMap((page) => page.items);
     if (!hasPdfText(items)) {
-      throw new PdfImportError("no-text", "当前 PDF 可能是扫描版，首版暂不支持。");
+      throw new PdfImportError(
+        "no-text",
+        "未检测到可读取的文字层。该 PDF 可能是扫描版或图片型 PDF，当前版本暂不支持。",
+      );
     }
     return {
       fileName: file.fileName,

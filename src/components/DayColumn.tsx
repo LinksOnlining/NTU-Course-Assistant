@@ -12,6 +12,8 @@ interface DayColumnProps {
   readonly userCourseIds: ReadonlySet<string>;
   readonly onEditCourse?: (course: Course) => void;
   readonly periods: readonly PeriodTime[];
+  readonly currentTimeOffset: number | null;
+  readonly currentTimeLabel: string;
 }
 
 export function DayColumn({
@@ -23,6 +25,8 @@ export function DayColumn({
   userCourseIds,
   onEditCourse,
   periods,
+  currentTimeOffset,
+  currentTimeLabel,
 }: DayColumnProps) {
   return (
     <section
@@ -42,6 +46,11 @@ export function DayColumn({
           onEdit={onEditCourse}
         />
       ))}
+      {currentTimeOffset !== null && (
+        <div className="current-time-line" style={{ top: currentTimeOffset }} aria-label="当前时间">
+          <span>● {currentTimeLabel}</span>
+        </div>
+      )}
     </section>
   );
 }

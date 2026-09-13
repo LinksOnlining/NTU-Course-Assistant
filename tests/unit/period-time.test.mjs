@@ -2,12 +2,50 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { TEST_PERIOD_TIMES } from "../../src/config/timetable.ts";
 import {
+  adjustPeriodSchedule,
   getTimelineBounds,
   periodRangeToTimeRange,
   periodToTime,
   timeRangeToPeriods,
   validatePeriodTimes,
 } from "../../src/core/period-time.ts";
+
+const shortSchedule = [
+  { period: 1, startTime: "08:00", endTime: "08:45" },
+  { period: 2, startTime: "08:50", endTime: "09:35" },
+  { period: 3, startTime: "09:55", endTime: "10:40" },
+];
+
+test("period start edits preserve duration and shift later periods with their breaks", () => {
+  assert.deepEqual(adjustPeriodSchedule(shortSchedule, 0, { startTime: "08:10" }), [
+    { period: 1, startTime: "08:10", endTime: "08:55" },
+    { period: 2, startTime: "09:00", endTime: "09:45" },
+    { period: 3, startTime: "10:05", endTime: "10:50" },
+  ]);
+});
+
+test("middle and end edits only affect the edited period and later periods", () => {
+  assert.deepEqual(adjustPeriodSchedule(shortSchedule, 1, { endTime: "09:45" }), [
+    shortSchedule[0],
+    { period: 2, startTime: "08:50", endTime: "09:45" },
+    { period: 3, startTime: "10:05", endTime: "10:50" },
+  ]);
+  assert.deepEqual(adjustPeriodSchedule(shortSchedule, 2, { endTime: "10:50" }), [
+    shortSchedule[0],
+    shortSchedule[1],
+    { period: 3, startTime: "09:55", endTime: "10:50" },
+  ]);
+});
+
+test("period adjustment rejects a schedule that would exceed the day", () => {
+  assert.throws(
+    () =>
+      adjustPeriodSchedule([{ period: 1, startTime: "23:00", endTime: "23:45" }], 0, {
+        startTime: "23:30",
+      }),
+    /超出当天时间范围/u,
+  );
+});
 
 test("test-only period configuration is complete, ordered and valid", () => {
   assert.doesNotThrow(() => validatePeriodTimes(TEST_PERIOD_TIMES));

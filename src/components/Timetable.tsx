@@ -1,5 +1,5 @@
-import type { CSSProperties } from "react";
-import { durationMinutes } from "../core/time.ts";
+import type { CSSProperties, RefObject } from "react";
+import { durationMinutes, offsetMinutes } from "../core/time.ts";
 import { layoutCourses } from "../core/timetable-layout.ts";
 import type { Course } from "../types/course.ts";
 import type { PeriodTime, TimeRange } from "../types/time.ts";
@@ -15,6 +15,11 @@ interface TimetableProps {
   readonly axis: TimeRange;
   readonly pxPerMinute: number;
   readonly periods: readonly PeriodTime[];
+  readonly visibleWeekdays?: readonly number[];
+  readonly currentWeekday?: number | null;
+  readonly nowMinutes?: number | null;
+  readonly nowTimeLabel?: string;
+  readonly scrollRef?: RefObject<HTMLDivElement | null>;
   readonly onEditCourse?: (course: Course) => void;
 }
 
@@ -25,6 +30,11 @@ export function Timetable({
   axis,
   pxPerMinute,
   periods,
+  visibleWeekdays = [1, 2, 3, 4, 5, 6, 7],
+  currentWeekday = null,
+  nowMinutes = null,
+  nowTimeLabel = "",
+  scrollRef,
   onEditCourse,
 }: TimetableProps) {
   if (!Number.isFinite(pxPerMinute) || pxPerMinute <= 0) {
@@ -34,29 +44,54 @@ export function Timetable({
   const timelineHeight = durationMinutes(axis) * pxPerMinute;
   const gridStyle = { "--hour-height": `${60 * pxPerMinute}px` } as CSSProperties;
 
+  const visibleDays = visibleWeekdays.map((weekday) => ({ weekday, label: DAYS[weekday - 1] }));
+  const currentOffset =
+    nowMinutes === null
+      ? null
+      : (nowMinutes - offsetMinutes(axis.startTime, "00:00")) * pxPerMinute;
   return (
-    <div className="timetable-scroll" data-testid="timetable-scroll">
-      <div className="timetable-grid" data-testid="timetable-grid" style={gridStyle}>
+    <div className="timetable-scroll" data-testid="timetable-scroll" ref={scrollRef}>
+      <div
+        className="timetable-grid"
+        data-testid="timetable-grid"
+        style={{
+          ...gridStyle,
+          gridTemplateColumns: `124px repeat(${visibleDays.length}, minmax(154px, 1fr))`,
+          minWidth: `${124 + visibleDays.length * 154}px`,
+        }}
+      >
         <div className="week-corner" aria-hidden="true">
           节次 / 时间
         </div>
-        {DAYS.map((day) => (
-          <div className="day-header" key={day}>
-            {day}
+        {visibleDays.map(({ weekday, label }) => (
+          <div
+            className={`day-header${weekday === currentWeekday ? " day-header--today" : ""}`}
+            key={label}
+          >
+            {label}
           </div>
         ))}
         <TimeAxis axis={axis} height={timelineHeight} pxPerMinute={pxPerMinute} periods={periods} />
-        {DAYS.map((day, index) => (
+        {visibleDays.map(({ weekday, label }) => (
           <DayColumn
-            key={day}
-            weekday={index + 1}
-            label={day}
-            items={days[index]}
+            key={label}
+            weekday={weekday}
+            label={label}
+            items={days[weekday - 1]}
             height={timelineHeight}
             pxPerMinute={pxPerMinute}
             userCourseIds={userCourseIds}
             periods={periods}
             onEditCourse={onEditCourse}
+            currentTimeOffset={
+              weekday === currentWeekday &&
+              currentOffset !== null &&
+              currentOffset >= 0 &&
+              currentOffset <= timelineHeight
+                ? currentOffset
+                : null
+            }
+            currentTimeLabel={nowTimeLabel}
           />
         ))}
       </div>
