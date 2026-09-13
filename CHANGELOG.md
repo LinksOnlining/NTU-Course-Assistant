@@ -1,6 +1,14 @@
 # 变更记录
 
-## 未发布 — 2026-09-10
+## 未发布 — 2026-09-13
+
+- **Phase 5 PASS / Phase 5.4 PASS**：提醒计划会在启动、数据变化和窗口恢复时由 TypeScript core 重建。新增 schema 3→4 migration 的最小 `handled_reminders` 表，在 notification delivery attempt 后记录 occurrence key 与时间，跨重启排除已处理提醒；写入失败不会使 scheduler 停止，当前 session 仍保持去重。scheduler 每分钟复核绝对 wall-clock，覆盖应用存活期间的休眠恢复和明显系统时间跳变。
+- 0→4、1→4、2→4、3→4 迁移链、未来版本拒绝、handled 保留清理、restart/catch-up/already-started、same-trigger 和持久状态失败均有回归覆盖。Phase 5 总验收通过：105 项 TypeScript 单元、39 项架构、282/297 UI（15 条既有条件 skip）、28 项 Rust、typecheck、lint、format、build、verify、fmt 与 clippy 均 PASS。
+- **Phase 4 CANCELLED BY USER**：不再继续教务系统导入或相关调查。
+- **Phase 5.1 PASS**：新增学期配置、提醒提前量和纯逻辑课程实例/提醒时刻计算；SQLite schema 迁移至 3，`app_settings` 与作息使用同一事务保存。当前不发送系统通知，不进入 Phase 5.2。
+- **Phase 5.2 PASS**：Rust 单实例调度器接收 TypeScript 提供的 occurrence key、绝对 UTC epoch 毫秒 trigger 和课程开始时刻；channel refresh 会替换旧等待，同一 trigger 会批量 due，当前会话按 key 去重。真实 Tauri 进程已验证两条短时未来计划按顺序各触发一次。当前仍未发送 Windows 系统通知。
+- **Phase 5.3 PASS**：接入官方 Tauri notification plugin。最小计划 payload 包含课程名、开始时间和可选教室；Rust notification adapter 在 due 时发送“课程即将开始”。同一时刻的每条 due 各自发送，失败只记录日志且不会停止后续提醒。
+- **Version 1.0 路线更新**：新增 Phase 7 桌面课程小组件。该阶段将以同一 Tauri 应用的底层多窗口展示今日或本周课程，复用既有领域模型；不使用置顶窗口、壁纸注入或第二套课程数据模型。
 
 - **Phase 3 PASS / Phase 3.4 PASS**：新增正式导入确认页，逐条展示课程字段与普通、警告、重复、冲突统计；返回修改保留候选修正，整批取消零写入，blocking 禁止确认，warning 和真实时间冲突允许保留。
 - 新增纯 `prepareImportPlan`：按名称、星期、实际时间和周数跳过现有及批内精确重复，同名不同安排继续写入；只为最终待写入项生成一次 UUID，并再次通过统一课程校验。

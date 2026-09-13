@@ -1,22 +1,46 @@
 import { useState } from "react";
 import { validatePeriodTimes } from "../core/period-time.ts";
+import {
+  SHANGHAI_TIMEZONE,
+  validateReminderSettings,
+  validateTermConfig,
+} from "../core/reminder.ts";
 import { minutesToTime, timeToMinutes } from "../core/time.ts";
+import type { ReminderConfiguration, ReminderSettings, TermConfig } from "../types/reminder.ts";
 import type { PeriodTime } from "../types/time.ts";
 
 interface PeriodSettingsProps {
   readonly periods: readonly PeriodTime[];
   readonly isUsingTestSchedule: boolean;
-  readonly onSave: (periods: readonly PeriodTime[]) => Promise<void>;
+  readonly reminderConfiguration: ReminderConfiguration;
+  readonly onSave: (
+    periods: readonly PeriodTime[],
+    termConfig: TermConfig | null,
+    reminderSettings: ReminderSettings,
+  ) => Promise<void>;
   readonly onCancel: () => void;
 }
 
 export function PeriodSettings({
   periods,
   isUsingTestSchedule,
+  reminderConfiguration,
   onSave,
   onCancel,
 }: PeriodSettingsProps) {
   const [draft, setDraft] = useState<PeriodTime[]>(() => periods.map((period) => ({ ...period })));
+  const [firstWeekMonday, setFirstWeekMonday] = useState(
+    reminderConfiguration.termConfig?.firstWeekMonday ?? "",
+  );
+  const [totalWeeks, setTotalWeeks] = useState(
+    String(reminderConfiguration.termConfig?.totalWeeks ?? 18),
+  );
+  const [remindersEnabled, setRemindersEnabled] = useState(
+    reminderConfiguration.reminderSettings.enabled,
+  );
+  const [advanceMinutes, setAdvanceMinutes] = useState(
+    String(reminderConfiguration.reminderSettings.advanceMinutes),
+  );
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -62,8 +86,22 @@ export function PeriodSettings({
   async function save() {
     try {
       validatePeriodTimes(draft);
+      const reminderSettings = validateReminderSettings({
+        enabled: remindersEnabled,
+        advanceMinutes: Number(advanceMinutes),
+      });
+      const termConfig = firstWeekMonday
+        ? validateTermConfig({
+            firstWeekMonday,
+            totalWeeks: Number(totalWeeks),
+            timezone: SHANGHAI_TIMEZONE,
+          })
+        : null;
+      if (reminderSettings.enabled && termConfig === null) {
+        throw new RangeError("启用提醒前请设置第 1 教学周的星期一");
+      }
       setIsSaving(true);
-      await onSave(draft);
+      await onSave(draft, termConfig, reminderSettings);
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "保存作息失败，请稍后重试。");
       setIsSaving(false);
@@ -141,6 +179,55 @@ export function PeriodSettings({
             删除最后一节
           </button>
         </div>
+        <section className="settings-section" aria-labelledby="reminder-settings-title">
+          <div>
+            <h3 id="reminder-settings-title">学期与课程提醒</h3>
+            <p>提醒目前只保存并计算时间，不会发送 Windows 系统通知。</p>
+          </div>
+          <div className="settings-fields">
+            <label>
+              <span>第 1 教学周星期一</span>
+              <input
+                type="date"
+                value={firstWeekMonday}
+                onChange={(event) => setFirstWeekMonday(event.target.value)}
+                aria-label="第 1 教学周星期一"
+              />
+            </label>
+            <label>
+              <span>总教学周数</span>
+              <input
+                type="number"
+                min="1"
+                max="30"
+                value={totalWeeks}
+                onChange={(event) => setTotalWeeks(event.target.value)}
+                aria-label="总教学周数"
+              />
+            </label>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={remindersEnabled}
+                onChange={(event) => setRemindersEnabled(event.target.checked)}
+                aria-label="启用课程提醒"
+              />
+              <span>启用课程提醒</span>
+            </label>
+            <label>
+              <span>提前提醒分钟</span>
+              <input
+                type="number"
+                min="0"
+                max="180"
+                value={advanceMinutes}
+                onChange={(event) => setAdvanceMinutes(event.target.value)}
+                disabled={!remindersEnabled}
+                aria-label="提前提醒分钟"
+              />
+            </label>
+          </div>
+        </section>
         {error && (
           <p className="form-error" role="alert">
             {error}

@@ -5,6 +5,42 @@ pub const MAX_PERIOD: u16 = 30;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TermConfig {
+    pub first_week_monday: String,
+    pub total_weeks: u8,
+    pub timezone: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReminderSettings {
+    pub enabled: bool,
+    pub advance_minutes: u16,
+}
+
+pub fn validate_term_config(config: &TermConfig) -> Result<(), String> {
+    if config.total_weeks == 0 || config.total_weeks > MAX_TEACHING_WEEK {
+        return Err("总教学周数必须是 1–30 的整数".into());
+    }
+    if config.timezone != "Asia/Shanghai" {
+        return Err("时区必须为 Asia/Shanghai".into());
+    }
+    let (year, month, day) = parse_date(&config.first_week_monday)?;
+    if weekday(year, month, day) != 1 {
+        return Err("第 1 教学周日期必须是星期一".into());
+    }
+    Ok(())
+}
+
+pub fn validate_reminder_settings(settings: &ReminderSettings) -> Result<(), String> {
+    if settings.advance_minutes > 180 {
+        return Err("提前提醒时间必须是 0–180 分钟的整数".into());
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PeriodTime {
     pub period: u16,
     pub start_time: String,
@@ -123,6 +159,51 @@ fn parse_time(value: &str) -> Result<u16, String> {
     Ok(hour * 60 + minute)
 }
 
+fn parse_date(value: &str) -> Result<(u32, u32, u32), String> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+        return Err("日期必须使用 YYYY-MM-DD".into());
+    }
+    let number = |slice: &[u8]| -> Option<u32> {
+        slice.iter().try_fold(0_u32, |result, byte| {
+            byte.is_ascii_digit()
+                .then_some(result * 10 + u32::from(byte - b'0'))
+        })
+    };
+    let (year, month, day) = (
+        number(&bytes[0..4]),
+        number(&bytes[5..7]),
+        number(&bytes[8..10]),
+    );
+    let (Some(year), Some(month), Some(day)) = (year, month, day) else {
+        return Err("日期必须使用 YYYY-MM-DD".into());
+    };
+    let leap = year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
+    let maximum = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => 0,
+    };
+    if year == 0 || day == 0 || day > maximum {
+        return Err("日期不存在".into());
+    }
+    Ok((year, month, day))
+}
+
+fn weekday(year: u32, month: u32, day: u32) -> u8 {
+    let month_days = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+    let leap = year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
+    let days = (year - 1) * 365 + (year - 1) / 4 - (year - 1) / 100
+        + (year - 1) / 400
+        + month_days[(month - 1) as usize]
+        + day
+        - 1
+        + u32::from(leap && month > 2);
+    (days % 7 + 1) as u8
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,5 +251,30 @@ mod tests {
         let mut overlap = valid;
         overlap[1].start_time = "08:40".into();
         assert!(validate_period_times(&overlap).is_err());
+    }
+
+    #[test]
+    fn term_and_reminder_settings_require_supported_values() {
+        let term = TermConfig {
+            first_week_monday: "2026-09-07".into(),
+            total_weeks: 18,
+            timezone: "Asia/Shanghai".into(),
+        };
+        assert!(validate_term_config(&term).is_ok());
+        assert!(validate_term_config(&TermConfig {
+            first_week_monday: "2026-09-08".into(),
+            ..term.clone()
+        })
+        .is_err());
+        assert!(validate_reminder_settings(&ReminderSettings {
+            enabled: true,
+            advance_minutes: 180
+        })
+        .is_ok());
+        assert!(validate_reminder_settings(&ReminderSettings {
+            enabled: true,
+            advance_minutes: 181
+        })
+        .is_err());
     }
 }

@@ -81,6 +81,11 @@ async function addUserCourse(page: Page, fields: CourseFields) {
   return page.locator('[data-source="user"]').filter({ hasText: fields.name }).first();
 }
 
+async function openUserCourseEditor(card: Locator) {
+  await card.focus();
+  await card.press("Enter");
+}
+
 async function completePracticeCandidates(preview: Locator) {
   for (let index = 0; index < 3; index += 1) {
     const practice = preview.locator('[data-candidate-kind="practice"]').nth(index);
@@ -133,7 +138,13 @@ test("text PDF extraction keeps page dimensions and coordinate-bearing text in m
   await expect(page.getByTestId("pdf-candidate-summary")).toContainText("识别到 0 个候选");
   await expect(page.getByTestId("pdf-candidate-summary")).toContainText("固定安排 0");
   await expect(page.getByTestId("pdf-candidate-summary")).toContainText("非固定实践 0");
-  await expect(preview.getByRole("button", { name: "进入最终确认" })).toBeDisabled();
+  const finalReviewButton = preview.getByRole("button", { name: "进入最终确认" });
+  await expect(finalReviewButton).toBeDisabled();
+  await expect(finalReviewButton).toBeVisible();
+  const footer = await box(preview.locator(".pdf-preview-footer"));
+  expect(footer.y + footer.height).toBeLessThanOrEqual(
+    await page.evaluate(() => window.innerHeight),
+  );
   await preview.getByRole("button", { name: "取消本次导入", exact: true }).click();
   await expect(preview).toHaveCount(0);
   await expect(page.locator('[data-source="user"]')).toHaveCount(0);
@@ -346,6 +357,25 @@ test("period settings save custom proportions and can add a twelfth period", asy
   await expect(page.locator('[data-period="12"]')).toBeVisible();
 });
 
+test("term and reminder settings validate and persist with the schedule", async ({ page }) => {
+  await page.getByRole("button", { name: "设置" }).click();
+  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  await expect(dialog.getByText("学期与课程提醒")).toBeVisible();
+  await dialog.getByLabel("启用课程提醒").check();
+  await dialog.getByRole("button", { name: "保存作息" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("第 1 教学周");
+  await dialog.getByLabel("第 1 教学周星期一").fill("2026-09-07");
+  await dialog.getByLabel("总教学周数").fill("18");
+  await dialog.getByLabel("提前提醒分钟").fill("60");
+  await dialog.getByRole("button", { name: "保存作息" }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole("button", { name: "设置" }).click();
+  const reopened = page.getByRole("dialog", { name: "作息时间" });
+  await expect(reopened.getByLabel("第 1 教学周星期一")).toHaveValue("2026-09-07");
+  await expect(reopened.getByLabel("启用课程提醒")).toBeChecked();
+  await expect(reopened.getByLabel("提前提醒分钟")).toHaveValue("60");
+});
+
 test("invalid period settings are blocked and cancel keeps the previous schedule", async ({
   page,
 }) => {
@@ -372,7 +402,14 @@ test("failed schedule save keeps the old timeline", async ({ page }) => {
               { period: 2, startTime: "08:50", endTime: "09:35" },
             ];
           }
-          if (command === "save_period_times") throw "保存作息失败，请稍后重试。";
+          if (command === "load_reminder_configuration") {
+            return {
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            };
+          }
+          if (command === "save_app_settings") throw "保存设置失败，请稍后重试。";
           throw "未预期的存储命令";
         },
       },
@@ -383,7 +420,7 @@ test("failed schedule save keeps the old timeline", async ({ page }) => {
   const dialog = page.getByRole("dialog", { name: "作息时间" });
   await dialog.getByLabel("第1节结束时间").fill("08:30");
   await dialog.getByRole("button", { name: "保存作息" }).click();
-  await expect(dialog.getByRole("alert")).toHaveText("保存作息失败，请稍后重试。");
+  await expect(dialog.getByRole("alert")).toHaveText("保存设置失败，请稍后重试。");
   await expect(page.locator('[data-period="1"]')).toHaveCSS("height", "45px");
 });
 
@@ -581,13 +618,13 @@ test("long Chinese user course name remains inside its real-height card", async 
   await expect(card).toHaveAttribute("title", new RegExp(longName));
 });
 
-test("only user courses expose edit controls and edit keeps ID while moving geometry", async ({
+test("only user courses are keyboard editable and edit keeps ID while moving geometry", async ({
   page,
 }) => {
-  await expect(page.locator('[data-source="fixture"] .course-edit-button')).toHaveCount(0);
+  await expect(page.locator(".course-edit-button")).toHaveCount(0);
   const original = await addUserCourse(page, { name: "机械设计基础" });
   const originalId = await original.getAttribute("data-course-id");
-  await original.getByRole("button", { name: "编辑 机械设计基础" }).click();
+  await openUserCourseEditor(original);
 
   const dialog = page.getByRole("dialog", { name: "编辑课程" });
   await expect(dialog.getByLabel("课程名称", { exact: true })).toHaveValue("机械设计基础");
@@ -619,7 +656,7 @@ test("only user courses expose edit controls and edit keeps ID while moving geom
 
 test("editing weeks can hide a course without deleting it", async ({ page }) => {
   const card = await addUserCourse(page, { name: "周数调整课程" });
-  await card.getByRole("button", { name: "编辑 周数调整课程" }).click();
+  await openUserCourseEditor(card);
   const dialog = page.getByRole("dialog", { name: "编辑课程" });
   await dialog.getByLabel("上课周数").fill("4-8,10,12-15");
   await dialog.getByRole("button", { name: "保存修改" }).click();
@@ -630,7 +667,7 @@ test("invalid edit is blocked and cancel preserves the original course", async (
   const card = await addUserCourse(page, { name: "不可破坏课程" });
   const originalId = await card.getAttribute("data-course-id");
   const originalTitle = await card.getAttribute("title");
-  await card.getByRole("button", { name: "编辑 不可破坏课程" }).click();
+  await openUserCourseEditor(card);
   const dialog = page.getByRole("dialog", { name: "编辑课程" });
   await dialog.getByLabel("课程名称", { exact: true }).fill("");
   await dialog.getByLabel("开始时间").fill("15:30");
@@ -658,7 +695,7 @@ test("invalid edit is blocked and cancel preserves the original course", async (
 test("edit cancel discards every changed field without creating a copy", async ({ page }) => {
   const card = await addUserCourse(page, { name: "保持原样课程", classroom: "原教室" });
   const id = await card.getAttribute("data-course-id");
-  await card.getByRole("button", { name: "编辑 保持原样课程" }).click();
+  await openUserCourseEditor(card);
   const dialog = page.getByRole("dialog", { name: "编辑课程" });
   await dialog.getByLabel("课程名称", { exact: true }).fill("不应保存");
   await dialog.getByLabel("星期").selectOption("6");
@@ -672,7 +709,7 @@ test("edit cancel discards every changed field without creating a copy", async (
 
 test("delete confirmation supports cancel and then removes by course ID", async ({ page }) => {
   let card = await addUserCourse(page, { name: "待删除课程" });
-  await card.getByRole("button", { name: "编辑 待删除课程" }).click();
+  await openUserCourseEditor(card);
   let dialog = page.getByRole("dialog", { name: "编辑课程" });
   await dialog.getByRole("button", { name: "删除 待删除课程" }).click();
   await expect(dialog.getByText("确定删除“待删除课程”吗？")).toBeVisible();
@@ -682,7 +719,7 @@ test("delete confirmation supports cancel and then removes by course ID", async 
   await expect(page.locator('[data-source="user"]')).toHaveCount(1);
 
   card = page.locator('[data-source="user"]');
-  await card.getByRole("button", { name: "编辑 待删除课程" }).click();
+  await openUserCourseEditor(card);
   dialog = page.getByRole("dialog", { name: "编辑课程" });
   await dialog.getByRole("button", { name: "删除 待删除课程" }).click();
   await dialog.getByRole("button", { name: "确认删除 待删除课程" }).click();
@@ -706,7 +743,7 @@ test("deleting an overlap recalculates the remaining course to one lane", async 
   });
   await expect(first).toHaveAttribute("data-lane-count", "2");
   await expect(second).toHaveAttribute("data-lane-count", "2");
-  await second.getByRole("button", { name: "编辑 用户重叠 B" }).click();
+  await openUserCourseEditor(second);
   const dialog = page.getByRole("dialog", { name: "编辑课程" });
   await dialog.getByRole("button", { name: "删除 用户重叠 B" }).click();
   await dialog.getByRole("button", { name: "确认删除 用户重叠 B" }).click();
@@ -735,6 +772,13 @@ test("storage failures keep the original UI state and show a clear error", async
         invoke: async (command: string) => {
           if (command === "load_courses") return { courses: [storedCourse], warnings: [] };
           if (command === "load_period_times") return null;
+          if (command === "load_reminder_configuration") {
+            return {
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            };
+          }
           if (command === "update_course") throw "更新课程失败，请稍后重试。";
           if (command === "delete_course") throw "删除课程失败，请稍后重试。";
           throw "未预期的存储命令";
@@ -744,7 +788,7 @@ test("storage failures keep the original UI state and show a clear error", async
   });
   await page.reload();
   const original = page.locator('[data-course-id="storage-failure-course"]');
-  await original.getByRole("button", { name: "编辑 数据库原课程" }).click();
+  await openUserCourseEditor(original);
   let dialog = page.getByRole("dialog", { name: "编辑课程" });
   await dialog.getByLabel("课程名称", { exact: true }).fill("不应保存的修改");
   await dialog.getByRole("button", { name: "保存修改" }).click();
@@ -752,7 +796,7 @@ test("storage failures keep the original UI state and show a clear error", async
   await expect(original).toContainText("数据库原课程");
   await dialog.getByRole("button", { name: "取消" }).click();
 
-  await original.getByRole("button", { name: "编辑 数据库原课程" }).click();
+  await openUserCourseEditor(original);
   dialog = page.getByRole("dialog", { name: "编辑课程" });
   await dialog.getByRole("button", { name: "删除 数据库原课程" }).click();
   await dialog.getByRole("button", { name: "确认删除 数据库原课程" }).click();
@@ -768,6 +812,13 @@ test("a failed insert does not create a course in the UI", async ({ page }) => {
         invoke: async (command: string) => {
           if (command === "load_courses") return { courses: [], warnings: [] };
           if (command === "load_period_times") return null;
+          if (command === "load_reminder_configuration") {
+            return {
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            };
+          }
           if (command === "insert_course") throw "保存课程失败，请稍后重试。";
           throw "未预期的存储命令";
         },
@@ -788,6 +839,13 @@ test("a stored course outside the current axis is skipped without crashing", asy
       value: {
         invoke: async (command: string) => {
           if (command === "load_period_times") return null;
+          if (command === "load_reminder_configuration") {
+            return {
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            };
+          }
           if (command !== "load_courses") throw "未预期的存储命令";
           return {
             courses: [

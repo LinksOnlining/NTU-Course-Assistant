@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Course } from "../types/course.ts";
 import type { PeriodTime } from "../types/time.ts";
+import type {
+  ReminderConfiguration,
+  ReminderPlan,
+  ReminderSettings,
+  TermConfig,
+} from "../types/reminder.ts";
 
 export interface LoadCoursesResult {
   readonly courses: readonly Course[];
@@ -9,6 +15,10 @@ export interface LoadCoursesResult {
 
 let developmentMemory: Course[] = [];
 let developmentPeriodTimes: PeriodTime[] | null = null;
+let developmentReminderConfiguration: ReminderConfiguration = {
+  termConfig: null,
+  reminderSettings: { enabled: false, advanceMinutes: 15 },
+};
 
 function usesDevelopmentMemory(): boolean {
   return import.meta.env.DEV && !("__TAURI_INTERNALS__" in window);
@@ -113,5 +123,59 @@ export async function saveStoredPeriodTimes(periods: readonly PeriodTime[]): Pro
     await invoke("save_period_times", { periods });
   } catch (error) {
     throw storageError(error, "保存作息失败，请稍后重试。");
+  }
+}
+
+export async function loadStoredReminderConfiguration(): Promise<
+  ReminderConfiguration & { warnings: readonly string[] }
+> {
+  if (usesDevelopmentMemory()) return { ...developmentReminderConfiguration, warnings: [] };
+  try {
+    return await invoke<ReminderConfiguration & { warnings: readonly string[] }>(
+      "load_reminder_configuration",
+    );
+  } catch (error) {
+    throw storageError(error, "无法读取提醒设置，请重新启动应用。");
+  }
+}
+
+export async function loadHandledReminderKeys(): Promise<readonly string[]> {
+  if (usesDevelopmentMemory()) return [];
+  try {
+    return await invoke<readonly string[]>("load_handled_reminder_keys");
+  } catch (error) {
+    throw storageError(error, "无法读取提醒状态，请重新启动应用。");
+  }
+}
+
+export async function saveStoredAppSettings(
+  periods: readonly PeriodTime[],
+  termConfig: TermConfig | null,
+  reminderSettings: ReminderSettings,
+): Promise<void> {
+  if (usesDevelopmentMemory()) {
+    developmentPeriodTimes = [...periods];
+    developmentReminderConfiguration = { termConfig, reminderSettings };
+    return;
+  }
+  try {
+    await invoke("save_app_settings", { periods, termConfig, reminderSettings });
+  } catch (error) {
+    throw storageError(error, "保存设置失败，请稍后重试。");
+  }
+}
+
+export async function refreshStoredReminderSchedule(
+  configuration: ReminderConfiguration,
+  plans: readonly ReminderPlan[],
+): Promise<void> {
+  if (usesDevelopmentMemory()) return;
+  try {
+    await invoke("refresh_reminder_schedule", {
+      enabled: configuration.reminderSettings.enabled && configuration.termConfig !== null,
+      plans,
+    });
+  } catch (error) {
+    throw storageError(error, "无法更新提醒计划，请重新启动应用。");
   }
 }

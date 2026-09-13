@@ -15,20 +15,30 @@ import { courseTiming } from "./core/timetable-layout.ts";
 import { parseNtuPdfTimetable } from "./importers/ntu-pdf/parse.ts";
 import { TEST_COURSES } from "./fixtures/courses.ts";
 import { choosePdfFile, extractPdfText, PdfImportError } from "./services/pdf-import.ts";
+import { subscribeReminderResume } from "./services/reminder-lifecycle.ts";
 import {
   deleteStoredCourse,
   importStoredCourses,
+  loadHandledReminderKeys,
   insertStoredCourse,
   loadStoredCourses,
   loadStoredPeriodTimes,
+  loadStoredReminderConfiguration,
+  refreshStoredReminderSchedule,
+  saveStoredAppSettings,
   updateStoredCourse,
-  saveStoredPeriodTimes,
 } from "./services/course-storage.ts";
+import {
+  buildReminderPlans,
+  DEFAULT_REMINDER_SETTINGS,
+  excludeHandledReminderPlans,
+} from "./core/reminder.ts";
 import type { Course } from "./types/course.ts";
 import type { ImportCandidate, ImportCandidateEdit } from "./types/import-candidate.ts";
 import type { ImportPlan } from "./types/import-proposal.ts";
 import type { PdfExtraction } from "./types/pdf.ts";
 import type { PeriodTime } from "./types/time.ts";
+import type { ReminderConfiguration } from "./types/reminder.ts";
 
 type PdfImportState =
   | { readonly kind: "idle" }
@@ -47,6 +57,10 @@ export function App() {
   const [periods, setPeriods] = useState<readonly PeriodTime[]>(TEST_TIMETABLE.periods);
   const [isPeriodSettingsOpen, setIsPeriodSettingsOpen] = useState(false);
   const [isUsingTestSchedule, setIsUsingTestSchedule] = useState(true);
+  const [reminderConfiguration, setReminderConfiguration] = useState<ReminderConfiguration>({
+    termConfig: null,
+    reminderSettings: DEFAULT_REMINDER_SETTINGS,
+  });
   const [periodMessage, setPeriodMessage] = useState("");
   const [storageStatus, setStorageStatus] = useState<"loading" | "ready" | "error">("loading");
   const [storageMessage, setStorageMessage] = useState("");
@@ -81,9 +95,38 @@ export function App() {
   );
 
   useEffect(() => {
+    if (storageStatus !== "ready") return;
     let active = true;
-    void Promise.all([loadStoredCourses(), loadStoredPeriodTimes()])
-      .then(([result, storedPeriods]) => {
+    const rebuildSchedule = async () => {
+      const plans = buildReminderPlans(userCourses, reminderConfiguration);
+      try {
+        const handled = new Set(await loadHandledReminderKeys());
+        if (!active) return;
+        await refreshStoredReminderSchedule(
+          reminderConfiguration,
+          excludeHandledReminderPlans(plans, handled),
+        );
+      } catch {
+        if (active) await refreshStoredReminderSchedule(reminderConfiguration, plans);
+      }
+    };
+    const resume = () => void rebuildSchedule().catch(() => undefined);
+    void rebuildSchedule().catch(() => undefined);
+    const unsubscribe = subscribeReminderResume(resume);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [reminderConfiguration, storageStatus, userCourses]);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      loadStoredCourses(),
+      loadStoredPeriodTimes(),
+      loadStoredReminderConfiguration(),
+    ])
+      .then(([result, storedPeriods, storedReminderConfiguration]) => {
         if (!active) return;
         const activePeriods = storedPeriods ?? TEST_TIMETABLE.periods;
         setPeriods(activePeriods);
@@ -92,7 +135,11 @@ export function App() {
           storedPeriods === null ? "当前使用测试作息，请在设置中确认。" : "已使用自定义作息。",
         );
         const displayAxis = getTimelineBounds(TEST_TIMETABLE.axis, activePeriods);
-        const warnings = [...result.warnings];
+        const warnings = [...result.warnings, ...storedReminderConfiguration.warnings];
+        setReminderConfiguration({
+          termConfig: storedReminderConfiguration.termConfig,
+          reminderSettings: storedReminderConfiguration.reminderSettings,
+        });
         const renderableCourses = result.courses.filter((course) => {
           try {
             courseTiming(course, displayAxis);
@@ -341,10 +388,12 @@ export function App() {
         <PeriodSettings
           periods={periods}
           isUsingTestSchedule={isUsingTestSchedule}
-          onSave={async (nextPeriods) => {
-            await saveStoredPeriodTimes(nextPeriods);
+          reminderConfiguration={reminderConfiguration}
+          onSave={async (nextPeriods, termConfig, reminderSettings) => {
+            await saveStoredAppSettings(nextPeriods, termConfig, reminderSettings);
             setPeriods([...nextPeriods]);
             setIsUsingTestSchedule(false);
+            setReminderConfiguration({ termConfig, reminderSettings });
             setPeriodMessage("已使用自定义作息。");
             setIsPeriodSettingsOpen(false);
           }}

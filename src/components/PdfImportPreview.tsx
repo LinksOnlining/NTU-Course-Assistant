@@ -403,28 +403,30 @@ export function PdfImportPreview({
           <span data-status="blocking">需修正 {summary.blocking}</span>
         </div>
 
-        {isUsingTestSchedule && (
-          <div className="pdf-schedule-warning" role="alert">
-            <span>当前仍是测试作息，固定课程暂时不能生成正式时间。</span>
-            <button type="button" className="secondary-button" onClick={onOpenPeriodSettings}>
-              打开作息设置
-            </button>
-          </div>
-        )}
+        <div className="pdf-preview-toolbar">
+          {isUsingTestSchedule && (
+            <div className="pdf-schedule-warning" role="alert">
+              <span>当前仍是测试作息，固定课程暂时不能生成正式时间。</span>
+              <button type="button" className="secondary-button" onClick={onOpenPeriodSettings}>
+                打开作息设置
+              </button>
+            </div>
+          )}
 
-        <nav className="candidate-filters" aria-label="筛选候选状态">
-          {filters.map(([value, label, count]) => (
-            <button
-              type="button"
-              key={value}
-              className={filter === value ? "is-active" : ""}
-              aria-pressed={filter === value}
-              onClick={() => setFilter(value)}
-            >
-              {label} {count}
-            </button>
-          ))}
-        </nav>
+          <nav className="candidate-filters" aria-label="筛选候选状态">
+            {filters.map(([value, label, count]) => (
+              <button
+                type="button"
+                key={value}
+                className={filter === value ? "is-active" : ""}
+                aria-pressed={filter === value}
+                onClick={() => setFilter(value)}
+              >
+                {label} {count}
+              </button>
+            ))}
+          </nav>
+        </div>
 
         <div className="pdf-preview-content">
           <div className="candidate-list" aria-label="PDF 课程候选">

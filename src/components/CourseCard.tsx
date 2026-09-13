@@ -61,6 +61,8 @@ export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit, periods }:
   ].join(" · ");
   const tone = cardTone(course.id);
   const contentDensity = textDensity(course, item.durationMinutes, laneCount);
+  const canEdit = isUserCourse && onEdit !== undefined;
+  const openEditor = () => onEdit?.(course);
 
   return (
     <article
@@ -81,19 +83,20 @@ export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit, periods }:
       }}
       tabIndex={0}
       title={title}
-      aria-label={title}
+      aria-label={canEdit ? `${title}。点击或按 Enter 编辑课程。` : title}
+      onClick={canEdit ? openEditor : undefined}
+      onKeyDown={
+        canEdit
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openEditor();
+              }
+            }
+          : undefined
+      }
     >
       {isUserCourse && <span className="course-origin">用户添加</span>}
-      {isUserCourse && onEdit && (
-        <button
-          type="button"
-          className="course-edit-button"
-          onClick={() => onEdit(course)}
-          aria-label={`编辑 ${course.name}`}
-        >
-          编辑
-        </button>
-      )}
       <strong className="course-name">{course.name}</strong>
       <span className="course-time">{timeLabel}</span>
       <span className="course-classroom">{course.classroom ?? "教室待定"}</span>

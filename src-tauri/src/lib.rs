@@ -1,10 +1,12 @@
 mod db;
 mod models;
+mod notification;
+mod scheduler;
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use db::CourseDatabase;
-use models::{Course, PeriodTime};
+use models::{Course, PeriodTime, ReminderSettings, TermConfig};
 use serde::Serialize;
 use tauri::{Manager, State};
 
@@ -13,7 +15,12 @@ enum StorageAvailability {
     Unavailable { message: String },
 }
 
-struct CourseState(Mutex<StorageAvailability>);
+#[derive(Clone)]
+struct CourseState(Arc<Mutex<StorageAvailability>>);
+
+struct SchedulerState(scheduler::ReminderScheduler);
+
+struct SqliteHandledStore(CourseState);
 
 impl CourseState {
     fn run<T>(
@@ -32,6 +39,18 @@ impl CourseState {
         action(database).map_err(|error| {
             eprintln!("Course database {operation} failed: {error}");
             format!("{operation}失败，请稍后重试。")
+        })
+    }
+}
+
+impl scheduler::HandledStore for SqliteHandledStore {
+    fn mark_handled(
+        &self,
+        occurrence_key: &str,
+        handled_at_milliseconds: i64,
+    ) -> Result<(), String> {
+        self.0.run("记录提醒状态", |database| {
+            database.mark_reminder_handled(occurrence_key, handled_at_milliseconds)
         })
     }
 }
@@ -103,8 +122,49 @@ fn save_period_times(
     })
 }
 
+#[tauri::command]
+fn load_reminder_configuration(
+    state: State<'_, CourseState>,
+) -> Result<db::ReminderConfiguration, String> {
+    state.run("读取提醒设置", CourseDatabase::load_reminder_configuration)
+}
+
+#[tauri::command]
+fn load_handled_reminder_keys(state: State<'_, CourseState>) -> Result<Vec<String>, String> {
+    state.run("读取提醒状态", CourseDatabase::load_handled_reminder_keys)
+}
+
+#[tauri::command]
+fn save_app_settings(
+    state: State<'_, CourseState>,
+    periods: Vec<PeriodTime>,
+    term_config: Option<TermConfig>,
+    reminder_settings: ReminderSettings,
+) -> Result<(), String> {
+    state.run("保存应用设置", |database| {
+        database.save_app_settings(&periods, term_config.as_ref(), &reminder_settings)
+    })
+}
+
+#[tauri::command]
+fn refresh_reminder_schedule(
+    scheduler: State<'_, SchedulerState>,
+    enabled: bool,
+    plans: Vec<scheduler::ReminderPlan>,
+) -> Result<(), String> {
+    scheduler.0.refresh(enabled, plans)
+}
+
+#[tauri::command]
+fn reminder_scheduler_status(
+    scheduler: State<'_, SchedulerState>,
+) -> Result<scheduler::SchedulerStatus, String> {
+    scheduler.0.status()
+}
+
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
@@ -142,7 +202,14 @@ pub fn run() {
                     }
                 }
             };
-            app.manage(CourseState(Mutex::new(storage)));
+            let course_state = CourseState(Arc::new(Mutex::new(storage)));
+            app.manage(course_state.clone());
+            app.manage(SchedulerState(scheduler::ReminderScheduler::new(
+                Arc::new(notification::WindowsNotificationAdapter::new(
+                    app.handle().clone(),
+                )),
+                Arc::new(SqliteHandledStore(course_state)),
+            )));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -152,7 +219,12 @@ pub fn run() {
             update_course,
             delete_course,
             load_period_times,
-            save_period_times
+            save_period_times,
+            load_reminder_configuration,
+            load_handled_reminder_keys,
+            save_app_settings,
+            refresh_reminder_schedule,
+            reminder_scheduler_status
         ])
         .run(tauri::generate_context!())
         .expect("启动课程表失败");

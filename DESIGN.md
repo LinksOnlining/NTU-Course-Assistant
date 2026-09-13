@@ -10,11 +10,11 @@ Rust 仅负责桌面宿主及必要系统 IO；不引入服务器、全局状态
 
 Phase 2.3/2.6 使用 rusqlite 0.40.2 的 bundled SQLite，Rust 存储边界提供课程 CRUD 以及 `load_period_times`、`save_period_times` 两个作息 command；React 通过 `src/services/course-storage.ts` 调用，不接触 SQL。数据库路径由 Tauri `app_local_data_dir()` 解析，实际文件为该目录下 `courses.sqlite3`，不依赖安装目录、源码目录或当前工作目录。
 
-schema 2 包含 `courses` 和 `period_times` 表：id 为文本主键，教师、教室和节次允许 null，星期及节次含 CHECK 约束，时间固定存 HH:mm 文本，weeks 存排序去重数字数组的 JSON 文本；`period_times` 以 period 为主键保存严格校验后的作息。`PRAGMA user_version` 记录 schema 版本；0→1 建课程表、1→2 在事务中创建作息表并更新版本，遇到高于程序支持的版本时拒绝打开且不修改数据库。数据库使用 3 秒 busy timeout、WAL 和外键检查，不引入 ORM。
+schema 4 包含 `courses`、`period_times`、`app_settings` 和最小 `handled_reminders` 表：id 为文本主键，教师、教室和节次允许 null，星期及节次含 CHECK 约束，时间固定存 HH:mm 文本，weeks 存排序去重数字数组的 JSON 文本；`period_times` 以 period 为主键保存严格校验后的作息。`app_settings` 仅保存 `term_config` 与 `reminder_settings` JSON。`handled_reminders` 只记录 occurrence key 和实际 handled 时间，用于跨重启去重，不构成通知历史。`PRAGMA user_version` 记录 schema 版本；0→1 建课程表、1→2 创建作息表、2→3 创建应用设置表、3→4 创建 handled 状态表，遇到高于程序支持的版本时拒绝打开且不修改数据库。数据库使用 3 秒 busy timeout、WAL 和外键检查，不引入 ORM。
 
 Rust 在命令写入前再次校验 Course，读取时逐行解析 JSON 和校验字段。损坏记录被跳过、记录内部错误并向 UI 返回不含数据库细节的提示；原行不会修改或删除。初始化失败时应用仍打开并禁用添加入口，CRUD 失败时 UI 保留原状态。格式合法但超出当前 UI 时间轴的记录由启动加载边界跳过并提示，避免破坏布局，数据库内容同样保持不变。
 
-Phase 2.4/2.6 用独立数据库验证了首次建库和 schema 2、1→2 migration、连接关闭后重开、合法记录与 JSON/星期/时间/字段类型坏记录混合加载、未来版本拒绝、3 秒 busy timeout 及失败写入不损坏原数据。作息保存先在 Rust 边界完成完整校验，再以事务替换 `period_times`；失败时保留上一份作息。未来 schema 会显示可操作的升级提示；其他初始化错误显示概括提示，SQLite 细节只写入 Rust 日志。React 只在 Rust 写入成功后提交状态，因此课程和作息写入失败均不会制造伪成功。
+Phase 2.4/2.6 用独立数据库验证了首次建库、迁移、连接关闭后重开、合法记录与 JSON/星期/时间/字段类型坏记录混合加载、未来版本拒绝、3 秒 busy timeout 及失败写入不损坏原数据。作息、学期和提醒设置先在 Rust 边界完成完整校验，再以单一事务写入；失败时保留上一份设置。未来 schema 会显示可操作的升级提示；其他初始化错误显示概括提示，SQLite 细节只写入 Rust 日志。React 只在 Rust 写入成功后提交状态，因此课程和设置写入失败均不会制造伪成功。
 
 Phase 3.1 使用 PDF.js 6 的文字型 PDF 提取能力，并在构建前从受锁定依赖生成被忽略的 CMap 静态资源，以支持中文字体映射。`src/services/pdf-import.ts` 是唯一的 PDF/Tauri 文件适配器：Tauri 使用 Dialog 选择 `.pdf` 并通过受作用域限制的 FS API 读取；浏览器开发测试使用原生临时 file input。解析器懒加载，不增加主界面首次加载的 PDF.js 代码。它返回 `PdfExtraction`（文件名、页码、页面宽高及保留文本/x/y/宽高的 `PdfTextItem`），结果只在 React 内存中存在。学校规则、Course 和 SQLite 不属于此层。扫描件、加密件、损坏件或非 PDF 明确失败，不假装识别成功。
 
@@ -28,7 +28,7 @@ Phase 3.3 的 `src/core/import-proposal.ts` 接收原始候选加用户覆盖值
 
 Phase 3.4 的 `prepareImportPlan` 在任何正式 ID 产生前，以稳定输入顺序决定待写入项、现有/批内精确重复及时间冲突。只有待写入提案在最终确认阶段调用 `crypto.randomUUID()`，并再次通过统一 `validateCourseInput`；失败重试复用同一次确认生成的 ID，返回修改后才丢弃该批正式对象。确认页打开后所有写入控件在请求期间禁用，失败保留计划和修改，成功或取消才清空 PDF 会话。
 
-前端只调用一次 `importStoredCourses`。Tauri `import_courses` command 把完整 `Vec<Course>` 交给 Rust，Rust 逐条执行与普通 CRUD 相同的 Course 校验，再在一个 SQLite transaction 中插入所有记录；空批明确拒绝，任一 JSON、约束或写入错误使整个事务回滚。成功返回实际写入的 `Course[]`，React 此后才合并状态。纯重复计划可在前端以零写入成功结束。该设计没有修改 schema，`user_version` 保持 2。
+前端只调用一次 `importStoredCourses`。Tauri `import_courses` command 把完整 `Vec<Course>` 交给 Rust，Rust 逐条执行与普通 CRUD 相同的 Course 校验，再在一个 SQLite transaction 中插入所有记录；空批明确拒绝，任一 JSON、约束或写入错误使整个事务回滚。成功返回实际写入的 `Course[]`，React 此后才合并状态。纯重复计划可在前端以零写入成功结束。
 
 ## 职责和数据流
 
@@ -91,11 +91,11 @@ Phase 2.7 只调整桌面表现。TimeAxis 的每个节次块把节次、开始�
 
 ## 后续系统功能约束（仅设计）
 
-提醒在 Rust 侧调度，不能仅依赖 WebView 计时器；Phase 5 引入必要托盘驻留及单实例，退出程序后不承诺提醒。按学期日期、周数、星期、真实时间计算提前 15 分钟，重启去重，唤醒后重算且不提醒已结束课程。不设计关机唤醒服务。
+Phase 5.1 落地纯逻辑时间模型：`TermConfig` 保存第 1 教学周星期一、总周数和固定 `Asia/Shanghai`；`ReminderSettings` 保存开关和 0–180 分钟提前量，默认关闭、15 分钟。核心根据 Course 的 weeks、weekday 和真实 HH:mm 生成稳定课程实例 key、提醒时刻，并只返回 future/catch-up/none 决策。Phase 5.2 将这些结果转换为 `{ occurrenceKey, triggerAtMilliseconds, courseStartMilliseconds }`：其中时刻是明确的 UTC epoch 毫秒。Phase 5.3 在同一计划附加最小展示 payload（课程名、开始时间、可选教室）。React 在启动、正式数据变化和窗口恢复时从 TypeScript core 重建计划，先排除 SQLite 已 handled key，再经 Tauri 刷新 Rust 单实例 scheduler；Rust 不读 Course、不重算教学周或日期，只以 channel 等待、替换计划、批量报告相同 trigger，并在会话中按 key 去重。due 后由独立 `WindowsNotificationAdapter` 经官方 Tauri plugin 发送系统通知；无论通知尝试成功或失败，scheduler 都会记录 handled，保持 at-most-once delivery attempt。若 handled 写入失败，当前运行仍去重并记录内部错误，下一次重启存在重复风险。scheduler 每分钟复核绝对 wall-clock，补足休眠和明显系统时间跳变；窗口恢复事件也会请求 TypeScript 重新计算。handled 记录在写入时清理超过 400 天的数据，因为已处理 occurrence 不会再成为未来课程。
 
 Windows 通知必须在实际安装的应用中验收；开发态不能代表正式身份及图标。自启动 Phase 6 默认关闭，用户启用后按当前用户登录启动，读取系统实际注册状态；不创建系统服务。
 
-教务系统数据可行性未知；Phase 4 先查公开官方入口和可合法获得的数据，再研究用户已登录页面导出、HTML/JSON。不能假设应用可直接读取任意浏览器 Cookie。
+Phase 4（教务系统导入）已由用户取消，不继续实现相关功能。
 
 ## 选型依据（2026-09-08 核查）
 
@@ -118,9 +118,9 @@ TEST_TIMETABLE 明确标为测试用，包含测试轴、当前周、像素比�
 Version 1.0 不实现日程功能，继续按照当前开发路线完成：
 
 PDF 导入
-→ 南通大学教务系统导入
 → 课程提醒
 → 开机自启动
+→ 桌面课程小组件
 → 托盘/发布
 → Version 1.0
 

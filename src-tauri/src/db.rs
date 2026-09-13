@@ -1,10 +1,14 @@
 use std::{fmt, fs, path::Path, time::Duration};
 
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 
-use crate::models::{validate_period_times, Course, PeriodTime};
+use crate::models::{
+    validate_period_times, validate_reminder_settings, validate_term_config, Course, PeriodTime,
+    ReminderSettings, TermConfig,
+};
 
-const CURRENT_SCHEMA_VERSION: i64 = 2;
+const CURRENT_SCHEMA_VERSION: i64 = 4;
+const HANDLED_REMINDER_RETENTION_MILLISECONDS: i64 = 400 * 24 * 60 * 60 * 1_000;
 
 #[derive(Debug)]
 pub enum StorageError {
@@ -54,6 +58,14 @@ impl From<serde_json::Error> for StorageError {
 #[derive(Debug)]
 pub struct LoadResult {
     pub courses: Vec<Course>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReminderConfiguration {
+    pub term_config: Option<TermConfig>,
+    pub reminder_settings: ReminderSettings,
     pub warnings: Vec<String>,
 }
 
@@ -123,6 +135,32 @@ impl CourseDatabase {
                 );",
             )?;
             transaction.pragma_update(None, "user_version", 2)?;
+            transaction.commit()?;
+        }
+        let version: i64 = self
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version < 3 {
+            let transaction = self.connection.transaction()?;
+            transaction.execute_batch(
+                "CREATE TABLE app_settings (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);",
+            )?;
+            transaction.pragma_update(None, "user_version", 3)?;
+            transaction.commit()?;
+        }
+        let version: i64 = self
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version < 4 {
+            let transaction = self.connection.transaction()?;
+            transaction.execute_batch(
+                "CREATE TABLE handled_reminders (
+                    occurrence_key TEXT PRIMARY KEY NOT NULL CHECK(length(trim(occurrence_key)) > 0),
+                    handled_at_milliseconds INTEGER NOT NULL CHECK(handled_at_milliseconds >= 0)
+                );
+                CREATE INDEX handled_reminders_handled_at ON handled_reminders(handled_at_milliseconds);",
+            )?;
+            transaction.pragma_update(None, "user_version", 4)?;
             transaction.commit()?;
         }
         Ok(())
@@ -291,6 +329,123 @@ impl CourseDatabase {
         transaction.commit()?;
         Ok(())
     }
+
+    pub fn load_reminder_configuration(&self) -> Result<ReminderConfiguration, StorageError> {
+        let mut warnings = Vec::new();
+        let term_config = self.load_setting("term_config")?.and_then(|value| {
+            match serde_json::from_str::<TermConfig>(&value) {
+                Ok(item) if validate_term_config(&item).is_ok() => Some(item),
+                _ => {
+                    warnings.push("学期设置无效，已等待重新设置。".into());
+                    None
+                }
+            }
+        });
+        let reminder_settings = self
+            .load_setting("reminder_settings")?
+            .and_then(
+                |value| match serde_json::from_str::<ReminderSettings>(&value) {
+                    Ok(item) if validate_reminder_settings(&item).is_ok() => Some(item),
+                    _ => {
+                        warnings.push("提醒设置无效，已使用默认关闭状态。".into());
+                        None
+                    }
+                },
+            )
+            .unwrap_or(ReminderSettings {
+                enabled: false,
+                advance_minutes: 15,
+            });
+        Ok(ReminderConfiguration {
+            term_config,
+            reminder_settings,
+            warnings,
+        })
+    }
+
+    pub fn save_app_settings(
+        &self,
+        periods: &[PeriodTime],
+        term_config: Option<&TermConfig>,
+        reminder_settings: &ReminderSettings,
+    ) -> Result<(), StorageError> {
+        validate_period_times(periods).map_err(StorageError::InvalidData)?;
+        if let Some(config) = term_config {
+            validate_term_config(config).map_err(StorageError::InvalidData)?;
+        }
+        validate_reminder_settings(reminder_settings).map_err(StorageError::InvalidData)?;
+        if reminder_settings.enabled && term_config.is_none() {
+            return Err(StorageError::InvalidData(
+                "启用提醒前请设置第 1 教学周星期一".into(),
+            ));
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute("DELETE FROM period_times", [])?;
+        for period in periods {
+            transaction.execute(
+                "INSERT INTO period_times (period, start_time, end_time) VALUES (?1, ?2, ?3)",
+                (&period.period, &period.start_time, &period.end_time),
+            )?;
+        }
+        match term_config {
+            Some(config) => {
+                transaction.execute("INSERT INTO app_settings (key, value) VALUES ('term_config', ?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [serde_json::to_string(config)?])?;
+            }
+            None => {
+                transaction.execute("DELETE FROM app_settings WHERE key='term_config'", [])?;
+            }
+        }
+        transaction.execute("INSERT INTO app_settings (key, value) VALUES ('reminder_settings', ?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [serde_json::to_string(reminder_settings)?])?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn load_handled_reminder_keys(&self) -> Result<Vec<String>, StorageError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT occurrence_key FROM handled_reminders ORDER BY occurrence_key")?;
+        let keys = statement
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<String>, _>>()?;
+        Ok(keys)
+    }
+
+    pub fn mark_reminder_handled(
+        &self,
+        occurrence_key: &str,
+        handled_at_milliseconds: i64,
+    ) -> Result<(), StorageError> {
+        if occurrence_key.trim().is_empty() || occurrence_key.trim() != occurrence_key {
+            return Err(StorageError::InvalidData("提醒实例 ID 无效".into()));
+        }
+        if handled_at_milliseconds < 0 {
+            return Err(StorageError::InvalidData("提醒处理时间无效".into()));
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute(
+            "INSERT INTO handled_reminders (occurrence_key, handled_at_milliseconds)
+             VALUES (?1, ?2)
+             ON CONFLICT(occurrence_key) DO NOTHING",
+            params![occurrence_key, handled_at_milliseconds],
+        )?;
+        transaction.execute(
+            "DELETE FROM handled_reminders WHERE handled_at_milliseconds < ?1",
+            [handled_at_milliseconds.saturating_sub(HANDLED_REMINDER_RETENTION_MILLISECONDS)],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    fn load_setting(&self, key: &str) -> Result<Option<String>, StorageError> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT value FROM app_settings WHERE key=?1",
+                [key],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
 }
 
 fn row_to_course(row: &Row<'_>) -> Result<Course, StorageError> {
@@ -353,16 +508,45 @@ mod tests {
     #[test]
     fn empty_database_runs_versioned_migration() {
         let database = database();
-        assert_eq!(database.schema_version().expect("schema version"), 2);
+        assert_eq!(database.schema_version().expect("schema version"), 4);
         let table_count: i64 = database
             .connection
             .query_row(
-                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('courses', 'period_times')",
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('courses', 'period_times', 'app_settings', 'handled_reminders')",
                 [],
                 |row| row.get(0),
             )
             .expect("courses table");
-        assert_eq!(table_count, 2);
+        assert_eq!(table_count, 4);
+    }
+
+    #[test]
+    fn handled_reminders_persist_once_and_expire_after_the_retention_window() {
+        let database = database();
+        database
+            .mark_reminder_handled("course-id:2026-09-09:14:00", 1_000)
+            .expect("mark handled");
+        database
+            .mark_reminder_handled("course-id:2026-09-09:14:00", 2_000)
+            .expect("mark duplicate handled");
+        assert_eq!(
+            database
+                .load_handled_reminder_keys()
+                .expect("load handled keys"),
+            vec!["course-id:2026-09-09:14:00"]
+        );
+        database
+            .mark_reminder_handled(
+                "course-id:2027-10-14:14:00",
+                HANDLED_REMINDER_RETENTION_MILLISECONDS + 1_001,
+            )
+            .expect("mark later handled");
+        assert_eq!(
+            database
+                .load_handled_reminder_keys()
+                .expect("load retained keys"),
+            vec!["course-id:2027-10-14:14:00"]
+        );
     }
 
     #[test]
@@ -556,7 +740,7 @@ mod tests {
         let mut expected = course();
         {
             let database = CourseDatabase::open(&path).expect("create database file");
-            assert_eq!(database.schema_version().expect("new schema version"), 2);
+            assert_eq!(database.schema_version().expect("new schema version"), 4);
             assert!(database
                 .load_courses()
                 .expect("new database is empty")
@@ -607,13 +791,13 @@ mod tests {
             .execute_batch(
                 "CREATE TABLE sentinel(value TEXT NOT NULL);
                  INSERT INTO sentinel VALUES ('keep-me');
-                 PRAGMA user_version = 3;",
+                 PRAGMA user_version = 5;",
             )
             .expect("create future database");
         drop(connection);
         assert!(matches!(
             CourseDatabase::open(&path),
-            Err(StorageError::UnsupportedSchema(3))
+            Err(StorageError::UnsupportedSchema(5))
         ));
         let unchanged = Connection::open(&path).expect("reopen future database");
         let version: i64 = unchanged
@@ -625,7 +809,7 @@ mod tests {
         let value: String = unchanged
             .query_row("SELECT value FROM sentinel", [], |row| row.get(0))
             .expect("future data remains");
-        assert_eq!(version, 3);
+        assert_eq!(version, 5);
         assert_eq!(journal_mode, "delete");
         assert_eq!(value, "keep-me");
         drop(unchanged);
@@ -691,7 +875,7 @@ mod tests {
             .expect("create schema one database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema one");
-        assert_eq!(database.schema_version().expect("migrated version"), 2);
+        assert_eq!(database.schema_version().expect("migrated version"), 4);
         assert_eq!(
             database
                 .load_courses()
@@ -710,6 +894,134 @@ mod tests {
             .expect("period table");
         assert_eq!(period_table, 1);
         remove_database_files(&path);
+    }
+
+    #[test]
+    fn schema_two_migrates_to_settings_without_changing_courses_or_periods() {
+        let path = temporary_database_path();
+        remove_database_files(&path);
+        let connection = Connection::open(&path).expect("open schema two database");
+        connection
+            .execute_batch(
+                "CREATE TABLE courses (
+                    id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, teacher TEXT NULL,
+                    classroom TEXT NULL, weekday INTEGER NOT NULL, start_time TEXT NOT NULL,
+                    end_time TEXT NOT NULL, start_period INTEGER NULL, end_period INTEGER NULL,
+                    weeks TEXT NOT NULL
+                );
+                CREATE TABLE period_times (period INTEGER PRIMARY KEY NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL);
+                INSERT INTO courses VALUES ('legacy','旧课程',NULL,NULL,1,'08:00','08:45',NULL,NULL,'[1]');
+                INSERT INTO period_times VALUES (1,'08:00','08:45');
+                PRAGMA user_version = 2;",
+            )
+            .expect("create schema two database");
+        drop(connection);
+        let database = CourseDatabase::open(&path).expect("migrate schema two");
+        assert_eq!(database.schema_version().expect("schema version"), 4);
+        assert_eq!(database.load_courses().expect("courses").courses.len(), 1);
+        assert_eq!(
+            database
+                .load_period_times()
+                .expect("periods")
+                .expect("periods")
+                .len(),
+            1
+        );
+        let settings_table: i64 = database
+            .connection
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='app_settings'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("settings table");
+        assert_eq!(settings_table, 1);
+        remove_database_files(&path);
+    }
+
+    #[test]
+    fn schema_three_migrates_without_changing_courses_periods_or_settings() {
+        let path = temporary_database_path();
+        remove_database_files(&path);
+        let connection = Connection::open(&path).expect("open schema three database");
+        connection
+            .execute_batch(
+                "CREATE TABLE courses (
+                    id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, teacher TEXT NULL,
+                    classroom TEXT NULL, weekday INTEGER NOT NULL, start_time TEXT NOT NULL,
+                    end_time TEXT NOT NULL, start_period INTEGER NULL, end_period INTEGER NULL,
+                    weeks TEXT NOT NULL
+                );
+                CREATE TABLE period_times (period INTEGER PRIMARY KEY NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL);
+                CREATE TABLE app_settings (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
+                INSERT INTO courses VALUES ('legacy','旧课程',NULL,NULL,1,'08:00','08:45',NULL,NULL,'[1]');
+                INSERT INTO period_times VALUES (1,'08:00','08:45');
+                INSERT INTO app_settings VALUES ('reminder_settings','{\"enabled\":false,\"advanceMinutes\":15}');
+                PRAGMA user_version = 3;",
+            )
+            .expect("create schema three database");
+        drop(connection);
+        let database = CourseDatabase::open(&path).expect("migrate schema three");
+        assert_eq!(database.schema_version().expect("schema version"), 4);
+        assert_eq!(database.load_courses().expect("courses").courses.len(), 1);
+        assert_eq!(
+            database
+                .load_period_times()
+                .expect("periods")
+                .expect("periods")
+                .len(),
+            1
+        );
+        assert!(
+            !database
+                .load_reminder_configuration()
+                .expect("settings")
+                .reminder_settings
+                .enabled
+        );
+        assert!(database
+            .load_handled_reminder_keys()
+            .expect("handled state")
+            .is_empty());
+        drop(database);
+        remove_database_files(&path);
+    }
+
+    #[test]
+    fn app_settings_round_trip_and_invalid_save_keeps_previous_values() {
+        let database = database();
+        let periods = vec![PeriodTime {
+            period: 1,
+            start_time: "08:00".into(),
+            end_time: "08:45".into(),
+        }];
+        let term = TermConfig {
+            first_week_monday: "2026-09-07".into(),
+            total_weeks: 18,
+            timezone: "Asia/Shanghai".into(),
+        };
+        let settings = ReminderSettings {
+            enabled: true,
+            advance_minutes: 15,
+        };
+        database
+            .save_app_settings(&periods, Some(&term), &settings)
+            .expect("save settings");
+        let loaded = database
+            .load_reminder_configuration()
+            .expect("load settings");
+        assert_eq!(loaded.term_config, Some(term.clone()));
+        assert_eq!(loaded.reminder_settings, settings);
+        assert!(database
+            .save_app_settings(&periods, None, &settings)
+            .is_err());
+        assert_eq!(
+            database
+                .load_reminder_configuration()
+                .expect("unchanged settings")
+                .term_config,
+            Some(term)
+        );
     }
 
     #[test]
