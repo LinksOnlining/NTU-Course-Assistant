@@ -112,20 +112,26 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByText("测试数据", { exact: true })).toBeVisible();
 });
 
-test("development opener keeps the widget prototype separate from the timetable", async ({
+test("widget settings default to disabled and save the requested mode and lock", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "打开小组件原型" }).click();
-  await expect(page.getByTestId("schedule-notice")).toHaveText("桌面课程小组件原型已打开。");
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "课程小组件" })).toHaveCount(0);
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "作息时间" });
+  await expect(settings.getByLabel("启用桌面课程小组件")).not.toBeChecked();
+  await settings.getByLabel("启用桌面课程小组件").check();
+  await settings.getByLabel("小组件显示模式").selectOption("week");
+  await settings.getByLabel("锁定小组件位置").check();
+  await settings.getByRole("button", { name: "保存小组件设置" }).click();
+  await expect(settings.getByLabel("启用桌面课程小组件")).toBeChecked();
+  await expect(settings.getByLabel("小组件显示模式")).toHaveValue("week");
+  await expect(settings.getByLabel("锁定小组件位置")).toBeChecked();
 });
 
 test("widget route provides Today and Week controls without mounting the timetable", async ({
   page,
 }) => {
   await page.goto("/?widget");
-  await expect(page.getByLabel("桌面课程小组件原型")).toBeVisible();
+  await expect(page.getByLabel("桌面课程小组件")).toBeVisible();
   await expect(page.getByRole("tab", { name: "今日" })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("tab", { name: "本周" }).click();
   await expect(page.getByRole("tab", { name: "本周" })).toHaveAttribute("aria-selected", "true");

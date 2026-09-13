@@ -99,6 +99,8 @@ Phase 7.1 将小组件限定为同一 Tauri 进程内一个 label 为 `widget` �
 
 Phase 7.2 将 Widget 内容限定为现有正式领域数据的纯展示派生：`Course[] + TermConfig → CourseOccurrence[] → WidgetViewModel`。ViewModel 使用 `getTeachingWeek` 判断当前 Shanghai 日期，不自行按天数推算教学周；Today 只保留当天 occurrence 并按开始时间排序，Week 只保留当前教学周的实际 occurrence。两个 WebView 不共享 React state：main 在正式写入成功后发出无 payload refresh event，widget 收到后经已有 service 重新读取；它每分钟更新展示时钟，但不重建或控制 reminder scheduler。模式只保留在运行时 React state；窗口状态与设置仍留给后续阶段。
 
+Phase 7.3 在 schema 4 已有 `app_settings` 中增加 `widget_settings` JSON key，不另建表或 migration。Rust 是设置的最终校验边界，验证 mode、成对坐标、成对尺寸和安全的 280×220 至 1200×1200 范围；缺失或损坏值返回默认关闭设置，不自动覆写坏值。主窗口与 widget 经轻量 settings event 各自重读，只有用户写入成功后才 emit。窗口 IO 保留在 widget service/Rust：启动仅对 enabled 创建 widget，既有窗口 show/hide 不抢焦点，native move/resize 以 500ms debounce 保存，locked 同时禁用 drag region 和 native resize。该设置不参与 reminder scheduler、Course 或其他应用设置写入。
+
 Phase 4（教务系统导入）已由用户取消，不继续实现相关功能。
 
 ## 选型依据（2026-09-08 核查）

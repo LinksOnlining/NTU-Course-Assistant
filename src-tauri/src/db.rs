@@ -3,8 +3,9 @@ use std::{fmt, fs, path::Path, time::Duration};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::models::{
-    validate_period_times, validate_reminder_settings, validate_term_config, Course, PeriodTime,
-    ReminderSettings, TermConfig,
+    default_widget_settings, validate_period_times, validate_reminder_settings,
+    validate_term_config, validate_widget_settings, Course, PeriodTime, ReminderSettings,
+    TermConfig, WidgetSettings,
 };
 
 const CURRENT_SCHEMA_VERSION: i64 = 4;
@@ -361,6 +362,28 @@ impl CourseDatabase {
             reminder_settings,
             warnings,
         })
+    }
+
+    pub fn load_widget_settings(&self) -> Result<WidgetSettings, StorageError> {
+        match self.load_setting("widget_settings")? {
+            None => Ok(default_widget_settings()),
+            Some(value) => match serde_json::from_str::<WidgetSettings>(&value) {
+                Ok(settings) if validate_widget_settings(&settings).is_ok() => Ok(settings),
+                _ => {
+                    eprintln!("Ignoring invalid stored widget settings");
+                    Ok(default_widget_settings())
+                }
+            },
+        }
+    }
+
+    pub fn save_widget_settings(&self, settings: &WidgetSettings) -> Result<(), StorageError> {
+        validate_widget_settings(settings).map_err(StorageError::InvalidData)?;
+        self.connection.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('widget_settings', ?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [serde_json::to_string(settings)?],
+        )?;
+        Ok(())
     }
 
     pub fn save_app_settings(
@@ -1022,6 +1045,65 @@ mod tests {
                 .term_config,
             Some(term)
         );
+    }
+
+    #[test]
+    fn widget_settings_round_trip_without_changing_reminder_configuration() {
+        let database = database();
+        let before = database
+            .load_reminder_configuration()
+            .expect("load reminder settings");
+        let settings = WidgetSettings {
+            enabled: true,
+            display_mode: "week".into(),
+            locked: true,
+            x: Some(120),
+            y: Some(80),
+            width: Some(400),
+            height: Some(500),
+        };
+        database
+            .save_widget_settings(&settings)
+            .expect("save widget settings");
+        assert_eq!(
+            database
+                .load_widget_settings()
+                .expect("load widget settings"),
+            settings
+        );
+        assert_eq!(
+            database
+                .load_reminder_configuration()
+                .expect("unchanged reminders")
+                .term_config,
+            before.term_config
+        );
+        assert_eq!(database.schema_version().expect("schema version"), 4);
+    }
+
+    #[test]
+    fn malformed_widget_settings_fall_back_without_mutating_storage() {
+        let database = database();
+        database
+            .connection
+            .execute(
+                "INSERT INTO app_settings (key, value) VALUES ('widget_settings', '{\"enabled\":true,\"displayMode\":\"bad\"}')",
+                [],
+            )
+            .expect("store malformed widget settings");
+        assert_eq!(
+            database.load_widget_settings().expect("fallback settings"),
+            default_widget_settings()
+        );
+        let raw: String = database
+            .connection
+            .query_row(
+                "SELECT value FROM app_settings WHERE key='widget_settings'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("original setting remains");
+        assert!(raw.contains("bad"));
     }
 
     #[test]

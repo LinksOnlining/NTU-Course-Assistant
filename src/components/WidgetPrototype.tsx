@@ -1,9 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildWidgetViewModel } from "../core/widget-view.ts";
-import { loadWidgetData } from "../services/widget-data.ts";
-import { openMainWindow, subscribeWidgetDataChanged } from "../services/widget-window.ts";
+import {
+  DEFAULT_WIDGET_SETTINGS,
+  loadWidgetData,
+  saveWidgetSettings,
+} from "../services/widget-data.ts";
+import {
+  hideWidget,
+  notifyWidgetSettingsChanged,
+  openMainWindow,
+  subscribeWidgetBounds,
+  subscribeWidgetDataChanged,
+  subscribeWidgetSettingsChanged,
+} from "../services/widget-window.ts";
 import type { Course } from "../types/course.ts";
 import type { TermConfig } from "../types/reminder.ts";
+import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
 
 function shanghaiNow(): { readonly date: string; readonly time: string } {
   const fields = new Intl.DateTimeFormat("en-CA", {
@@ -24,10 +36,11 @@ function shanghaiNow(): { readonly date: string; readonly time: string } {
 }
 
 export function WidgetPrototype() {
-  const [mode, setMode] = useState<"today" | "week">("today");
+  const [settings, setSettings] = useState<WidgetSettings>(DEFAULT_WIDGET_SETTINGS);
   const [courses, setCourses] = useState<readonly Course[]>([]);
   const [termConfig, setTermConfig] = useState<TermConfig | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [settingsError, setSettingsError] = useState("");
   const [clock, setClock] = useState(shanghaiNow);
 
   useEffect(() => {
@@ -38,6 +51,7 @@ export function WidgetPrototype() {
         if (!active) return;
         setCourses(data.courses);
         setTermConfig(data.termConfig);
+        setSettings(data.settings);
         setStatus("ready");
       } catch {
         if (active) setStatus("error");
@@ -45,13 +59,62 @@ export function WidgetPrototype() {
     };
     void refresh();
     const unsubscribe = subscribeWidgetDataChanged(() => void refresh());
+    const unsubscribeSettings = subscribeWidgetSettingsChanged(() => void refresh());
     const timer = window.setInterval(() => setClock(shanghaiNow()), 60_000);
     return () => {
       active = false;
       unsubscribe();
+      unsubscribeSettings();
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const unsubscribe = subscribeWidgetBounds((bounds) => {
+      if (settings.locked) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const next = { ...settings, ...bounds };
+        void saveWidgetSettings(next)
+          .then(() => {
+            setSettings(next);
+            notifyWidgetSettingsChanged();
+          })
+          .catch(() =>
+            setSettingsError("无法保存小组件位置或尺寸，下次打开将使用上次保存的位置。"),
+          );
+      }, 500);
+    });
+    return () => {
+      window.clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [settings]);
+
+  async function updateSettings(change: Partial<WidgetSettings>) {
+    const next = { ...settings, ...change };
+    try {
+      await saveWidgetSettings(next);
+      setSettings(next);
+      setSettingsError("");
+      notifyWidgetSettingsChanged();
+    } catch {
+      setSettingsError("保存小组件设置失败，当前设置未应用。");
+    }
+  }
+
+  async function closeWidget() {
+    const next = { ...settings, enabled: false };
+    try {
+      await saveWidgetSettings(next);
+      setSettings(next);
+      notifyWidgetSettingsChanged();
+      await hideWidget();
+    } catch {
+      setSettingsError("关闭小组件失败，当前显示状态未改变。");
+    }
+  }
 
   const view = useMemo(
     () => buildWidgetViewModel(courses, termConfig, clock),
@@ -59,8 +122,11 @@ export function WidgetPrototype() {
   );
 
   return (
-    <main className="widget-prototype" aria-label="桌面课程小组件原型">
-      <header className="widget-prototype__header">
+    <main className="widget-prototype" aria-label="桌面课程小组件">
+      <header
+        className="widget-prototype__header"
+        data-tauri-drag-region={settings.locked ? undefined : ""}
+      >
         <div>
           <p className="widget-prototype__eyebrow">课程小组件</p>
           {view.kind === "ready" && (
@@ -69,41 +135,63 @@ export function WidgetPrototype() {
             </strong>
           )}
         </div>
-        <button
-          type="button"
-          className="widget-prototype__open"
-          onClick={() => void openMainWindow()}
-        >
-          打开课程表
-        </button>
+        <div className="widget-prototype__controls">
+          <button
+            type="button"
+            className="widget-prototype__open"
+            onClick={() => void updateSettings({ locked: !settings.locked })}
+          >
+            {settings.locked ? "解锁" : "锁定"}
+          </button>
+          <button
+            type="button"
+            className="widget-prototype__open"
+            onClick={() => void openMainWindow()}
+          >
+            打开课程表
+          </button>
+          <button
+            type="button"
+            className="widget-prototype__open"
+            onClick={() => void closeWidget()}
+            aria-label="关闭小组件"
+          >
+            关闭
+          </button>
+        </div>
       </header>
       <div className="widget-prototype__tabs" role="tablist" aria-label="课程范围">
         <button
           type="button"
           role="tab"
-          aria-selected={mode === "today"}
-          onClick={() => setMode("today")}
+          aria-selected={settings.displayMode === "today"}
+          onClick={() => void updateSettings({ displayMode: "today" as WidgetDisplayMode })}
         >
           今日
         </button>
         <button
           type="button"
           role="tab"
-          aria-selected={mode === "week"}
-          onClick={() => setMode("week")}
+          aria-selected={settings.displayMode === "week"}
+          onClick={() => void updateSettings({ displayMode: "week" as WidgetDisplayMode })}
         >
           本周
         </button>
       </div>
       {status === "loading" && <p className="widget-prototype__state">正在加载课程…</p>}
       {status === "error" && <p className="widget-prototype__state">课程加载失败</p>}
+      {settingsError && (
+        <p className="widget-prototype__state" role="alert">
+          {settingsError}
+        </p>
+      )}
       {status === "ready" && view.kind === "missing-term" && (
         <p className="widget-prototype__state">请先确认学期设置</p>
       )}
       {status === "ready" && view.kind === "outside-term" && (
         <p className="widget-prototype__state">当前不在教学周</p>
       )}
-      {status === "ready" && view.kind === "ready" && mode === "today" && (
+      {status === "ready" && view.kind === "ready" && settings.displayMode === "today" && (
         <section className="widget-prototype__list" aria-label="今日课程">
           <p className="widget-prototype__date">{view.date}</p>
           {view.today.length === 0 ? (
@@ -121,7 +209,7 @@ export function WidgetPrototype() {
           )}
         </section>
       )}
-      {status === "ready" && view.kind === "ready" && mode === "week" && (
+      {status === "ready" && view.kind === "ready" && settings.displayMode === "week" && (
         <section className="widget-prototype__week" aria-label="本周课程">
           {view.week.map((day) => (
             <article key={day.date}>

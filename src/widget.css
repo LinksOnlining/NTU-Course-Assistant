@@ -30,6 +30,11 @@
   gap: 10px;
 }
 
+.widget-prototype__controls {
+  display: flex;
+  gap: 5px;
+}
+
 .widget-prototype__header strong {
   font-size: 15px;
 }

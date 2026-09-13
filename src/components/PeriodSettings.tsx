@@ -9,16 +9,19 @@ import { minutesToTime, timeToMinutes } from "../core/time.ts";
 import { loadAutostartEnabled, saveAutostartEnabled } from "../services/autostart.ts";
 import type { ReminderConfiguration, ReminderSettings, TermConfig } from "../types/reminder.ts";
 import type { PeriodTime } from "../types/time.ts";
+import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
 
 interface PeriodSettingsProps {
   readonly periods: readonly PeriodTime[];
   readonly isUsingTestSchedule: boolean;
   readonly reminderConfiguration: ReminderConfiguration;
+  readonly widgetSettings: WidgetSettings;
   readonly onSave: (
     periods: readonly PeriodTime[],
     termConfig: TermConfig | null,
     reminderSettings: ReminderSettings,
   ) => Promise<void>;
+  readonly onSaveWidgetSettings: (settings: WidgetSettings) => Promise<void>;
   readonly onCancel: () => void;
 }
 
@@ -26,7 +29,9 @@ export function PeriodSettings({
   periods,
   isUsingTestSchedule,
   reminderConfiguration,
+  widgetSettings,
   onSave,
+  onSaveWidgetSettings,
   onCancel,
 }: PeriodSettingsProps) {
   const [draft, setDraft] = useState<PeriodTime[]>(() => periods.map((period) => ({ ...period })));
@@ -47,6 +52,11 @@ export function PeriodSettings({
   const [autostartEnabled, setAutostartEnabled] = useState<boolean | null>(null);
   const [autostartError, setAutostartError] = useState("");
   const [isUpdatingAutostart, setIsUpdatingAutostart] = useState(false);
+  const [widgetEnabled, setWidgetEnabled] = useState(widgetSettings.enabled);
+  const [widgetMode, setWidgetMode] = useState<WidgetDisplayMode>(widgetSettings.displayMode);
+  const [widgetLocked, setWidgetLocked] = useState(widgetSettings.locked);
+  const [isSavingWidget, setIsSavingWidget] = useState(false);
+  const [widgetError, setWidgetError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -162,6 +172,23 @@ export function PeriodSettings({
       );
     } finally {
       setIsUpdatingAutostart(false);
+    }
+  }
+
+  async function saveWidget() {
+    setIsSavingWidget(true);
+    setWidgetError("");
+    try {
+      await onSaveWidgetSettings({
+        ...widgetSettings,
+        enabled: widgetEnabled,
+        displayMode: widgetMode,
+        locked: widgetLocked,
+      });
+    } catch (caught: unknown) {
+      setWidgetError(caught instanceof Error ? caught.message : "保存小组件设置失败，请稍后重试。");
+    } finally {
+      setIsSavingWidget(false);
     }
   }
 
@@ -305,6 +332,59 @@ export function PeriodSettings({
           {autostartError && (
             <p className="form-error" role="alert">
               {autostartError}
+            </p>
+          )}
+        </section>
+        <section className="settings-section" aria-labelledby="widget-settings-title">
+          <div>
+            <h3 id="widget-settings-title">桌面课程小组件</h3>
+            <p>默认关闭；显示模式和锁定状态会在下次打开时恢复。</p>
+          </div>
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={widgetEnabled}
+              disabled={isSavingWidget}
+              onChange={(event) => setWidgetEnabled(event.target.checked)}
+              aria-label="启用桌面课程小组件"
+            />
+            <span>启用桌面课程小组件</span>
+          </label>
+          <div className="settings-fields">
+            <label>
+              <span>显示</span>
+              <select
+                value={widgetMode}
+                disabled={isSavingWidget}
+                onChange={(event) => setWidgetMode(event.target.value as WidgetDisplayMode)}
+                aria-label="小组件显示模式"
+              >
+                <option value="today">今日</option>
+                <option value="week">本周</option>
+              </select>
+            </label>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={widgetLocked}
+                disabled={isSavingWidget}
+                onChange={(event) => setWidgetLocked(event.target.checked)}
+                aria-label="锁定小组件位置"
+              />
+              <span>锁定位置</span>
+            </label>
+          </div>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void saveWidget()}
+            disabled={isSavingWidget}
+          >
+            {isSavingWidget ? "保存中…" : "保存小组件设置"}
+          </button>
+          {widgetError && (
+            <p className="form-error" role="alert">
+              {widgetError}
             </p>
           )}
         </section>

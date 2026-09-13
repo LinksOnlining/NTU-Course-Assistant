@@ -32,6 +32,9 @@ test("widget window stays outside course storage and reminder scheduling", () =>
   const rust = source("src-tauri/src/lib.rs");
 
   assert.match(widgetService, /invoke\("open_widget"\)/);
+  assert.match(widgetService, /invoke\("hide_widget"\)/);
+  assert.match(rust, /load_widget_settings/);
+  assert.match(rust, /save_widget_settings/);
   assert.doesNotMatch(widgetService, /course-storage|sqlite|reminder/i);
   assert.doesNotMatch(
     widgetUi,

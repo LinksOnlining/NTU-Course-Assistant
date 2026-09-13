@@ -7,6 +7,7 @@ import type {
   ReminderSettings,
   TermConfig,
 } from "../types/reminder.ts";
+import type { WidgetSettings } from "../types/widget-settings.ts";
 
 export interface LoadCoursesResult {
   readonly courses: readonly Course[];
@@ -18,6 +19,15 @@ let developmentPeriodTimes: PeriodTime[] | null = null;
 let developmentReminderConfiguration: ReminderConfiguration = {
   termConfig: null,
   reminderSettings: { enabled: false, advanceMinutes: 15 },
+};
+let developmentWidgetSettings: WidgetSettings = {
+  enabled: false,
+  displayMode: "today",
+  locked: false,
+  x: null,
+  y: null,
+  width: null,
+  height: null,
 };
 
 function usesDevelopmentMemory(): boolean {
@@ -136,6 +146,27 @@ export async function loadStoredReminderConfiguration(): Promise<
     );
   } catch (error) {
     throw storageError(error, "无法读取提醒设置，请重新启动应用。");
+  }
+}
+
+export async function loadStoredWidgetSettings(): Promise<WidgetSettings> {
+  if (usesDevelopmentMemory()) return { ...developmentWidgetSettings };
+  try {
+    return await invoke<WidgetSettings>("load_widget_settings");
+  } catch (error) {
+    throw storageError(error, "无法读取小组件设置，请重新启动应用。");
+  }
+}
+
+export async function saveStoredWidgetSettings(settings: WidgetSettings): Promise<void> {
+  if (usesDevelopmentMemory()) {
+    developmentWidgetSettings = { ...settings };
+    return;
+  }
+  try {
+    await invoke("save_widget_settings", { settings });
+  } catch (error) {
+    throw storageError(error, "保存小组件设置失败，请稍后重试。");
   }
 }
 

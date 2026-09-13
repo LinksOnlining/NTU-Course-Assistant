@@ -6,7 +6,7 @@ mod scheduler;
 use std::sync::{Arc, Mutex};
 
 use db::CourseDatabase;
-use models::{Course, PeriodTime, ReminderSettings, TermConfig};
+use models::{Course, PeriodTime, ReminderSettings, TermConfig, WidgetSettings};
 use serde::Serialize;
 use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
@@ -147,6 +147,28 @@ fn save_app_settings(
 }
 
 #[tauri::command]
+fn load_widget_settings(state: State<'_, CourseState>) -> Result<WidgetSettings, String> {
+    state.run("读取小组件设置", CourseDatabase::load_widget_settings)
+}
+
+#[tauri::command]
+fn save_widget_settings(
+    app: tauri::AppHandle,
+    state: State<'_, CourseState>,
+    settings: WidgetSettings,
+) -> Result<(), String> {
+    state.run("保存小组件设置", |database| {
+        database.save_widget_settings(&settings)
+    })?;
+    if let Some(widget) = app.get_webview_window("widget") {
+        widget
+            .set_resizable(!settings.locked)
+            .map_err(|_| "无法更新小组件锁定状态。".to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn refresh_reminder_schedule(
     scheduler: State<'_, SchedulerState>,
     enabled: bool,
@@ -163,7 +185,7 @@ fn reminder_scheduler_status(
 }
 
 #[tauri::command]
-fn open_widget(app: tauri::AppHandle) -> Result<(), String> {
+fn show_widget(app: &tauri::AppHandle, settings: &WidgetSettings) -> Result<(), String> {
     if let Some(widget) = app.get_webview_window("widget") {
         widget
             .show()
@@ -171,22 +193,45 @@ fn open_widget(app: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    WebviewWindowBuilder::new(&app, "widget", WebviewUrl::App("index.html?widget".into()))
-        .title("课程小组件")
-        .inner_size(360.0, 430.0)
-        .resizable(false)
-        .maximizable(false)
-        .minimizable(false)
-        .decorations(false)
-        .skip_taskbar(true)
-        .always_on_bottom(true)
-        .focused(false)
-        .build()
-        .map(|_| ())
-        .map_err(|error| {
-            eprintln!("Widget window creation failed: {error}");
-            "无法打开桌面课程小组件原型。".to_string()
-        })
+    let mut builder =
+        WebviewWindowBuilder::new(app, "widget", WebviewUrl::App("index.html?widget".into()))
+            .title("课程小组件")
+            .inner_size(
+                settings.width.unwrap_or(360) as f64,
+                settings.height.unwrap_or(430) as f64,
+            )
+            .min_inner_size(280.0, 220.0)
+            .max_inner_size(1200.0, 1200.0)
+            .resizable(!settings.locked)
+            .maximizable(false)
+            .minimizable(false)
+            .decorations(false)
+            .skip_taskbar(true)
+            .always_on_bottom(true)
+            .focused(false);
+    if let (Some(x), Some(y)) = (settings.x, settings.y) {
+        builder = builder.position(x as f64, y as f64);
+    }
+    builder.build().map(|_| ()).map_err(|error| {
+        eprintln!("Widget window creation failed: {error}");
+        "无法打开桌面课程小组件原型。".to_string()
+    })
+}
+
+#[tauri::command]
+fn open_widget(app: tauri::AppHandle, state: State<'_, CourseState>) -> Result<(), String> {
+    let settings = state.run("读取小组件设置", CourseDatabase::load_widget_settings)?;
+    show_widget(&app, &settings)
+}
+
+#[tauri::command]
+fn hide_widget(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(widget) = app.get_webview_window("widget") {
+        widget
+            .hide()
+            .map_err(|_| "无法关闭桌面课程小组件。".to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -255,6 +300,14 @@ pub fn run() {
                 )),
                 Arc::new(SqliteHandledStore(course_state)),
             )));
+            if let Ok(settings) = app
+                .state::<CourseState>()
+                .run("读取小组件设置", CourseDatabase::load_widget_settings)
+            {
+                if settings.enabled {
+                    show_widget(&app.handle().clone(), &settings)?;
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -268,9 +321,12 @@ pub fn run() {
             load_reminder_configuration,
             load_handled_reminder_keys,
             save_app_settings,
+            load_widget_settings,
+            save_widget_settings,
             refresh_reminder_schedule,
             reminder_scheduler_status,
             open_widget,
+            hide_widget,
             open_main
         ])
         .on_window_event(|window, event| {

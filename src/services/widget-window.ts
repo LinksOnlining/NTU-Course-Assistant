@@ -1,18 +1,30 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { WidgetSettings } from "../types/widget-settings.ts";
 
 const WIDGET_REFRESH_EVENT = "widget-data-changed";
+const WIDGET_SETTINGS_EVENT = "widget-settings-changed";
 
 function usesBrowserPreview(): boolean {
   return import.meta.env.DEV && !("__TAURI_INTERNALS__" in window);
 }
 
-export async function openWidgetPrototype(): Promise<void> {
+export async function showWidget(): Promise<void> {
   if (usesBrowserPreview()) return;
   try {
     await invoke("open_widget");
   } catch {
     throw new Error("无法打开桌面课程小组件原型，请稍后重试。");
+  }
+}
+
+export async function hideWidget(): Promise<void> {
+  if (usesBrowserPreview()) return;
+  try {
+    await invoke("hide_widget");
+  } catch {
+    throw new Error("无法关闭桌面课程小组件，请稍后重试。");
   }
 }
 
@@ -47,5 +59,80 @@ export function subscribeWidgetDataChanged(onChanged: () => void): () => void {
     active = false;
     window.removeEventListener(WIDGET_REFRESH_EVENT, onChanged);
     unlisten?.();
+  };
+}
+
+export function notifyWidgetSettingsChanged(): void {
+  if (usesBrowserPreview()) {
+    window.dispatchEvent(new Event(WIDGET_SETTINGS_EVENT));
+    return;
+  }
+  void emit(WIDGET_SETTINGS_EVENT).catch(() => undefined);
+}
+
+export function subscribeWidgetSettingsChanged(onChanged: () => void): () => void {
+  window.addEventListener(WIDGET_SETTINGS_EVENT, onChanged);
+  let active = true;
+  let unlisten: (() => void) | undefined;
+  void listen(WIDGET_SETTINGS_EVENT, onChanged)
+    .then((stop) => {
+      if (active) unlisten = stop;
+      else void stop();
+    })
+    .catch(() => undefined);
+  return () => {
+    active = false;
+    window.removeEventListener(WIDGET_SETTINGS_EVENT, onChanged);
+    unlisten?.();
+  };
+}
+
+export function subscribeWidgetBounds(
+  onBounds: (bounds: Pick<WidgetSettings, "x" | "y" | "width" | "height">) => void,
+): () => void {
+  if (usesBrowserPreview()) return () => undefined;
+  const current = getCurrentWindow();
+  let active = true;
+  let position: { x: number; y: number } | null = null;
+  let size: { width: number; height: number } | null = null;
+  const stops: (() => void)[] = [];
+  const emitBounds = () => {
+    if (position && size) onBounds({ ...position, ...size });
+  };
+  void current
+    .outerPosition()
+    .then((value) => {
+      position = value;
+      emitBounds();
+    })
+    .catch(() => undefined);
+  void current
+    .innerSize()
+    .then((value) => {
+      size = value;
+      emitBounds();
+    })
+    .catch(() => undefined);
+  void current
+    .onMoved(({ payload }) => {
+      position = { x: payload.x, y: payload.y };
+      emitBounds();
+    })
+    .then((stop) => {
+      if (active) stops.push(stop);
+      else void stop();
+    });
+  void current
+    .onResized(({ payload }) => {
+      size = { width: payload.width, height: payload.height };
+      emitBounds();
+    })
+    .then((stop) => {
+      if (active) stops.push(stop);
+      else void stop();
+    });
+  return () => {
+    active = false;
+    stops.forEach((stop) => stop());
   };
 }

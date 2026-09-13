@@ -16,7 +16,13 @@ import { parseNtuPdfTimetable } from "./importers/ntu-pdf/parse.ts";
 import { TEST_COURSES } from "./fixtures/courses.ts";
 import { choosePdfFile, extractPdfText, PdfImportError } from "./services/pdf-import.ts";
 import { subscribeReminderResume } from "./services/reminder-lifecycle.ts";
-import { notifyWidgetDataChanged, openWidgetPrototype } from "./services/widget-window.ts";
+import {
+  hideWidget,
+  notifyWidgetDataChanged,
+  notifyWidgetSettingsChanged,
+  showWidget,
+  subscribeWidgetSettingsChanged,
+} from "./services/widget-window.ts";
 import {
   deleteStoredCourse,
   importStoredCourses,
@@ -25,10 +31,13 @@ import {
   loadStoredCourses,
   loadStoredPeriodTimes,
   loadStoredReminderConfiguration,
+  loadStoredWidgetSettings,
   refreshStoredReminderSchedule,
   saveStoredAppSettings,
+  saveStoredWidgetSettings,
   updateStoredCourse,
 } from "./services/course-storage.ts";
+import { DEFAULT_WIDGET_SETTINGS } from "./services/widget-data.ts";
 import {
   buildReminderPlans,
   DEFAULT_REMINDER_SETTINGS,
@@ -40,6 +49,7 @@ import type { ImportPlan } from "./types/import-proposal.ts";
 import type { PdfExtraction } from "./types/pdf.ts";
 import type { PeriodTime } from "./types/time.ts";
 import type { ReminderConfiguration } from "./types/reminder.ts";
+import type { WidgetSettings } from "./types/widget-settings.ts";
 
 type PdfImportState =
   | { readonly kind: "idle" }
@@ -62,6 +72,7 @@ export function App() {
     termConfig: null,
     reminderSettings: DEFAULT_REMINDER_SETTINGS,
   });
+  const [widgetSettings, setWidgetSettings] = useState<WidgetSettings>(DEFAULT_WIDGET_SETTINGS);
   const [periodMessage, setPeriodMessage] = useState("");
   const [storageStatus, setStorageStatus] = useState<"loading" | "ready" | "error">("loading");
   const [storageMessage, setStorageMessage] = useState("");
@@ -126,8 +137,9 @@ export function App() {
       loadStoredCourses(),
       loadStoredPeriodTimes(),
       loadStoredReminderConfiguration(),
+      loadStoredWidgetSettings(),
     ])
-      .then(([result, storedPeriods, storedReminderConfiguration]) => {
+      .then(([result, storedPeriods, storedReminderConfiguration, storedWidgetSettings]) => {
         if (!active) return;
         const activePeriods = storedPeriods ?? TEST_TIMETABLE.periods;
         setPeriods(activePeriods);
@@ -141,6 +153,7 @@ export function App() {
           termConfig: storedReminderConfiguration.termConfig,
           reminderSettings: storedReminderConfiguration.reminderSettings,
         });
+        setWidgetSettings(storedWidgetSettings);
         const renderableCourses = result.courses.filter((course) => {
           try {
             courseTiming(course, displayAxis);
@@ -164,6 +177,14 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    return subscribeWidgetSettingsChanged(() => {
+      void loadStoredWidgetSettings()
+        .then(setWidgetSettings)
+        .catch(() => undefined);
+    });
+  }, []);
+
   async function importPdf() {
     try {
       const file = await choosePdfFile();
@@ -184,15 +205,6 @@ export function App() {
       const message =
         error instanceof PdfImportError ? error.message : "无法读取该 PDF，请确认文件后重试。";
       setPdfImport({ kind: "error", message });
-    }
-  }
-
-  async function openWidget() {
-    try {
-      await openWidgetPrototype();
-      setPeriodMessage("桌面课程小组件原型已打开。");
-    } catch (error) {
-      setPeriodMessage(error instanceof Error ? error.message : "无法打开桌面课程小组件原型。");
     }
   }
 
@@ -261,16 +273,6 @@ export function App() {
           <p className="subtitle">时间决定位置，空闲时段按真实比例保留</p>
         </div>
         <div className="header-actions">
-          {import.meta.env.DEV && (
-            <button
-              type="button"
-              className="settings-button"
-              onClick={() => void openWidget()}
-              aria-label="打开小组件原型"
-            >
-              小组件原型
-            </button>
-          )}
           <button
             type="button"
             className="pdf-import-button"
@@ -413,6 +415,7 @@ export function App() {
           periods={periods}
           isUsingTestSchedule={isUsingTestSchedule}
           reminderConfiguration={reminderConfiguration}
+          widgetSettings={widgetSettings}
           onSave={async (nextPeriods, termConfig, reminderSettings) => {
             await saveStoredAppSettings(nextPeriods, termConfig, reminderSettings);
             setPeriods([...nextPeriods]);
@@ -421,6 +424,18 @@ export function App() {
             notifyWidgetDataChanged();
             setPeriodMessage("已使用自定义作息。");
             setIsPeriodSettingsOpen(false);
+          }}
+          onSaveWidgetSettings={async (nextSettings) => {
+            await saveStoredWidgetSettings(nextSettings);
+            try {
+              if (nextSettings.enabled) await showWidget();
+              else await hideWidget();
+            } catch (error) {
+              await saveStoredWidgetSettings(widgetSettings).catch(() => undefined);
+              throw error;
+            }
+            setWidgetSettings(nextSettings);
+            notifyWidgetSettingsChanged();
           }}
           onCancel={() => setIsPeriodSettingsOpen(false)}
         />

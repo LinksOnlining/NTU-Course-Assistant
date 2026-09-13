@@ -18,6 +18,61 @@ pub struct ReminderSettings {
     pub advance_minutes: u16,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WidgetSettings {
+    pub enabled: bool,
+    pub display_mode: String,
+    pub locked: bool,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+pub fn default_widget_settings() -> WidgetSettings {
+    WidgetSettings {
+        enabled: false,
+        display_mode: "today".into(),
+        locked: false,
+        x: None,
+        y: None,
+        width: None,
+        height: None,
+    }
+}
+
+pub fn validate_widget_settings(settings: &WidgetSettings) -> Result<(), String> {
+    if settings.display_mode != "today" && settings.display_mode != "week" {
+        return Err("小组件显示模式无效".into());
+    }
+    if settings.x.is_some() != settings.y.is_some() {
+        return Err("小组件位置必须同时包含横纵坐标".into());
+    }
+    if settings.width.is_some() != settings.height.is_some() {
+        return Err("小组件尺寸必须同时包含宽高".into());
+    }
+    if settings
+        .x
+        .is_some_and(|value| !(-10_000..=10_000).contains(&value))
+        || settings
+            .y
+            .is_some_and(|value| !(-10_000..=10_000).contains(&value))
+    {
+        return Err("小组件位置超出允许范围".into());
+    }
+    if settings
+        .width
+        .is_some_and(|value| !(280..=1_200).contains(&value))
+        || settings
+            .height
+            .is_some_and(|value| !(220..=1_200).contains(&value))
+    {
+        return Err("小组件尺寸超出允许范围".into());
+    }
+    Ok(())
+}
+
 pub fn validate_term_config(config: &TermConfig) -> Result<(), String> {
     if config.total_weeks == 0 || config.total_weeks > MAX_TEACHING_WEEK {
         return Err("总教学周数必须是 1–30 的整数".into());
@@ -274,6 +329,26 @@ mod tests {
         assert!(validate_reminder_settings(&ReminderSettings {
             enabled: true,
             advance_minutes: 181
+        })
+        .is_err());
+    }
+
+    #[test]
+    fn widget_settings_default_and_validation_are_stable() {
+        let settings = default_widget_settings();
+        assert!(!settings.enabled);
+        assert_eq!(settings.display_mode, "today");
+        assert!(!settings.locked);
+        assert!(validate_widget_settings(&settings).is_ok());
+        assert!(validate_widget_settings(&WidgetSettings {
+            width: Some(200),
+            height: Some(220),
+            ..settings.clone()
+        })
+        .is_err());
+        assert!(validate_widget_settings(&WidgetSettings {
+            display_mode: "invalid".into(),
+            ..settings
         })
         .is_err());
     }

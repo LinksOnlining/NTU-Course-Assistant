@@ -2,6 +2,9 @@
 
 ## 未发布 — 2026-09-13
 
+- **Phase 7.3 PASS**：桌面课程小组件默认关闭，并可持久化启用、Today/Week、锁定、位置与尺寸；应用启动仅在 enabled 时无焦点恢复。复用 schema 4 的 `app_settings`，没有 migration、Course、scheduler 或通知变更。
+- 主设置和 Widget 控制均通过成功写入后的轻量事件同步；move/resize 使用 500ms debounce，保存失败不伪成功且不影响当前窗口继续使用。
+
 - **Phase 7.2 PASS**：Widget 新增默认“今日”和可切换“本周”课程展示，复用 TermConfig、教学周核心和 CourseOccurrence；Today 按开始时间排序并省略空教室，学期外、未配置学期和无课均有明确状态。主窗口成功写入后只发送 refresh 事件，widget 经既有 service 重读数据；每分钟刷新 Shanghai 时间，不增加 scheduler、通知、SQLite schema 或 Widget 状态持久化。
 
 - **Phase 7.1 PASS**：新增同一 Tauri 应用内唯一的底层小组件原型窗口。官方 `WebviewWindowBuilder` 以无装饰、跳过任务栏、固定大小、`always_on_bottom(true)` 与 `focused(false)` 创建；重复打开只显示已有窗口且不抢焦点，关闭请求隐藏小组件并保留主窗口。原型只显示静态文本，不读课程/SQLite/提醒，也没有托盘、今日/本周、窗口状态持久化或第二进程。
