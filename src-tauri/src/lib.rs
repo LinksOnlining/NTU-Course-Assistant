@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use db::CourseDatabase;
 use models::{Course, PeriodTime, ReminderSettings, TermConfig};
 use serde::Serialize;
-use tauri::{Manager, State};
+use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 enum StorageAvailability {
     Ready(CourseDatabase),
@@ -162,6 +162,33 @@ fn reminder_scheduler_status(
     scheduler.0.status()
 }
 
+#[tauri::command]
+fn open_widget(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(widget) = app.get_webview_window("widget") {
+        widget
+            .show()
+            .map_err(|_| "无法显示桌面课程小组件原型。".to_string())?;
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(&app, "widget", WebviewUrl::App("index.html?widget".into()))
+        .title("课程小组件")
+        .inner_size(320.0, 180.0)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .decorations(false)
+        .skip_taskbar(true)
+        .always_on_bottom(true)
+        .focused(false)
+        .build()
+        .map(|_| ())
+        .map_err(|error| {
+            eprintln!("Widget window creation failed: {error}");
+            "无法打开桌面课程小组件原型。".to_string()
+        })
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -231,8 +258,17 @@ pub fn run() {
             load_handled_reminder_keys,
             save_app_settings,
             refresh_reminder_schedule,
-            reminder_scheduler_status
+            reminder_scheduler_status,
+            open_widget
         ])
+        .on_window_event(|window, event| {
+            if window.label() == "widget" {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("启动课程表失败");
 }

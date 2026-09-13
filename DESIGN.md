@@ -95,6 +95,8 @@ Phase 5.1 落地纯逻辑时间模型：`TermConfig` 保存第 1 教学周星期
 
 Windows 通知必须在实际安装的应用中验收；开发态不能代表正式身份及图标。Phase 6 使用官方 `tauri-plugin-autostart`：React 仅经 `src/services/autostart.ts` 调用 `isEnabled`、`enable`、`disable`，设置弹窗打开和重新聚焦时读取系统实际状态，用户切换后立即复读。它不写 SQLite、不增加 migration，默认关闭；系统 API 失败或复读状态与请求不一致时 UI 保留实际已知状态并显示错误。能力仅授予 `autostart:default`（读取、启用、关闭），按当前用户启动，不创建 Windows Service。官方 `tauri-plugin-single-instance` 注册在应用初始化最前面；第二次启动会显示并聚焦已有 `main` 窗口，因此不会创建第二个 reminder scheduler。
 
+Phase 7.1 将小组件限定为同一 Tauri 进程内一个 label 为 `widget` 的独立顶级窗口。创建由 Rust `open_widget` command 负责：已有窗口只调用 `show()`，不调用 `set_focus()`；新窗口加载 `index.html?widget`，使用 `always_on_bottom(true)`、`focused(false)`、无装饰、跳过任务栏和固定 320×180 原型尺寸。窗口可被用户正常点击，但创建与重用不抢主窗口焦点；关闭请求改为隐藏，主窗口生命周期不变。`WidgetPrototype` 只有静态原型文本，不读 Course、SQLite 或 reminder scheduler，也不提供课程内容、今日/本周筛选、设置、位置/尺寸持久化、托盘或通知。这些数据与交互边界留给后续 Phase 7 小阶段。
+
 Phase 4（教务系统导入）已由用户取消，不继续实现相关功能。
 
 ## 选型依据（2026-09-08 核查）

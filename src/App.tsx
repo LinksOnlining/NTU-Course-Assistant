@@ -16,6 +16,7 @@ import { parseNtuPdfTimetable } from "./importers/ntu-pdf/parse.ts";
 import { TEST_COURSES } from "./fixtures/courses.ts";
 import { choosePdfFile, extractPdfText, PdfImportError } from "./services/pdf-import.ts";
 import { subscribeReminderResume } from "./services/reminder-lifecycle.ts";
+import { openWidgetPrototype } from "./services/widget-window.ts";
 import {
   deleteStoredCourse,
   importStoredCourses,
@@ -186,6 +187,15 @@ export function App() {
     }
   }
 
+  async function openWidget() {
+    try {
+      await openWidgetPrototype();
+      setPeriodMessage("桌面课程小组件原型已打开。");
+    } catch (error) {
+      setPeriodMessage(error instanceof Error ? error.message : "无法打开桌面课程小组件原型。");
+    }
+  }
+
   function cancelPdfImport() {
     if (isImporting) return;
     setPdfImport({ kind: "idle" });
@@ -250,6 +260,16 @@ export function App() {
           <p className="subtitle">时间决定位置，空闲时段按真实比例保留</p>
         </div>
         <div className="header-actions">
+          {import.meta.env.DEV && (
+            <button
+              type="button"
+              className="settings-button"
+              onClick={() => void openWidget()}
+              aria-label="打开小组件原型"
+            >
+              小组件原型
+            </button>
+          )}
           <button
             type="button"
             className="pdf-import-button"

@@ -1,11 +1,11 @@
 # 项目状态
 
 - 最后更新：2026-09-13
-- 当前阶段：**Phase 6 PASS**；Phase 1、Phase 2、Phase 2.5–2.7、Phase 3.1–3.4 均为 PASS；Phase 4 已由用户取消。
-- 阶段门禁：Phase 5 与 Phase 6 总验收均已通过；等待用户确认后进入 Phase 7。
+- 当前阶段：**Phase 7.1 PASS**；Phase 1、Phase 2、Phase 2.5–2.7、Phase 3.1–3.4、Phase 5 与 Phase 6 均为 PASS；Phase 4 已由用户取消。
+- 阶段门禁：Phase 7.1 最小独立窗口原型已通过；等待用户确认后进入 Phase 7.2。
 - 已完成：Phase 0；Phase 1 全部；Phase 2 全部；Phase 2.5 节次显示；Phase 2.6 用户可配置作息；Phase 2.7 桌面时间轴与自适应课程文字。
 - 核心规则：严格 HH:mm；课程 top/height 只由实际时间及 pxPerMinute 决定；07:00–22:00 轴保留真实空闲比例；重叠链由纯布局函数分配横向 lane；星期列始终为周一至周日。
-- 验证 PASS：严格 typecheck、105 项 TypeScript 单元测试、39 项架构测试、28 项 Rust 测试、315 个 UI 场景（300 通过、15 项按设备/私有样本条件跳过）、clippy、oxlint、Prettier、npm run build、npm run verify。
+- 验证 PASS：严格 typecheck、105 项 TypeScript 单元测试、40 项架构测试、28 项 Rust 测试、324 个 UI 场景（309 通过、15 项按设备/私有样本条件跳过）、clippy、oxlint、Prettier、npm run build、npm run verify。
 - Desktop PASS：真实 Tauri 独立窗口完成 schema 3→4、due 后 handled 持久化、关闭重启后的去重和未来计划恢复；标题为“大学课程表”且进程响应正常。
 - 测试配置：src/config/timetable.ts 中 TEST_TIMETABLE 明确 purpose=test-only，测试轴为 07:00–22:00、当前周为第 3 周、每分钟 1px；src/fixtures/courses.ts 全部为测试数据，不代表正式南通大学课表或作息。
 - 架构：core 只依赖同层逻辑及共享纯类型，不访问 DOM/React/Tauri/系统 IO；组件只消费 core 返回的分钟几何数据。
@@ -16,8 +16,9 @@
 - Phase 4：**CANCELLED BY USER**。教务系统导入及其后续调查不再是项目计划。
 - Phase 5.1–5.4：TypeScript 以 `Asia/Shanghai` 生成稳定 occurrence key、UTC epoch 毫秒提醒计划及最小通知展示 payload；启动、数据变化与窗口恢复均会重建计划。Rust 单线程调度器只等待绝对时刻、通过 channel 刷新或取消旧计划、同一时刻批量处理并在当前会话去重；每分钟复核 wall-clock 处理 sleep/time-jump。`handled_reminders` 在通知尝试后跨重启去重，通知或持久化失败都只记录内部错误且不会令 scheduler 崩溃。官方 Tauri 通知适配器在 due 时发送“课程即将开始”，正文显示课程、时间和可选教室；它不读 Course、不重算教学周或课程日期。
 - Phase 6：设置中的“启动设置”默认关闭，读取官方 autostart plugin 的系统实际状态；用户修改后立刻重新读取，失败或状态不一致不会显示伪成功。未增加 SQLite 字段、migration 或后台服务，schema 保持 4。官方 single-instance plugin 会将重复启动请求带回主窗口，避免重复 reminder scheduler。
+- Phase 7.1：同一 Tauri 应用可创建唯一 label 为 `widget` 的独立小组件原型窗口。Rust 使用官方 `WebviewWindowBuilder` 的 `always_on_bottom(true)`，窗口无系统装饰、不进任务栏、不可缩放/最大化/最小化、创建时 `focused(false)`；重复请求仅 `show()` 已有窗口且不聚焦。关闭请求会隐藏小组件，不退出主应用。React 仅经 `src/services/widget-window.ts` 调用命令，原型不读取 Course、SQLite 或 reminder scheduler；未增加数据库、迁移、托盘、通知或第二进程。
 - Version 1.0 路线：Phase 5 课程提醒 → Phase 6 开机自启动 → Phase 7 桌面课程小组件 → 托盘 / 发布。Phase 7 使用同一 Tauri 应用的多窗口模式，复用 Course、PeriodTime、TermConfig 和 CourseOccurrence；不建立第二套课程模型，不使用置顶窗口或 Explorer/壁纸注入。
-- 尚未实现：桌面小组件、托盘、正式发布。
+- 尚未实现：小组件的今日/本周内容、窗口位置和尺寸持久化、托盘、正式发布。
 - 已知非阻断项：Rust 的 linker_messages 创建库/对象输出警告仍存在，编译和运行正常。没有忽略失败测试。
 - PDF：已有真实样本检查，15 条固定安排和 3 条非固定实践课程；原件不入 Git，实际钟点和学期起点仍需用户确认。
 - Phase 3.1 状态：新增 PDF.js 原始文本层提取与 Tauri Dialog/FS 适配器。提取结果只驻留 React 内存，保留文件名、页码、页面宽高、文本、x/y、文本宽高；不判断星期、课程、教室、周数或节次，不创建 Course，也不调用 SQLite。PDF.js CMap 在本机构建时从依赖复制到被忽略的 `public/pdfjs/cmaps`，用于中文字体映射。
@@ -28,8 +29,8 @@
 - CourseProposal 状态：`prepareCourseProposal` 通过已确认 PeriodTime 映射时间并调用统一 `validateCourseInput`；提案只保留 candidateId 和无 id 的课程数据。test-only 作息、缺星期/节次/周数等继续 blocking；教室或教师缺失为 warning，warning 不阻止继续。
 - Phase 3.4 状态：纯 `prepareImportPlan` 在生成 ID 前稳定计算写入、现有/批内重复跳过及时间冲突；正式确认时仅为待写入项生成一次 UUID 并再次通过统一校验。Rust `import_courses` 在单个 SQLite transaction 中再次校验并批量插入，任一失败整体回滚；React 只在成功返回后合并课程。
 - Phase 3.4 Desktop 验收：备份真实 AppData 数据库后，在 Tauri 独立窗口补齐 3 条实践并将 18 条课程一次写入；`load_courses` 返回 18，当前周立即显示 12 张用户卡片。正常关闭重启后仍恢复 18；再次导入同一 PDF 得到重复 18、写入 0，数据库保持 18。全过程 `period_times=12`、`user_version=2`、integrity=ok，页面/控制台无错误；验收后已恢复原始数据库为 courses=0。
-- 下一步：等待用户确认后进入 Phase 7：桌面课程小组件。
-- 验证详情：docs/phase-1-verification.md、docs/phase-2-verification.md、docs/phase-2-5-verification.md、docs/phase-2-6-verification.md、docs/phase-2-7-verification.md、docs/phase-3-1-verification.md、docs/phase-3-2-verification.md、docs/phase-3-3-verification.md、docs/phase-3-4-verification.md、docs/phase-5-1-verification.md、docs/phase-5-2-verification.md、docs/phase-5-3-verification.md、docs/phase-5-4-verification.md、docs/phase-6-verification.md。
+- 下一步：等待用户确认后进入 Phase 7.2：小组件今日/本周内容。
+- 验证详情：docs/phase-1-verification.md、docs/phase-2-verification.md、docs/phase-2-5-verification.md、docs/phase-2-6-verification.md、docs/phase-2-7-verification.md、docs/phase-3-1-verification.md、docs/phase-3-2-verification.md、docs/phase-3-3-verification.md、docs/phase-3-4-verification.md、docs/phase-5-1-verification.md、docs/phase-5-2-verification.md、docs/phase-5-3-verification.md、docs/phase-5-4-verification.md、docs/phase-6-verification.md、docs/phase-7-1-verification.md。
 - Git：Phase 3.1–3.4 的改动按特别规则合并为一个稳定提交；未创建 tag，未 push。
 
 继续前阅读 CODEX.md、DESIGN.md 和验证记录；保留 Phase 1.1 的 Vite watcher 忽略规则。

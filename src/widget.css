@@ -1,0 +1,40 @@
+.widget-prototype {
+  display: grid;
+  min-height: 100%;
+  align-content: center;
+  gap: 8px;
+  padding: 28px;
+  color: #17352b;
+  background:
+    radial-gradient(circle at 10% 0%, rgb(206 234 220 / 82%), transparent 43%),
+    linear-gradient(145deg, #f7faf6, #e6f1eb);
+}
+
+.widget-prototype__eyebrow,
+.widget-prototype__phase,
+.widget-prototype__note {
+  margin: 0;
+}
+
+.widget-prototype__eyebrow {
+  color: #527b6e;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.widget-prototype h1 {
+  margin: 0;
+  font-size: 27px;
+  letter-spacing: -0.04em;
+}
+
+.widget-prototype__phase {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.widget-prototype__note {
+  color: #587168;
+  font-size: 13px;
+}

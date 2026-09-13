@@ -112,6 +112,15 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByText("测试数据", { exact: true })).toBeVisible();
 });
 
+test("development opener keeps the widget prototype separate from the timetable", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "打开小组件原型" }).click();
+  await expect(page.getByTestId("schedule-notice")).toHaveText("桌面课程小组件原型已打开。");
+  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "课程小组件" })).toHaveCount(0);
+});
+
 test("seven fixed days and teaching-week filter", async ({ page }) => {
   await expect(page.getByTestId("day-column")).toHaveCount(7);
   await expect(page.locator(".day-header")).toHaveText([
