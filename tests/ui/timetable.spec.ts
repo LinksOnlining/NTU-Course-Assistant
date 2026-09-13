@@ -122,6 +122,7 @@ test("widget settings default to disabled and save the requested mode and lock",
   await settings.getByLabel("小组件显示模式").selectOption("week");
   await settings.getByLabel("锁定小组件位置").check();
   await settings.getByRole("button", { name: "保存小组件设置" }).click();
+  await expect(settings.getByRole("button", { name: "保存小组件设置" })).toBeEnabled();
   await expect(settings.getByLabel("启用桌面课程小组件")).toBeChecked();
   await expect(settings.getByLabel("小组件显示模式")).toHaveValue("week");
   await expect(settings.getByLabel("锁定小组件位置")).toBeChecked();
@@ -427,6 +428,17 @@ test("Windows 登录启动失败和系统状态不一致不会显示伪成功", 
         invoke: async (command: string) => {
           if (command === "load_courses") return { courses: [], warnings: [] };
           if (command === "load_period_times") return null;
+          if (command === "load_widget_settings") {
+            return {
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            };
+          }
           if (command === "load_reminder_configuration") {
             return {
               termConfig: null,
@@ -505,6 +517,17 @@ test("failed schedule save keeps the old timeline", async ({ page }) => {
               { period: 1, startTime: "08:00", endTime: "08:45" },
               { period: 2, startTime: "08:50", endTime: "09:35" },
             ];
+          }
+          if (command === "load_widget_settings") {
+            return {
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            };
           }
           if (command === "load_reminder_configuration") {
             return {
@@ -877,6 +900,17 @@ test("storage failures keep the original UI state and show a clear error", async
         invoke: async (command: string) => {
           if (command === "load_courses") return { courses: [storedCourse], warnings: [] };
           if (command === "load_period_times") return null;
+          if (command === "load_widget_settings") {
+            return {
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            };
+          }
           if (command === "load_reminder_configuration") {
             return {
               termConfig: null,
@@ -917,6 +951,17 @@ test("a failed insert does not create a course in the UI", async ({ page }) => {
         invoke: async (command: string) => {
           if (command === "load_courses") return { courses: [], warnings: [] };
           if (command === "load_period_times") return null;
+          if (command === "load_widget_settings") {
+            return {
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            };
+          }
           if (command === "load_reminder_configuration") {
             return {
               termConfig: null,
@@ -944,6 +989,17 @@ test("a stored course outside the current axis is skipped without crashing", asy
       value: {
         invoke: async (command: string) => {
           if (command === "load_period_times") return null;
+          if (command === "load_widget_settings") {
+            return {
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            };
+          }
           if (command === "load_reminder_configuration") {
             return {
               termConfig: null,

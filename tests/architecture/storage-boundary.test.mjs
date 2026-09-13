@@ -43,6 +43,12 @@ test("widget window stays outside course storage and reminder scheduling", () =>
   assert.doesNotMatch(widgetCore, /(?:react|@tauri-apps|sqlite|\binvoke\s*\()/i);
   assert.match(rust, /get_webview_window\("widget"\)/);
   assert.match(rust, /always_on_bottom\(true\)/);
+  assert.doesNotMatch(rust, /always_on_top/);
+  assert.match(rust, /available_monitors\(\)/);
+  const capability = source("src-tauri/capabilities/default.json");
+  assert.match(capability, /"main"/);
+  assert.match(capability, /"widget"/);
+  assert.match(capability, /core:window:allow-start-dragging/);
   assert.equal((rust.match(/ReminderScheduler::new/g) ?? []).length, 1);
 });
 

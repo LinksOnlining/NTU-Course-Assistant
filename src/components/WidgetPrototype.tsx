@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { buildWidgetViewModel } from "../core/widget-view.ts";
 import {
   DEFAULT_WIDGET_SETTINGS,
@@ -9,6 +9,7 @@ import {
   hideWidget,
   notifyWidgetSettingsChanged,
   openMainWindow,
+  startWidgetDragging,
   subscribeWidgetBounds,
   subscribeWidgetDataChanged,
   subscribeWidgetSettingsChanged,
@@ -116,6 +117,19 @@ export function WidgetPrototype() {
     }
   }
 
+  function startDrag(event: MouseEvent<HTMLElement>) {
+    if (
+      settings.locked ||
+      event.button !== 0 ||
+      (event.target instanceof Element && event.target.closest("button, input, select"))
+    ) {
+      return;
+    }
+    void startWidgetDragging().catch((error: unknown) =>
+      setSettingsError(error instanceof Error ? error.message : "无法移动小组件，请稍后重试。"),
+    );
+  }
+
   const view = useMemo(
     () => buildWidgetViewModel(courses, termConfig, clock),
     [clock, courses, termConfig],
@@ -125,7 +139,7 @@ export function WidgetPrototype() {
     <main className="widget-prototype" aria-label="桌面课程小组件">
       <header
         className="widget-prototype__header"
-        data-tauri-drag-region={settings.locked ? undefined : ""}
+        onMouseDown={startDrag}
       >
         <div>
           <p className="widget-prototype__eyebrow">课程小组件</p>
@@ -146,7 +160,13 @@ export function WidgetPrototype() {
           <button
             type="button"
             className="widget-prototype__open"
-            onClick={() => void openMainWindow()}
+            onClick={() =>
+              void openMainWindow().catch((error: unknown) =>
+                setSettingsError(
+                  error instanceof Error ? error.message : "无法打开课程表，请稍后重试。",
+                ),
+              )
+            }
           >
             打开课程表
           </button>

@@ -37,6 +37,15 @@ export async function openMainWindow(): Promise<void> {
   }
 }
 
+export async function startWidgetDragging(): Promise<void> {
+  if (usesBrowserPreview()) return;
+  try {
+    await getCurrentWindow().startDragging();
+  } catch {
+    throw new Error("无法移动小组件，请稍后重试。");
+  }
+}
+
 export function notifyWidgetDataChanged(): void {
   if (usesBrowserPreview()) {
     window.dispatchEvent(new Event(WIDGET_REFRESH_EVENT));
@@ -93,44 +102,31 @@ export function subscribeWidgetBounds(
   if (usesBrowserPreview()) return () => undefined;
   const current = getCurrentWindow();
   let active = true;
-  let position: { x: number; y: number } | null = null;
-  let size: { width: number; height: number } | null = null;
   const stops: (() => void)[] = [];
-  const emitBounds = () => {
-    if (position && size) onBounds({ ...position, ...size });
-  };
-  void current
-    .outerPosition()
-    .then((value) => {
-      position = value;
-      emitBounds();
-    })
-    .catch(() => undefined);
-  void current
-    .innerSize()
-    .then((value) => {
-      size = value;
-      emitBounds();
-    })
-    .catch(() => undefined);
   void current
     .onMoved(({ payload }) => {
-      position = { x: payload.x, y: payload.y };
-      emitBounds();
+      void current
+        .innerSize()
+        .then((size) => onBounds({ x: payload.x, y: payload.y, ...size }))
+        .catch(() => undefined);
     })
     .then((stop) => {
       if (active) stops.push(stop);
       else void stop();
-    });
+    })
+    .catch(() => undefined);
   void current
     .onResized(({ payload }) => {
-      size = { width: payload.width, height: payload.height };
-      emitBounds();
+      void current
+        .outerPosition()
+        .then((position) => onBounds({ ...position, width: payload.width, height: payload.height }))
+        .catch(() => undefined);
     })
     .then((stop) => {
       if (active) stops.push(stop);
       else void stop();
-    });
+    })
+    .catch(() => undefined);
   return () => {
     active = false;
     stops.forEach((stop) => stop());

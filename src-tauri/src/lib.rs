@@ -8,7 +8,55 @@ use std::sync::{Arc, Mutex};
 use db::CourseDatabase;
 use models::{Course, PeriodTime, ReminderSettings, TermConfig, WidgetSettings};
 use serde::Serialize;
-use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{
+    Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+};
+
+#[derive(Clone, Copy)]
+struct ScreenRect {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+fn restored_widget_position(
+    position: Option<(i32, i32)>,
+    size: (u32, u32),
+    screens: &[ScreenRect],
+    fallback: Option<ScreenRect>,
+) -> Option<(i32, i32)> {
+    let (x, y) = position?;
+    let visible = screens.iter().any(|screen| {
+        let right = x.saturating_add(size.0 as i32);
+        let bottom = y.saturating_add(size.1 as i32);
+        right > screen.x
+            && bottom > screen.y
+            && x < screen.x.saturating_add(screen.width as i32)
+            && y < screen.y.saturating_add(screen.height as i32)
+    });
+    if visible {
+        Some((x, y))
+    } else {
+        fallback.map(|screen| (screen.x.saturating_add(40), screen.y.saturating_add(40)))
+    }
+}
+
+fn available_screen_rects(app: &tauri::AppHandle) -> Vec<ScreenRect> {
+    app.available_monitors()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|monitor| {
+            let area = monitor.work_area();
+            ScreenRect {
+                x: area.position.x,
+                y: area.position.y,
+                width: area.size.width,
+                height: area.size.height,
+            }
+        })
+        .collect()
+}
 
 enum StorageAvailability {
     Ready(CourseDatabase),
@@ -28,15 +76,19 @@ impl CourseState {
         operation: &str,
         action: impl FnOnce(&CourseDatabase) -> Result<T, db::StorageError>,
     ) -> Result<T, String> {
-        let storage = self
-            .0
-            .lock()
-            .map_err(|_| "课程存储当前不可用，请重新启动应用。".to_string())?;
-        let database = match &*storage {
-            StorageAvailability::Ready(database) => database,
-            StorageAvailability::Unavailable { message } => return Err(message.clone()),
+        let result = {
+            let storage = self
+                .0
+                .lock()
+                .map_err(|_| "课程存储当前不可用，请重新启动应用。".to_string())?;
+            let database = match &*storage {
+                StorageAvailability::Ready(database) => database,
+                StorageAvailability::Unavailable { message } => return Err(message.clone()),
+            };
+            let result = action(database);
+            result
         };
-        action(database).map_err(|error| {
+        result.map_err(|error| {
             eprintln!("Course database {operation} failed: {error}");
             format!("{operation}失败，请稍后重试。")
         })
@@ -143,7 +195,8 @@ fn save_app_settings(
 ) -> Result<(), String> {
     state.run("保存应用设置", |database| {
         database.save_app_settings(&periods, term_config.as_ref(), &reminder_settings)
-    })
+    })?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -193,13 +246,10 @@ fn show_widget(app: &tauri::AppHandle, settings: &WidgetSettings) -> Result<(), 
         return Ok(());
     }
 
-    let mut builder =
+    let builder =
         WebviewWindowBuilder::new(app, "widget", WebviewUrl::App("index.html?widget".into()))
             .title("课程小组件")
-            .inner_size(
-                settings.width.unwrap_or(360) as f64,
-                settings.height.unwrap_or(430) as f64,
-            )
+            .inner_size(360.0, 430.0)
             .min_inner_size(280.0, 220.0)
             .max_inner_size(1200.0, 1200.0)
             .resizable(!settings.locked)
@@ -209,13 +259,38 @@ fn show_widget(app: &tauri::AppHandle, settings: &WidgetSettings) -> Result<(), 
             .skip_taskbar(true)
             .always_on_bottom(true)
             .focused(false);
-    if let (Some(x), Some(y)) = (settings.x, settings.y) {
-        builder = builder.position(x as f64, y as f64);
-    }
-    builder.build().map(|_| ()).map_err(|error| {
+    let widget = builder.build().map_err(|error| {
         eprintln!("Widget window creation failed: {error}");
         "无法打开桌面课程小组件原型。".to_string()
-    })
+    })?;
+    let size = (
+        settings.width.unwrap_or(360),
+        settings.height.unwrap_or(430),
+    );
+    widget
+        .set_size(PhysicalSize::new(size.0, size.1))
+        .map_err(|_| "无法恢复小组件尺寸。".to_string())?;
+    let screens = available_screen_rects(app);
+    let primary = app.primary_monitor().ok().flatten().map(|monitor| {
+        let area = monitor.work_area();
+        ScreenRect {
+            x: area.position.x,
+            y: area.position.y,
+            width: area.size.width,
+            height: area.size.height,
+        }
+    });
+    if let Some((x, y)) = restored_widget_position(
+        settings.x.zip(settings.y),
+        size,
+        &screens,
+        primary.or_else(|| screens.first().copied()),
+    ) {
+        widget
+            .set_position(PhysicalPosition::new(x, y))
+            .map_err(|_| "无法恢复小组件位置。".to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -239,6 +314,8 @@ fn open_main(app: tauri::AppHandle) -> Result<(), String> {
     let main = app
         .get_webview_window("main")
         .ok_or_else(|| "无法找到课程表窗口。".to_string())?;
+    main.unminimize()
+        .map_err(|_| "无法恢复课程表窗口。".to_string())?;
     main.show()
         .map_err(|_| "无法显示课程表窗口。".to_string())?;
     main.set_focus()
@@ -339,4 +416,43 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("启动课程表失败");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{restored_widget_position, ScreenRect};
+
+    const PRIMARY: ScreenRect = ScreenRect {
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+    };
+
+    #[test]
+    fn visible_widget_position_is_retained_across_available_monitors() {
+        let second = ScreenRect {
+            x: 1920,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        assert_eq!(
+            restored_widget_position(
+                Some((2100, 80)),
+                (360, 430),
+                &[PRIMARY, second],
+                Some(PRIMARY)
+            ),
+            Some((2100, 80))
+        );
+    }
+
+    #[test]
+    fn unavailable_screen_position_returns_to_primary_work_area() {
+        assert_eq!(
+            restored_widget_position(Some((2500, 80)), (360, 430), &[PRIMARY], Some(PRIMARY)),
+            Some((40, 40))
+        );
+    }
 }

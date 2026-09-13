@@ -2,6 +2,9 @@
 
 ## 未发布 — 2026-09-13
 
+- **Phase 7 PASS / Phase 7.4 PASS**：完成 Windows 人工验收。Widget 正常显示，普通及最大化窗口能够遮挡，Alt+Tab 不出现，创建不抢焦点，drag/resize/lock、设置保存与重启恢复、single-instance 均通过。Win+D 时 Widget 隐藏，恢复应用后仍按底层窗口规则被普通窗口遮挡；该实际行为作为 V1 可接受限制记录。真实双显示器移除与 DPI 切换未单独执行，由 existing physical-geometry fallback 自动覆盖并作为 documented limitation 保留。
+- 修复设置保存可能永久显示“保存中…”的问题：作息表单在所有结束路径恢复可操作状态；小组件边界只在原生移动或缩放后保存，避免设置事件触发的重复写入。补齐 widget 的事件监听与拖拽权限，数据库锁在 SQL 结束后释放再执行窗口操作。Widget 改为从自由标题区域显式调用原生拖动；“打开课程表”会恢复并聚焦最小化的主窗口。
+
 - **Phase 7.3 PASS**：桌面课程小组件默认关闭，并可持久化启用、Today/Week、锁定、位置与尺寸；应用启动仅在 enabled 时无焦点恢复。复用 schema 4 的 `app_settings`，没有 migration、Course、scheduler 或通知变更。
 - 主设置和 Widget 控制均通过成功写入后的轻量事件同步；move/resize 使用 500ms debounce，保存失败不伪成功且不影响当前窗口继续使用。
 

@@ -145,6 +145,7 @@ export function PeriodSettings({
       await onSave(draft, termConfig, reminderSettings);
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "保存作息失败，请稍后重试。");
+    } finally {
       setIsSaving(false);
     }
   }

@@ -101,6 +101,8 @@ Phase 7.2 将 Widget 内容限定为现有正式领域数据的纯展示派生�
 
 Phase 7.3 在 schema 4 已有 `app_settings` 中增加 `widget_settings` JSON key，不另建表或 migration。Rust 是设置的最终校验边界，验证 mode、成对坐标、成对尺寸和安全的 280×220 至 1200×1200 范围；缺失或损坏值返回默认关闭设置，不自动覆写坏值。主窗口与 widget 经轻量 settings event 各自重读，只有用户写入成功后才 emit。窗口 IO 保留在 widget service/Rust：启动仅对 enabled 创建 widget，既有窗口 show/hide 不抢焦点，native move/resize 以 500ms debounce 保存，locked 同时禁用 drag region 和 native resize。该设置不参与 reminder scheduler、Course 或其他应用设置写入。
 
+Phase 7.4 将 geometry 统一为 Tauri physical pixels：Widget WebView 保存 `PhysicalPosition` 和 `PhysicalSize`，Rust 创建后用对应 physical setter 恢复，避免与 builder 的 logical-pixel 参数混用。恢复仅检查当前 monitor work areas；保存矩形与任一 work area 相交即保留，完全离屏则移到主 work area 的 40px 偏移。边界订阅仅在原生 move/resize 后写入，不能因 settings reload 再次保存；持久化 command 的数据库锁只覆盖 SQL，窗口操作与 settings event 在锁释放后执行。Widget 的自由标题区域显式调用官方 `startDragging`，控件不参与拖动；“打开课程表”会先 `unminimize`、再显示和聚焦主窗口。该算法不保存硬件身份，也不添加 WorkerW、Explorer、always-on-top 或第二进程。真实 Windows 的 Win+D、Alt+Tab 与手动窗口交互已验收；双屏和 DPI 未单独执行，继续以自动 fallback 覆盖并明确记录限制。
+
 Phase 4（教务系统导入）已由用户取消，不继续实现相关功能。
 
 ## 选型依据（2026-09-08 核查）
