@@ -404,6 +404,29 @@ test("term and reminder settings validate and persist with the schedule", async 
   await expect(reopened.getByLabel("提前提醒分钟")).toHaveValue("60");
 });
 
+test("reminder settings can request a Windows test notification without changing the schedule", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "设置" }).click();
+  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  await page.evaluate(() => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command === "send_test_course_notification") return undefined;
+          throw new Error(`未预期的命令：${command}`);
+        },
+      },
+    });
+  });
+  await dialog.getByRole("button", { name: "发送测试提醒" }).click();
+  await expect(dialog.getByRole("status")).toContainText("已请求 Windows 显示测试提醒");
+  await page.evaluate(() => {
+    delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  });
+});
+
 test("Windows 登录启动开关默认关闭且能立即启用或关闭", async ({ page }) => {
   await page.getByRole("button", { name: "设置" }).click();
   const dialog = page.getByRole("dialog", { name: "作息时间" });

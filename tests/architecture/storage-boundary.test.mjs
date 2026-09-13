@@ -12,6 +12,7 @@ test("React orchestration uses the course storage service rather than Tauri or S
 
 test("only service adapters import frontend Tauri APIs", () => {
   assert.match(source("src/services/course-storage.ts"), /@tauri-apps\/api\/core/);
+  assert.match(source("src/services/reminder-notification.ts"), /@tauri-apps\/api\/core/);
   assert.match(source("src/services/widget-window.ts"), /@tauri-apps\/api\/core/);
   assert.match(source("src/services/pdf-import.ts"), /@tauri-apps\/plugin-(?:dialog|fs)/);
   for (const path of [
@@ -50,6 +51,17 @@ test("widget window stays outside course storage and reminder scheduling", () =>
   assert.match(capability, /"widget"/);
   assert.match(capability, /core:window:allow-start-dragging/);
   assert.equal((rust.match(/ReminderScheduler::new/g) ?? []).length, 1);
+});
+
+test("tray lifecycle has one native boundary and reuses main and widget helpers", () => {
+  const rust = source("src-tauri/src/lib.rs");
+  assert.equal((rust.match(/TrayIconBuilder::with_id/g) ?? []).length, 1);
+  assert.match(rust, /fn show_main_window/);
+  assert.match(rust, /show_main_window\(app\)/);
+  assert.match(rust, /TRAY_TOGGLE_WIDGET/);
+  assert.match(rust, /TRAY_QUIT => app\.exit\(0\)/);
+  assert.match(rust, /window\.label\(\) == "main" \|\| window\.label\(\) == "widget"/);
+  assert.doesNotMatch(rust, /always_on_top|SELECT\s+.*tray|INSERT\s+.*tray/i);
 });
 
 test("NTU parsing stays pure and cannot create or persist courses", () => {

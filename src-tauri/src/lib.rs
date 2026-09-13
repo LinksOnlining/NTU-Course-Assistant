@@ -9,8 +9,16 @@ use db::CourseDatabase;
 use models::{Course, PeriodTime, ReminderSettings, TermConfig, WidgetSettings};
 use serde::Serialize;
 use tauri::{
-    Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    image::Image,
+    menu::{Menu, MenuItem, PredefinedMenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl, WebviewWindowBuilder,
+    WindowEvent,
 };
+
+const TRAY_OPEN_MAIN: &str = "tray-open-main";
+const TRAY_TOGGLE_WIDGET: &str = "tray-toggle-widget";
+const TRAY_QUIT: &str = "tray-quit";
 
 #[derive(Clone, Copy)]
 struct ScreenRect {
@@ -85,8 +93,7 @@ impl CourseState {
                 StorageAvailability::Ready(database) => database,
                 StorageAvailability::Unavailable { message } => return Err(message.clone()),
             };
-            let result = action(database);
-            result
+            action(database)
         };
         result.map_err(|error| {
             eprintln!("Course database {operation} failed: {error}");
@@ -238,6 +245,11 @@ fn reminder_scheduler_status(
 }
 
 #[tauri::command]
+fn send_test_course_notification(app: tauri::AppHandle) -> Result<(), String> {
+    notification::send_test_notification(&app)
+}
+
+#[tauri::command]
 fn show_widget(app: &tauri::AppHandle, settings: &WidgetSettings) -> Result<(), String> {
     if let Some(widget) = app.get_webview_window("widget") {
         widget
@@ -310,7 +322,7 @@ fn hide_widget(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn open_main(app: tauri::AppHandle) -> Result<(), String> {
+fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
     let main = app
         .get_webview_window("main")
         .ok_or_else(|| "无法找到课程表窗口。".to_string())?;
@@ -322,13 +334,84 @@ fn open_main(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|_| "无法聚焦课程表窗口。".to_string())
 }
 
+#[tauri::command]
+fn open_main(app: tauri::AppHandle) -> Result<(), String> {
+    show_main_window(&app)
+}
+
+fn toggle_widget_from_tray(app: &tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<CourseState>();
+    let settings = state.run("读取小组件设置", CourseDatabase::load_widget_settings)?;
+    if !settings.enabled {
+        let next = WidgetSettings {
+            enabled: true,
+            ..settings
+        };
+        state.run("保存小组件设置", |database| {
+            database.save_widget_settings(&next)
+        })?;
+        show_widget(app, &next)?;
+        let _ = app.emit("widget-settings-changed", ());
+        return Ok(());
+    }
+    if let Some(widget) = app.get_webview_window("widget") {
+        if widget.is_visible().unwrap_or(false) {
+            return widget
+                .hide()
+                .map_err(|_| "无法隐藏桌面课程小组件。".to_string());
+        }
+    }
+    show_widget(app, &settings)
+}
+
+fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let open_main = MenuItem::with_id(app, TRAY_OPEN_MAIN, "打开课程表", true, None::<&str>)?;
+    let toggle_widget = MenuItem::with_id(
+        app,
+        TRAY_TOGGLE_WIDGET,
+        "显示 / 隐藏桌面小组件",
+        true,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(app, TRAY_QUIT, "退出程序", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&open_main, &toggle_widget, &separator, &quit])?;
+    let icon = Image::from_bytes(include_bytes!("../icons/tray/tray-icon.png"))?;
+    TrayIconBuilder::with_id("main-tray")
+        .icon(icon)
+        .tooltip("大学课程表")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            TRAY_OPEN_MAIN => {
+                let _ = show_main_window(app);
+            }
+            TRAY_TOGGLE_WIDGET => {
+                let _ = toggle_widget_from_tray(app);
+            }
+            TRAY_QUIT => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if matches!(
+                event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                }
+            ) {
+                let _ = show_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            let _ = show_main_window(app);
         }))
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
@@ -377,6 +460,7 @@ pub fn run() {
                 )),
                 Arc::new(SqliteHandledStore(course_state)),
             )));
+            create_tray(&app.handle().clone())?;
             if let Ok(settings) = app
                 .state::<CourseState>()
                 .run("读取小组件设置", CourseDatabase::load_widget_settings)
@@ -402,13 +486,14 @@ pub fn run() {
             save_widget_settings,
             refresh_reminder_schedule,
             reminder_scheduler_status,
+            send_test_course_notification,
             open_widget,
             hide_widget,
             open_main
         ])
         .on_window_event(|window, event| {
-            if window.label() == "widget" {
-                if let WindowEvent::CloseRequested { api, .. } = event {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" || window.label() == "widget" {
                     api.prevent_close();
                     let _ = window.hide();
                 }

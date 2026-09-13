@@ -103,6 +103,8 @@ Phase 7.3 在 schema 4 已有 `app_settings` 中增加 `widget_settings` JSON ke
 
 Phase 7.4 将 geometry 统一为 Tauri physical pixels：Widget WebView 保存 `PhysicalPosition` 和 `PhysicalSize`，Rust 创建后用对应 physical setter 恢复，避免与 builder 的 logical-pixel 参数混用。恢复仅检查当前 monitor work areas；保存矩形与任一 work area 相交即保留，完全离屏则移到主 work area 的 40px 偏移。边界订阅仅在原生 move/resize 后写入，不能因 settings reload 再次保存；持久化 command 的数据库锁只覆盖 SQL，窗口操作与 settings event 在锁释放后执行。Widget 的自由标题区域显式调用官方 `startDragging`，控件不参与拖动；“打开课程表”会先 `unminimize`、再显示和聚焦主窗口。该算法不保存硬件身份，也不添加 WorkerW、Explorer、always-on-top 或第二进程。真实 Windows 的 Win+D、Alt+Tab 与手动窗口交互已验收；双屏和 DPI 未单独执行，继续以自动 fallback 覆盖并明确记录限制。
 
+Phase 8 使用官方 Tauri 2 Tray API。在 setup 中只创建一个 `main-tray`，它与唯一 scheduler、主窗口和最多一个 widget 同属一个进程。Tray 与 single-instance、Widget“打开课程表”复用 `show_main_window`，统一执行 unminimize、show、focus；主窗口 CloseRequested 只 hide，Tray 的显式退出调用 app exit，因此不会被窗口 close 拦截。Tray widget 切换读取和保存既有 `WidgetSettings`，不引入第二份状态或新 schema。正式图标源保留在 `assets/branding/app-icon-source.png`，应用 ICO 保留 16、24、32、48、64、128、256 像素图层；Tray 使用同品牌的小尺寸日历/铃铛 PNG。提醒设置中的测试通知只调用正式 Windows notification adapter，不参与 scheduler、Course、SQLite 或 handled 状态。
+
 Phase 4（教务系统导入）已由用户取消，不继续实现相关功能。
 
 ## 选型依据（2026-09-08 核查）

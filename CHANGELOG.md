@@ -2,6 +2,10 @@
 
 ## 未发布 — 2026-09-13
 
+- **Phase 8 PASS**：使用 `assets/branding/app-icon-source.png` 生成正式应用图标、包含 16/24/32/48/64/128/256 图层的 `.ico` 与同品牌简化 Tray 图标；release EXE、MSI、NSIS 和 Start Menu 快捷方式均使用正式资源。
+- 新增官方 Tauri Tray：主窗口 × 改为隐藏，Tray 可恢复主窗口、显示/隐藏唯一桌面小组件，且“退出程序”才结束应用。单实例、单 scheduler、schema 4 与 autostart 保持不变。
+- 设置新增不修改任何课程或计划的“发送测试提醒”，真实 Windows Toast 已人工确认。完成 107 项 TypeScript 单元、44 项架构、327 项 UI（15 项条件 skip）、33 项 Rust、verify、fmt、clippy 和 NSIS 安装态启动验证。
+
 - **Phase 7 PASS / Phase 7.4 PASS**：完成 Windows 人工验收。Widget 正常显示，普通及最大化窗口能够遮挡，Alt+Tab 不出现，创建不抢焦点，drag/resize/lock、设置保存与重启恢复、single-instance 均通过。Win+D 时 Widget 隐藏，恢复应用后仍按底层窗口规则被普通窗口遮挡；该实际行为作为 V1 可接受限制记录。真实双显示器移除与 DPI 切换未单独执行，由 existing physical-geometry fallback 自动覆盖并作为 documented limitation 保留。
 - 修复设置保存可能永久显示“保存中…”的问题：作息表单在所有结束路径恢复可操作状态；小组件边界只在原生移动或缩放后保存，避免设置事件触发的重复写入。补齐 widget 的事件监听与拖拽权限，数据库锁在 SQL 结束后释放再执行窗口操作。Widget 改为从自由标题区域显式调用原生拖动；“打开课程表”会恢复并聚焦最小化的主窗口。
 

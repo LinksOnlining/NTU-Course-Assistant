@@ -7,6 +7,7 @@ import {
 } from "../core/reminder.ts";
 import { minutesToTime, timeToMinutes } from "../core/time.ts";
 import { loadAutostartEnabled, saveAutostartEnabled } from "../services/autostart.ts";
+import { sendTestCourseNotification } from "../services/reminder-notification.ts";
 import type { ReminderConfiguration, ReminderSettings, TermConfig } from "../types/reminder.ts";
 import type { PeriodTime } from "../types/time.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
@@ -49,6 +50,8 @@ export function PeriodSettings({
   );
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingTestReminder, setIsSendingTestReminder] = useState(false);
+  const [testReminderMessage, setTestReminderMessage] = useState("");
   const [autostartEnabled, setAutostartEnabled] = useState<boolean | null>(null);
   const [autostartError, setAutostartError] = useState("");
   const [isUpdatingAutostart, setIsUpdatingAutostart] = useState(false);
@@ -147,6 +150,21 @@ export function PeriodSettings({
       setError(caught instanceof Error ? caught.message : "保存作息失败，请稍后重试。");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function sendTestReminder() {
+    setIsSendingTestReminder(true);
+    setTestReminderMessage("");
+    try {
+      await sendTestCourseNotification();
+      setTestReminderMessage("已请求 Windows 显示测试提醒，请查看通知中心。");
+    } catch (caught: unknown) {
+      setTestReminderMessage(
+        caught instanceof Error ? caught.message : "无法发送测试提醒，请稍后重试。",
+      );
+    } finally {
+      setIsSendingTestReminder(false);
     }
   }
 
@@ -267,7 +285,7 @@ export function PeriodSettings({
         <section className="settings-section" aria-labelledby="reminder-settings-title">
           <div>
             <h3 id="reminder-settings-title">学期与课程提醒</h3>
-            <p>运行中的应用会在到期时发送 Windows 系统通知。</p>
+            <p>运行中的应用会在到期时发送 Windows 系统通知；可先发送测试提醒确认系统设置。</p>
           </div>
           <div className="settings-fields">
             <label>
@@ -312,6 +330,19 @@ export function PeriodSettings({
               />
             </label>
           </div>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void sendTestReminder()}
+            disabled={isSendingTestReminder}
+          >
+            {isSendingTestReminder ? "发送中…" : "发送测试提醒"}
+          </button>
+          {testReminderMessage && (
+            <p className="form-message" role="status">
+              {testReminderMessage}
+            </p>
+          )}
         </section>
         <section className="settings-section" aria-labelledby="autostart-settings-title">
           <div>

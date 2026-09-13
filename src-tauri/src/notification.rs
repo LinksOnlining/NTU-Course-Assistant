@@ -13,6 +13,15 @@ impl WindowsNotificationAdapter {
     }
 }
 
+pub fn send_test_notification(app: &AppHandle<Wry>) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title("课程提醒测试")
+        .body("这是一条 Windows 课程提醒测试通知。")
+        .show()
+        .map_err(|error| error.to_string())
+}
+
 impl DueHandler for WindowsNotificationAdapter {
     fn handle_due(&self, plan: &ReminderPlan) -> Result<(), String> {
         self.app

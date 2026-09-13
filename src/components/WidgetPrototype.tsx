@@ -137,10 +137,7 @@ export function WidgetPrototype() {
 
   return (
     <main className="widget-prototype" aria-label="桌面课程小组件">
-      <header
-        className="widget-prototype__header"
-        onMouseDown={startDrag}
-      >
+      <header className="widget-prototype__header" onMouseDown={startDrag}>
         <div>
           <p className="widget-prototype__eyebrow">课程小组件</p>
           {view.kind === "ready" && (
