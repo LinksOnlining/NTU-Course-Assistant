@@ -41,3 +41,5 @@
 - Git：Phase 3.1–3.4 的改动按特别规则合并为一个稳定提交；未创建 tag，未 push。
 
 继续前阅读 CODEX.md、DESIGN.md 和验证记录；保留 Phase 1.1 的 Vite watcher 忽略规则。
+
+- v1.1.1: 修复已安装版 PDF.js 中文 CMap 资源被 CSP 拦截导致的课表识别失败。
