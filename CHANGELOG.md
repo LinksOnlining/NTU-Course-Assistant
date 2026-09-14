@@ -1,5 +1,10 @@
 # 变更记录
 
+## 1.1.0 — 2026-09-14
+
+- 发布 Windows NSIS 与 MSI 安装包，源码、CI 和 Release workflow 已推送到 Public GitHub Repository。
+- 修复真实三页南通大学课表 PDF 结构识别；设置保存与离线 OCR 修复包含在本版本中。
+
 ## 1.1.0 Release Candidate — 2026-09-14
 
 ### Added
