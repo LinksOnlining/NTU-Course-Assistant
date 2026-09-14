@@ -565,15 +565,9 @@ export function App() {
           }}
           onSaveWidgetSettings={async (patch) => {
             const saved = await patchStoredWidgetSettings(patch);
-            try {
-              if (saved.enabled) await showWidget();
-              else await hideWidget();
-            } catch (error) {
-              await patchStoredWidgetSettings({ enabled: widgetSettings.enabled }).catch(
-                () => undefined,
-              );
-              throw error;
-            }
+            // Window creation/showing can take longer than the storage write on Windows.
+            // Do not hold the settings dialog in a perpetual "saving" state while it does so.
+            void (saved.enabled ? showWidget() : hideWidget()).catch(() => undefined);
             setWidgetSettings(saved);
             notifyWidgetSettingsChanged();
             return saved;
