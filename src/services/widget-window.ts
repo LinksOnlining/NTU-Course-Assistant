@@ -105,9 +105,12 @@ export function subscribeWidgetBounds(
   const stops: (() => void)[] = [];
   void current
     .onMoved(({ payload }) => {
+      if (!active) return;
       void current
         .innerSize()
-        .then((size) => onBounds({ x: payload.x, y: payload.y, ...size }))
+        .then((size) => {
+          if (active) onBounds({ x: payload.x, y: payload.y, ...size });
+        })
         .catch(() => undefined);
     })
     .then((stop) => {
@@ -117,9 +120,12 @@ export function subscribeWidgetBounds(
     .catch(() => undefined);
   void current
     .onResized(({ payload }) => {
+      if (!active) return;
       void current
         .outerPosition()
-        .then((position) => onBounds({ ...position, width: payload.width, height: payload.height }))
+        .then((position) => {
+          if (active) onBounds({ ...position, width: payload.width, height: payload.height });
+        })
         .catch(() => undefined);
     })
     .then((stop) => {

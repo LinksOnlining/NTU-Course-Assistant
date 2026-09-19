@@ -1,4 +1,5 @@
 import { TEST_COURSES } from "../fixtures/courses.ts";
+import { invoke } from "@tauri-apps/api/core";
 import {
   loadStoredCourses,
   loadStoredReminderConfiguration,
@@ -26,6 +27,9 @@ export interface WidgetData {
 }
 
 export async function loadWidgetData(): Promise<WidgetData> {
+  if (!import.meta.env.DEV || "__TAURI_INTERNALS__" in window) {
+    return invoke<WidgetData>("load_widget_data");
+  }
   const [storedCourses, configuration, settings] = await Promise.all([
     loadStoredCourses(),
     loadStoredReminderConfiguration(),

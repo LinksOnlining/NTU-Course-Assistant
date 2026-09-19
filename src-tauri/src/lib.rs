@@ -132,6 +132,14 @@ struct LoadCoursesResponse {
     warnings: Vec<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WidgetDataResponse {
+    courses: Vec<Course>,
+    term_config: Option<TermConfig>,
+    settings: WidgetSettings,
+}
+
 #[tauri::command]
 fn load_courses(state: State<'_, CourseState>) -> Result<LoadCoursesResponse, String> {
     state.run("读取课程", |database| {
@@ -206,9 +214,7 @@ fn save_app_settings(
     reminder_settings: ReminderSettings,
 ) -> Result<SavedAppSettings, String> {
     state.run("保存应用设置", |database| {
-        database.save_app_settings(&periods, term_config.as_ref(), &reminder_settings)
-    })?;
-    state.run("读取已保存应用设置", |database| {
+        database.save_app_settings(&periods, term_config.as_ref(), &reminder_settings)?;
         Ok(SavedAppSettings {
             periods: database
                 .load_period_times()?
@@ -232,10 +238,16 @@ fn patch_widget_settings(
     let settings = state.run("保存小组件设置", |database| {
         database.patch_widget_settings(&patch)
     })?;
-    if let Some(widget) = app.get_webview_window("widget") {
-        widget
-            .set_resizable(!settings.locked)
-            .map_err(|_| "无法更新小组件锁定状态。".to_string())?;
+    if patch.locked.is_some() {
+        let app = app.clone();
+        let locked = settings.locked;
+        tauri::async_runtime::spawn(async move {
+            if let Some(widget) = app.get_webview_window("widget") {
+                if widget.set_resizable(!locked).is_err() {
+                    eprintln!("Widget lock update failed");
+                }
+            }
+        });
     }
     Ok(settings)
 }
@@ -326,6 +338,11 @@ fn show_widget(app: &tauri::AppHandle, settings: &WidgetSettings) -> Result<(), 
 
 #[tauri::command]
 fn open_widget(app: tauri::AppHandle, state: State<'_, CourseState>) -> Result<(), String> {
+    if let Some(widget) = app.get_webview_window("widget") {
+        return widget
+            .show()
+            .map_err(|_| "无法显示桌面课程小组件。".to_string());
+    }
     let settings = state.run("读取小组件设置", CourseDatabase::load_widget_settings)?;
     show_widget(&app, &settings)
 }
@@ -362,12 +379,16 @@ fn toggle_widget_from_tray(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<CourseState>();
     let settings = state.run("读取小组件设置", CourseDatabase::load_widget_settings)?;
     if !settings.enabled {
-        let next = WidgetSettings {
-            enabled: true,
-            ..settings
-        };
-        state.run("保存小组件设置", |database| {
-            database.save_widget_settings(&next)
+        let next = state.run("保存小组件设置", |database| {
+            database.patch_widget_settings(&WidgetSettingsPatch {
+                enabled: Some(true),
+                display_mode: None,
+                locked: None,
+                x: None,
+                y: None,
+                width: None,
+                height: None,
+            })
         })?;
         show_widget(app, &next)?;
         let _ = app.emit("widget-settings-changed", ());

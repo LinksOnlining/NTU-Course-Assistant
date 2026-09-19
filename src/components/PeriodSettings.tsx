@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   adjustPeriodSchedule,
   applyUniformPeriodDuration,
@@ -40,6 +40,15 @@ export function PeriodSettings({
   onCancel,
 }: PeriodSettingsProps) {
   const [draft, setDraft] = useState<PeriodTime[]>(() => periods.map((period) => ({ ...period })));
+  const draftRef = useRef(draft);
+  const [timeDrafts, setTimeDrafts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      periods.flatMap((period) => [
+        [`${period.period}:startTime`, period.startTime],
+        [`${period.period}:endTime`, period.endTime],
+      ]),
+    ),
+  );
   const [uniformDuration, setUniformDuration] = useState(() =>
     periods[0] ? String(durationMinutes(periods[0])) : "45",
   );
@@ -95,12 +104,34 @@ export function PeriodSettings({
     };
   }, []);
 
+  function commitDraft(next: readonly PeriodTime[]) {
+    const canonicalDraft = [...next];
+    draftRef.current = canonicalDraft;
+    setDraft(canonicalDraft);
+    setTimeDrafts(
+      Object.fromEntries(
+        canonicalDraft.flatMap((period) => [
+          [`${period.period}:startTime`, period.startTime],
+          [`${period.period}:endTime`, period.endTime],
+        ]),
+      ),
+    );
+  }
+
   function update(index: number, field: "startTime" | "endTime", value: string) {
+    const period = draftRef.current[index];
+    if (!period) return;
+    setTimeDrafts((current) => ({ ...current, [`${period.period}:${field}`]: value }));
     try {
-      setDraft((current) => [...adjustPeriodSchedule(current, index, { [field]: value })]);
+      timeToMinutes(value);
+      commitDraft(adjustPeriodSchedule(draftRef.current, index, { [field]: value }));
       setError("");
     } catch (caught: unknown) {
-      setError(caught instanceof Error ? caught.message : "无法调整节次时间。");
+      if (value.length === 5) {
+        setError(caught instanceof Error ? caught.message : "无法调整节次时间。");
+      } else {
+        setError("");
+      }
     }
   }
 
@@ -109,7 +140,7 @@ export function PeriodSettings({
       setError("最多只能配置 30 节课");
       return;
     }
-    const last = draft[draft.length - 1];
+    const last = draftRef.current[draftRef.current.length - 1];
     let startTime = "08:00";
     let endTime = "08:45";
     if (last) {
@@ -121,7 +152,7 @@ export function PeriodSettings({
         endTime = "23:59";
       }
     }
-    setDraft((current) => [...current, { period: current.length + 1, startTime, endTime }]);
+    commitDraft([...draftRef.current, { period: draftRef.current.length + 1, startTime, endTime }]);
     setError("");
   }
 
@@ -130,13 +161,13 @@ export function PeriodSettings({
       setError("至少保留一节课");
       return;
     }
-    setDraft((current) => current.slice(0, -1));
+    commitDraft(draftRef.current.slice(0, -1));
     setError("");
   }
 
   function applyDuration() {
     try {
-      setDraft((current) => [...applyUniformPeriodDuration(current, Number(uniformDuration))]);
+      commitDraft(applyUniformPeriodDuration(draftRef.current, Number(uniformDuration)));
       setError("");
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "无法应用单节课时长。");
@@ -145,6 +176,15 @@ export function PeriodSettings({
 
   async function save() {
     try {
+      if (
+        draft.some(
+          (period) =>
+            timeDrafts[`${period.period}:startTime`] !== period.startTime ||
+            timeDrafts[`${period.period}:endTime`] !== period.endTime,
+        )
+      ) {
+        throw new RangeError("请先完成每个节次的 HH:mm 时间输入。");
+      }
       validatePeriodTimes(draft);
       const reminderSettings = validateReminderSettings({
         enabled: remindersEnabled,
@@ -263,8 +303,11 @@ export function PeriodSettings({
               <label>
                 <span className="visually-hidden">第{period.period}节开始时间</span>
                 <input
-                  type="time"
-                  value={period.startTime}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={5}
+                  pattern="[0-2][0-9]:[0-5][0-9]"
+                  value={timeDrafts[`${period.period}:startTime`] ?? period.startTime}
                   onChange={(event) => update(index, "startTime", event.target.value)}
                   aria-label={`第${period.period}节开始时间`}
                 />
@@ -273,8 +316,11 @@ export function PeriodSettings({
               <label>
                 <span className="visually-hidden">第{period.period}节结束时间</span>
                 <input
-                  type="time"
-                  value={period.endTime}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={5}
+                  pattern="[0-2][0-9]:[0-5][0-9]"
+                  value={timeDrafts[`${period.period}:endTime`] ?? period.endTime}
                   onChange={(event) => update(index, "endTime", event.target.value)}
                   aria-label={`第${period.period}节结束时间`}
                 />

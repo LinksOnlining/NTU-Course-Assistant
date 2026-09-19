@@ -48,6 +48,16 @@ test("period adjustment rejects a schedule that would exceed the day", () => {
   );
 });
 
+test("one hundred draft schedule edits stay deterministic and do not mutate canonical input", () => {
+  const canonical = shortSchedule.map((period) => ({ ...period }));
+  let draft = canonical;
+  for (let index = 0; index < 100; index += 1) {
+    draft = adjustPeriodSchedule(draft, 0, { startTime: index % 2 === 0 ? "08:01" : "08:00" });
+  }
+  assert.deepEqual(canonical, shortSchedule);
+  assert.deepEqual(draft, shortSchedule);
+});
+
 test("uniform duration preserves the first start and every original break", () => {
   assert.deepEqual(applyUniformPeriodDuration(shortSchedule, 40), [
     { period: 1, startTime: "08:00", endTime: "08:40" },

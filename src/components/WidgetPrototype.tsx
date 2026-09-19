@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { buildWidgetViewModel } from "../core/widget-view.ts";
 import {
   DEFAULT_WIDGET_SETTINGS,
   loadWidgetData,
+  loadWidgetSettings,
   patchWidgetSettings,
 } from "../services/widget-data.ts";
 import {
@@ -43,24 +44,40 @@ export function WidgetPrototype() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [settingsError, setSettingsError] = useState("");
   const [clock, setClock] = useState(shanghaiNow);
+  const lockedRef = useRef(settings.locked);
+  const settingsOperation = useRef(0);
+
+  useEffect(() => {
+    lockedRef.current = settings.locked;
+  }, [settings.locked]);
 
   useEffect(() => {
     let active = true;
-    const refresh = async () => {
+    const refreshData = async () => {
+      const settingsRevision = settingsOperation.current;
       try {
         const data = await loadWidgetData();
         if (!active) return;
         setCourses(data.courses);
         setTermConfig(data.termConfig);
-        setSettings(data.settings);
+        if (settingsRevision === settingsOperation.current) setSettings(data.settings);
         setStatus("ready");
       } catch {
         if (active) setStatus("error");
       }
     };
-    void refresh();
-    const unsubscribe = subscribeWidgetDataChanged(() => void refresh());
-    const unsubscribeSettings = subscribeWidgetSettingsChanged(() => void refresh());
+    const refreshSettings = async () => {
+      const revision = ++settingsOperation.current;
+      try {
+        const next = await loadWidgetSettings();
+        if (active && revision === settingsOperation.current) setSettings(next);
+      } catch {
+        if (active) setSettingsError("无法读取小组件设置，将继续显示上一份内容。");
+      }
+    };
+    void refreshData();
+    const unsubscribe = subscribeWidgetDataChanged(() => void refreshData());
+    const unsubscribeSettings = subscribeWidgetSettingsChanged(() => void refreshSettings());
     const timer = window.setInterval(() => setClock(shanghaiNow()), 60_000);
     return () => {
       active = false;
@@ -72,29 +89,37 @@ export function WidgetPrototype() {
 
   useEffect(() => {
     let timer: number | undefined;
+    let active = true;
     const unsubscribe = subscribeWidgetBounds((bounds) => {
-      if (settings.locked) return;
+      if (!active || lockedRef.current) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
+        if (!active) return;
+        const operation = ++settingsOperation.current;
         void patchWidgetSettings(bounds)
           .then((saved) => {
+            if (!active || operation !== settingsOperation.current) return;
             setSettings(saved);
-            notifyWidgetSettingsChanged();
           })
-          .catch(() =>
-            setSettingsError("无法保存小组件位置或尺寸，下次打开将使用上次保存的位置。"),
-          );
+          .catch(() => {
+            if (active) {
+              setSettingsError("无法保存小组件位置或尺寸，下次打开将使用上次保存的位置。");
+            }
+          });
       }, 500);
     });
     return () => {
+      active = false;
       window.clearTimeout(timer);
       unsubscribe();
     };
-  }, [settings]);
+  }, []);
 
   async function updateSettings(change: Partial<WidgetSettings>) {
+    const operation = ++settingsOperation.current;
     try {
       const saved = await patchWidgetSettings(change);
+      if (operation !== settingsOperation.current) return;
       setSettings(saved);
       setSettingsError("");
       notifyWidgetSettingsChanged();
@@ -104,8 +129,10 @@ export function WidgetPrototype() {
   }
 
   async function closeWidget() {
+    const operation = ++settingsOperation.current;
     try {
       const saved = await patchWidgetSettings({ enabled: false });
+      if (operation !== settingsOperation.current) return;
       setSettings(saved);
       notifyWidgetSettingsChanged();
       await hideWidget();
