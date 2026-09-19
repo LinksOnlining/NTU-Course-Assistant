@@ -25,9 +25,21 @@
 
 .widget-prototype__header {
   display: flex;
+  min-height: 40px;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  padding: 4px 2px;
+  cursor: grab;
+  user-select: none;
+}
+
+.widget-prototype__header:active {
+  cursor: grabbing;
+}
+
+.widget-prototype__header.is-locked {
+  cursor: default;
 }
 
 .widget-prototype__controls {
@@ -49,6 +61,7 @@
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
+  user-select: auto;
 }
 
 .widget-prototype__open {
