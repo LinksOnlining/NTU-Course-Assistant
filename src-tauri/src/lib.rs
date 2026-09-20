@@ -188,6 +188,13 @@ async fn import_courses(
 }
 
 #[tauri::command]
+async fn clear_all_courses(state: State<'_, CourseState>) -> Result<(), String> {
+    state
+        .run_in_background("清空全部课程", CourseDatabase::clear_all_courses)
+        .await
+}
+
+#[tauri::command]
 fn update_course(state: State<'_, CourseState>, course: Course) -> Result<(), String> {
     state.run("更新课程", |database| database.update_course(&course))
 }
@@ -591,6 +598,7 @@ pub fn run() {
             load_courses,
             insert_course,
             import_courses,
+            clear_all_courses,
             update_course,
             delete_course,
             load_period_times,

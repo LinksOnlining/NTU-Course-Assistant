@@ -113,6 +113,18 @@ export async function deleteStoredCourse(id: string): Promise<void> {
   }
 }
 
+export async function clearStoredCourses(): Promise<void> {
+  if (usesDevelopmentMemory()) {
+    developmentMemory = [];
+    return;
+  }
+  try {
+    await invoke("clear_all_courses");
+  } catch (error) {
+    throw storageError(error, "清空全部课程失败，当前课程未被修改，请稍后重试。");
+  }
+}
+
 export async function loadStoredPeriodTimes(): Promise<readonly PeriodTime[] | null> {
   if (usesDevelopmentMemory()) {
     return developmentPeriodTimes ? [...developmentPeriodTimes] : null;

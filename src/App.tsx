@@ -25,6 +25,7 @@ import {
 } from "./services/widget-window.ts";
 import {
   deleteStoredCourse,
+  clearStoredCourses,
   importStoredCourses,
   loadHandledReminderKeys,
   insertStoredCourse,
@@ -785,6 +786,12 @@ export function App() {
             setWidgetSettings(saved);
             notifyWidgetSettingsChanged();
             return saved;
+          }}
+          courseCount={userCourses.length}
+          onClearAllCourses={async () => {
+            await clearStoredCourses();
+            setUserCourses([]);
+            notifyWidgetDataChanged();
           }}
           onCheckUpdates={() => void checkForUpdates(true)}
           onBackupRestored={() => {

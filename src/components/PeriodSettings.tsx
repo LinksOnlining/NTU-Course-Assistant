@@ -27,12 +27,14 @@ interface PeriodSettingsProps {
   readonly isUsingTestSchedule: boolean;
   readonly reminderConfiguration: ReminderConfiguration;
   readonly widgetSettings: WidgetSettings;
+  readonly courseCount: number;
   readonly onSave: (
     periods: readonly PeriodTime[],
     termConfig: TermConfig | null,
     reminderSettings: ReminderSettings,
   ) => Promise<void>;
   readonly onSaveWidgetSettings: (patch: Partial<WidgetSettings>) => Promise<WidgetSettings>;
+  readonly onClearAllCourses: () => Promise<void>;
   readonly onCheckUpdates: () => void;
   readonly onBackupRestored: () => void;
   readonly onCancel: () => void;
@@ -43,8 +45,10 @@ export function PeriodSettings({
   isUsingTestSchedule,
   reminderConfiguration,
   widgetSettings,
+  courseCount,
   onSave,
   onSaveWidgetSettings,
+  onClearAllCourses,
   onCheckUpdates,
   onBackupRestored,
   onCancel,
@@ -90,6 +94,9 @@ export function PeriodSettings({
   const [backupMessage, setBackupMessage] = useState("");
   const [isExportingBackup, setIsExportingBackup] = useState(false);
   const [isRestoringBackup, setIsRestoringBackup] = useState(false);
+  const [isConfirmingClearCourses, setIsConfirmingClearCourses] = useState(false);
+  const [isClearingCourses, setIsClearingCourses] = useState(false);
+  const [clearCoursesError, setClearCoursesError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -299,6 +306,22 @@ export function PeriodSettings({
       setBackupMessage(caught instanceof Error ? caught.message : "恢复失败，当前数据未被修改。");
     } finally {
       setIsRestoringBackup(false);
+    }
+  }
+
+  async function clearAllCourses() {
+    setIsClearingCourses(true);
+    setClearCoursesError("");
+    try {
+      await onClearAllCourses();
+      setIsConfirmingClearCourses(false);
+      setBackupMessage("全部课程已清空；作息、学期、提醒和小组件设置均未修改。");
+    } catch (caught: unknown) {
+      setClearCoursesError(
+        caught instanceof Error ? caught.message : "清空全部课程失败，当前课程未被修改。",
+      );
+    } finally {
+      setIsClearingCourses(false);
     }
   }
   async function saveWidget() {
@@ -622,7 +645,52 @@ export function PeriodSettings({
               {backupMessage}
             </p>
           )}
-        </section>{" "}
+        </section>
+        <section className="settings-section" aria-labelledby="course-data-settings-title">
+          <div>
+            <h3 id="course-data-settings-title">课表数据</h3>
+            <p>清空只会删除课程，不会修改作息、学期、提醒、小组件或其他应用偏好。</p>
+          </div>
+          <button
+            type="button"
+            className="danger-button"
+            onClick={() => {
+              setClearCoursesError("");
+              setIsConfirmingClearCourses(true);
+            }}
+            disabled={courseCount === 0 || isClearingCourses}
+          >
+            清空全部课程
+          </button>
+          {isConfirmingClearCourses && (
+            <div className="delete-confirmation" role="alertdialog" aria-label="清空全部课程确认">
+              <p>
+                确定清空全部 {courseCount}{" "}
+                门课程吗？此操作不会删除作息、学期、提醒、小组件设置或其他应用偏好。
+              </p>
+              <p>如需保留课程数据，可先导出备份。</p>
+              {clearCoursesError && <p className="form-error">{clearCoursesError}</p>}
+              <div>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setIsConfirmingClearCourses(false)}
+                  disabled={isClearingCourses}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="danger-button danger-button--confirm"
+                  onClick={() => void clearAllCourses()}
+                  disabled={isClearingCourses}
+                >
+                  {isClearingCourses ? "正在清空…" : "确认清空"}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
         <section className="settings-section" aria-labelledby="about-settings-title">
           <div>
             <h3 id="about-settings-title">关于</h3>

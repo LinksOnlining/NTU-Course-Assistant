@@ -308,6 +308,13 @@ impl CourseDatabase {
         Ok(())
     }
 
+    pub fn clear_all_courses(&self) -> Result<(), StorageError> {
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute("DELETE FROM courses", [])?;
+        transaction.commit()?;
+        Ok(())
+    }
+
     pub fn load_period_times(&self) -> Result<Option<Vec<PeriodTime>>, StorageError> {
         let mut statement = self
             .connection
@@ -804,6 +811,76 @@ mod tests {
     }
 
     #[test]
+    fn clearing_courses_keeps_all_non_course_settings() {
+        let database = database();
+        let saved_course = course();
+        database
+            .insert_course(&saved_course)
+            .expect("insert course");
+        let periods = vec![PeriodTime {
+            period: 1,
+            start_time: "08:00".into(),
+            end_time: "08:45".into(),
+        }];
+        database.save_period_times(&periods).expect("save periods");
+        let term = TermConfig {
+            first_week_monday: "2026-09-07".into(),
+            total_weeks: 18,
+            timezone: "Asia/Shanghai".into(),
+        };
+        let reminders = ReminderSettings {
+            enabled: true,
+            advance_minutes: 15,
+        };
+        database
+            .save_app_settings(&periods, Some(&term), &reminders)
+            .expect("save settings");
+        let widget = WidgetSettings {
+            enabled: true,
+            display_mode: "week".into(),
+            locked: true,
+            x: Some(120),
+            y: Some(80),
+            width: Some(380),
+            height: Some(420),
+        };
+        database
+            .patch_widget_settings(&WidgetSettingsPatch {
+                enabled: Some(widget.enabled),
+                display_mode: Some(widget.display_mode.clone()),
+                locked: Some(widget.locked),
+                x: widget.x,
+                y: widget.y,
+                width: widget.width,
+                height: widget.height,
+            })
+            .expect("save widget");
+        database.save_day_count(5).expect("save day count");
+
+        database.clear_all_courses().expect("clear courses");
+
+        assert!(database
+            .load_courses()
+            .expect("load courses")
+            .courses
+            .is_empty());
+        assert_eq!(
+            database.load_period_times().expect("load periods"),
+            Some(periods)
+        );
+        let configuration = database
+            .load_reminder_configuration()
+            .expect("load reminders");
+        assert_eq!(configuration.term_config, Some(term));
+        assert_eq!(configuration.reminder_settings, reminders);
+        assert_eq!(
+            database.load_widget_settings().expect("load widget"),
+            widget
+        );
+        assert_eq!(database.load_day_count().expect("load day count"), 5);
+    }
+
+    #[test]
     fn corrupt_json_is_reported_and_left_untouched() {
         let database = database();
         let expected = course();
@@ -1296,7 +1373,12 @@ mod tests {
         let course = course();
         database.insert_course(&course).expect("seed course");
         let backup = database.export_backup().expect("export backup");
-        database.delete_course(&course.id).expect("delete course");
+        database.clear_all_courses().expect("clear courses");
+        assert!(database
+            .load_courses()
+            .expect("courses cleared before restore")
+            .courses
+            .is_empty());
         database.restore_backup(&backup).expect("restore backup");
         assert_eq!(
             database.load_courses().expect("restored courses").courses,
