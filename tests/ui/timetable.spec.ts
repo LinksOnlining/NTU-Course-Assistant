@@ -340,6 +340,17 @@ test("real PDF import supports final review, rollback-safe retry, duplicates and
     delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   });
 
+  // A completed import must leave the active renderer able to save both
+  // independent settings paths. This guards the post-import runtime state,
+  // rather than only validating the import transaction itself.
+  await page.getByRole("button", { name: "设置" }).click();
+  const postImportSettings = page.getByRole("dialog", { name: "作息时间" });
+  await postImportSettings.getByRole("button", { name: "保存小组件设置" }).click();
+  await expect(postImportSettings.getByRole("button", { name: "保存小组件设置" })).toBeEnabled();
+  await postImportSettings.getByRole("button", { name: "添加节次" }).click();
+  await postImportSettings.getByRole("button", { name: "保存作息" }).click();
+  await expect(postImportSettings).toHaveCount(0);
+
   await selectPdfPath(page, samplePath!);
   const duplicatePreview = page.getByRole("dialog", { name: "检查导入候选" });
   await completePracticeCandidates(duplicatePreview);

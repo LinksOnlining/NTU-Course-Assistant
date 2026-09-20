@@ -114,7 +114,16 @@ test("PDF preview and proposal preparation cannot call storage adapters", () => 
 test("batch PDF persistence crosses one frontend service and one Rust transaction command", () => {
   const service = source("src/services/course-storage.ts");
   const app = source("src/App.tsx");
+  const rust = source("src-tauri/src/lib.rs");
   assert.match(service, /invoke<readonly Course\[]>\("import_courses", \{ courses \}\)/);
   assert.match(app, /importStoredCourses\(pendingImportCourses\)/);
+  assert.match(
+    rust,
+    /async fn import_courses[\s\S]{0,240}run_in_background\("批量导入课程"/,
+  );
+  assert.match(
+    rust,
+    /async fn load_handled_reminder_keys[\s\S]{0,180}run_in_background\("读取提醒状态"/,
+  );
   assert.doesNotMatch(app, /for[\s\S]{0,120}insertStoredCourse/);
 });

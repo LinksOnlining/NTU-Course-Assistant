@@ -176,13 +176,15 @@ fn insert_course(state: State<'_, CourseState>, course: Course) -> Result<(), St
 }
 
 #[tauri::command]
-fn import_courses(
+async fn import_courses(
     state: State<'_, CourseState>,
     courses: Vec<Course>,
 ) -> Result<Vec<Course>, String> {
-    state.run("批量导入课程", |database| {
-        database.import_courses(&courses)
-    })
+    state
+        .run_in_background("批量导入课程", move |database| {
+            database.import_courses(&courses)
+        })
+        .await
 }
 
 #[tauri::command]
@@ -233,8 +235,10 @@ fn load_reminder_configuration(
 }
 
 #[tauri::command]
-fn load_handled_reminder_keys(state: State<'_, CourseState>) -> Result<Vec<String>, String> {
-    state.run("读取提醒状态", CourseDatabase::load_handled_reminder_keys)
+async fn load_handled_reminder_keys(state: State<'_, CourseState>) -> Result<Vec<String>, String> {
+    state
+        .run_in_background("读取提醒状态", CourseDatabase::load_handled_reminder_keys)
+        .await
 }
 
 #[tauri::command]
