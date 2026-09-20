@@ -80,7 +80,10 @@ export async function choosePdfFile(): Promise<SelectedPdfFile | null> {
     multiple: false,
     filters: [{ name: "PDF 文件", extensions: ["pdf"] }],
   });
-  if (selected === null || Array.isArray(selected)) return null;
+  // Tauri normally returns null on cancel. Keep the cancel branch tolerant of
+  // older/native dialog implementations that use undefined or an empty list.
+  if (selected == null || (Array.isArray(selected) && selected.length === 0)) return null;
+  if (Array.isArray(selected)) return null;
   const fileName = fileNameFromPath(selected);
   ensurePdfName(fileName);
   try {

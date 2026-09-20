@@ -712,11 +712,13 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
   await expect(settings.getByRole("button", { name: "保存中…" })).toBeVisible();
   await invokePdfDialog();
   await expect.poll(dialogCalls).toBe(1);
+  await expect(page.getByRole("button", { name: "导入 PDF" })).toBeEnabled();
 
   await settings.getByRole("button", { name: "保存作息" }).click();
   await expect(settings.getByRole("button", { name: "保存中…" })).toHaveCount(2);
   await invokePdfDialog();
   await expect.poll(dialogCalls).toBe(2);
+  await expect(page.getByRole("button", { name: "导入 PDF" })).toBeEnabled();
 
   await page.evaluate(() =>
     (
@@ -726,6 +728,7 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
   await expect(settings.getByRole("button", { name: "保存小组件设置" })).toBeEnabled();
   await invokePdfDialog();
   await expect.poll(dialogCalls).toBe(3);
+  await expect(page.getByRole("button", { name: "导入 PDF" })).toBeEnabled();
   await page.evaluate(() =>
     (
       window as Window & { __pdfDialogRegression: { reject(key: string, reason: string): void } }
@@ -736,6 +739,195 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
   await settings.getByRole("button", { name: "关闭作息设置" }).click();
   await page.getByRole("button", { name: "导入 PDF" }).click();
   await expect.poll(dialogCalls).toBe(4);
+  await expect(page.getByRole("button", { name: "导入 PDF" })).toBeEnabled();
+});
+
+test("PDF dialog errors release the cancel-path operation gate", async ({ page }) => {
+  await page.addInitScript(() => {
+    let dialogCalls = 0;
+    let shouldFail = true;
+    Object.assign(window, {
+      __pdfDialogErrorRegression: {
+        dialogCalls: () => dialogCalls,
+        allowNextDialog: () => {
+          shouldFail = false;
+        },
+      },
+    });
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: (command: string) => {
+          if (command === "load_courses") return Promise.resolve({ courses: [], warnings: [] });
+          if (command === "load_period_times") return Promise.resolve(null);
+          if (command === "load_day_count") return Promise.resolve(7);
+          if (command === "load_reminder_configuration") {
+            return Promise.resolve({
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            });
+          }
+          if (command === "load_widget_settings") {
+            return Promise.resolve({
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            });
+          }
+          if (command === "plugin:autostart|is_enabled") return Promise.resolve(false);
+          if (command === "refresh_reminder_schedule") return Promise.resolve(undefined);
+          if (command === "plugin:dialog|open") {
+            dialogCalls += 1;
+            return shouldFail
+              ? Promise.reject(new Error("模拟文件选择器失败"))
+              : Promise.resolve(null);
+          }
+          throw new Error(`未预期的命令：${command}`);
+        },
+      },
+    });
+  });
+  await page.reload();
+  const importButton = page.getByRole("button", { name: "导入 PDF" });
+  await importButton.click();
+  await expect(page.getByRole("alert")).toHaveText("无法读取该 PDF，请确认文件后重试。");
+  await expect(importButton).toBeEnabled();
+  await page.evaluate(() =>
+    (
+      window as Window & { __pdfDialogErrorRegression: { allowNextDialog(): void } }
+    ).__pdfDialogErrorRegression.allowNextDialog(),
+  );
+  await importButton.click();
+  await expect(importButton).toBeEnabled();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("PDF dialog cancel result variants release the operation gate", async ({ page }) => {
+  await page.addInitScript(() => {
+    let resultIndex = 0;
+    const results: unknown[] = [undefined, [], null];
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: (command: string) => {
+          if (command === "load_courses") return Promise.resolve({ courses: [], warnings: [] });
+          if (command === "load_period_times") return Promise.resolve(null);
+          if (command === "load_day_count") return Promise.resolve(7);
+          if (command === "load_reminder_configuration") {
+            return Promise.resolve({
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            });
+          }
+          if (command === "load_widget_settings") {
+            return Promise.resolve({
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            });
+          }
+          if (command === "plugin:autostart|is_enabled") return Promise.resolve(false);
+          if (command === "refresh_reminder_schedule") return Promise.resolve(undefined);
+          if (command === "plugin:dialog|open") {
+            return Promise.resolve(results[resultIndex++]);
+          }
+          throw new Error(`未预期的命令：${command}`);
+        },
+      },
+    });
+  });
+  await page.reload();
+  const importButton = page.getByRole("button", { name: "导入 PDF" });
+  for (let index = 0; index < 3; index += 1) {
+    await importButton.click();
+    await expect(importButton).toBeEnabled();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  }
+});
+
+test("canceling PDF picker returns to idle before subsequent settings saves", async ({ page }) => {
+  await page.addInitScript(() => {
+    let resolveDialog: ((value: unknown) => void) | undefined;
+    const widgetSettings = {
+      enabled: false,
+      displayMode: "today",
+      locked: false,
+      x: null,
+      y: null,
+      width: null,
+      height: null,
+    };
+    Object.assign(window, {
+      __pdfCancelRegression: {
+        cancel: () => resolveDialog?.(null),
+      },
+    });
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: (command: string) => {
+          if (command === "load_courses") return Promise.resolve({ courses: [], warnings: [] });
+          if (command === "load_period_times") return Promise.resolve(null);
+          if (command === "load_day_count") return Promise.resolve(7);
+          if (command === "load_reminder_configuration") {
+            return Promise.resolve({
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            });
+          }
+          if (command === "load_widget_settings") return Promise.resolve(widgetSettings);
+          if (command === "plugin:autostart|is_enabled") return Promise.resolve(false);
+          if (command === "patch_widget_settings") return Promise.resolve(widgetSettings);
+          if (command === "save_app_settings") {
+            return Promise.resolve({
+              periods: [{ period: 1, startTime: "08:00", endTime: "08:45" }],
+              configuration: {
+                termConfig: null,
+                reminderSettings: { enabled: false, advanceMinutes: 15 },
+              },
+            });
+          }
+          if (command === "plugin:dialog|open") {
+            return new Promise((resolve) => {
+              resolveDialog = resolve;
+            });
+          }
+          if (command === "refresh_reminder_schedule") return Promise.resolve(undefined);
+          throw new Error(`未预期的命令：${command}`);
+        },
+      },
+    });
+  });
+  await page.reload();
+  const importButton = page.getByRole("button", { name: "导入 PDF" });
+  await importButton.click();
+  await expect(page.getByText("正在打开 PDF 文件选择器…")).toBeVisible();
+  await expect(importButton).toBeDisabled();
+  await page.evaluate(() =>
+    (
+      window as Window & { __pdfCancelRegression: { cancel(): void } }
+    ).__pdfCancelRegression.cancel(),
+  );
+  await expect(page.getByText("正在打开 PDF 文件选择器…")).toHaveCount(0);
+  await expect(importButton).toBeEnabled();
+
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "作息时间" });
+  await settings.getByRole("button", { name: "保存小组件设置" }).click();
+  await expect(settings.getByRole("button", { name: "保存小组件设置" })).toBeEnabled();
+  await settings.getByRole("button", { name: "保存作息" }).click();
+  await expect(settings).toHaveCount(0);
 });
 
 test("overlap chain is visible in two lanes", async ({ page }) => {

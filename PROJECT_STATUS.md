@@ -1,12 +1,12 @@
 # 项目状态
 
 - 最后更新：2026-09-20
-- 当前阶段：**v1.2.0 本地最终构建，等待 Windows 人工验收**。Backup / Restore 已完整移除且 SQLite schema 保持 4；课程写入与清空命令统一使用后台存储边界，提醒刷新采用 generation 防旧刷新覆盖，小组件刷新采用 single-flight/coalescing 并保留 last-known-good 内容。自动回归、Rust 检查和本地生产构建均通过；尚未创建 v1.2.0 tag 或发布 Release。
+- 当前阶段：**v1.2.0 本地最终构建，等待 Windows 人工验收**。Backup / Restore 已完整移除且 SQLite schema 保持 4；课程写入与清空命令统一使用后台存储边界，提醒刷新采用 generation 防旧刷新覆盖，小组件刷新采用 single-flight/coalescing 并保留 last-known-good 内容；PDF 文件选择器取消/异常路径现在显式释放操作状态。自动回归、Rust 检查和本地生产构建均通过；尚未创建 v1.2.0 tag 或发布 Release。
 - v1.2.0 RC：Updater 使用 Tauri 官方签名、GitHub Releases HTTPS endpoint 和 Windows passive installer；启动后台检查、关于页手动检查、更新弹窗、进度、失败重试与 Release 回退均已实现。PDF 导入完成后显示基于实际 ImportPlan 的结果统计。正式签名 NSIS/MSI 及 `.sig` 本地产物已确认；最终 Windows 安装态人工验收与真实 GitHub Release updater E2E 待 RC 接受后完成。Backup / Restore 已从 v1.2.0 移除。
 - 阶段门禁：Phase 7.4 离屏恢复、保存回归修复、自动验证、开发态/安装态启动和 Windows 人工验收均已完成。双显示器移除与 DPI 切换未单独执行，保留为已有 physical geometry fallback 自动覆盖的 documented limitation，不阻断 V1。
 - 已完成：Phase 0；Phase 1 全部；Phase 2 全部；Phase 2.5 节次显示；Phase 2.6 用户可配置作息；Phase 2.7 桌面时间轴与自适应课程文字。
 - 核心规则：严格 HH:mm；课程 top/height 只由实际时间及 pxPerMinute 决定；07:00–22:00 轴保留真实空闲比例；重叠链由纯布局函数分配横向 lane；星期列始终为周一至周日。
-- 验证 PASS：严格 typecheck、107 项 TypeScript 单元测试、44 项架构测试、33 项 Rust 测试、342 个 UI 场景（327 通过、15 项按设备/私有样本条件跳过）、clippy、oxlint、Prettier、npm run build、npm run verify 与 `npm run tauri build`。
+- 验证 PASS：严格 typecheck、112 项 TypeScript 单元测试、48 项架构测试、36 项 Rust 测试、423 个 UI 场景（408 通过、15 项按设备/私有样本条件跳过）、clippy、oxlint、Prettier、npm run build、npm run verify 与 `npm run tauri build`。
 - Desktop PASS：真实 Tauri 独立窗口完成 schema 3→4、due 后 handled 持久化、关闭重启后的去重和未来计划恢复；标题为“大学课程表”且进程响应正常。
 - 测试配置：src/config/timetable.ts 中 TEST_TIMETABLE 明确 purpose=test-only，测试轴为 07:00–22:00、当前周为第 3 周、每分钟 1px；src/fixtures/courses.ts 全部为测试数据，不代表正式南通大学课表或作息。
 - 架构：core 只依赖同层逻辑及共享纯类型，不访问 DOM/React/Tauri/系统 IO；组件只消费 core 返回的分钟几何数据。

@@ -70,6 +70,7 @@ interface PdfImportResult {
 
 type PdfImportState =
   | { readonly kind: "idle" }
+  | { readonly kind: "opening" }
   | {
       readonly kind: "reading";
       readonly fileName: string;
@@ -125,6 +126,8 @@ export function App() {
   const initialScrollDone = useRef(false);
   const widgetSettingsRevision = useRef(0);
   const courseMutationGeneration = useRef(0);
+  const pdfDialogGeneration = useRef(0);
+  const pdfDialogActive = useRef(false);
   const reminderRefreshGeneration = useRef(0);
   const fixtureCourses = showDevelopmentFixtures ? TEST_COURSES : [];
   const courses = useMemo(() => [...fixtureCourses, ...userCourses], [fixtureCourses, userCourses]);
@@ -358,9 +361,25 @@ export function App() {
   }
 
   async function importPdf() {
+    if (pdfDialogActive.current || pdfImport.kind === "opening" || pdfImport.kind === "reading") {
+      return;
+    }
+    const generation = ++pdfDialogGeneration.current;
+    pdfDialogActive.current = true;
+    const trace = beginRuntimeTrace("pdf-dialog", generation);
+    setPdfImport({ kind: "opening" });
+    trace("click");
+    trace("operation-acquire");
     try {
+      trace("open-start");
       const file = await choosePdfFile();
-      if (file === null) return;
+      trace(`open-return-${file === null ? "cancel" : "selected"}`);
+      if (file === null) {
+        trace("result-cancel");
+        setPdfImport({ kind: "idle" });
+        return;
+      }
+      trace("result-selected");
       setImportPlan(null);
       setPendingImportCourses([]);
       setImportError("");
@@ -382,9 +401,17 @@ export function App() {
       setCandidateEdits({});
       setPdfImport({ kind: "success", document, candidates });
     } catch (error) {
+      trace("result-error");
       const message =
         error instanceof PdfImportError ? error.message : "无法读取该 PDF，请确认文件后重试。";
       setPdfImport({ kind: "error", message });
+    } finally {
+      trace("cleanup-start");
+      if (pdfDialogGeneration.current === generation) {
+        pdfDialogActive.current = false;
+      }
+      trace("operation-release");
+      trace("handler-return");
     }
   }
 
@@ -475,7 +502,7 @@ export function App() {
             type="button"
             className="pdf-import-button"
             onClick={() => void importPdf()}
-            disabled={pdfImport.kind === "reading"}
+            disabled={pdfImport.kind === "opening" || pdfImport.kind === "reading"}
             aria-label="导入 PDF"
           >
             导入 PDF
@@ -692,6 +719,11 @@ export function App() {
       {periodMessage && isUsingTestSchedule && (
         <p className="schedule-notice" role="status" data-testid="schedule-notice">
           {periodMessage}
+        </p>
+      )}
+      {pdfImport.kind === "opening" && (
+        <p className="pdf-import-status" role="status">
+          正在打开 PDF 文件选择器…
         </p>
       )}
       {pdfImport.kind === "reading" && (
