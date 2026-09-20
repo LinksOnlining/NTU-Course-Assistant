@@ -582,6 +582,102 @@ test("failed schedule save keeps the old timeline", async ({ page }) => {
   await expect(page.locator('[data-period="1"]')).toHaveCSS("height", "45px");
 });
 
+test("PDF dialog invocation stays responsive while settings writes are pending or fail", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    type Deferred = { resolve: () => void; reject: (reason: string) => void };
+    const pending: Record<string, Deferred | undefined> = {};
+    let dialogCalls = 0;
+    const widgetSettings = {
+      enabled: false,
+      displayMode: "today",
+      locked: false,
+      x: null,
+      y: null,
+      width: null,
+      height: null,
+    };
+    const defer = (key: string, value: unknown = undefined) =>
+      new Promise((resolve, reject) => {
+        pending[key] = { resolve: () => resolve(value), reject: (reason) => reject(reason) };
+      });
+    Object.assign(window, {
+      __pdfDialogRegression: {
+        dialogCalls: () => dialogCalls,
+        resolve: (key: string) => pending[key]?.resolve(),
+        reject: (key: string, reason: string) => pending[key]?.reject(reason),
+      },
+    });
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: (command: string) => {
+          if (command === "load_courses") return Promise.resolve({ courses: [], warnings: [] });
+          if (command === "load_period_times") return Promise.resolve(null);
+          if (command === "load_day_count") return Promise.resolve(7);
+          if (command === "load_reminder_configuration") {
+            return Promise.resolve({
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            });
+          }
+          if (command === "load_widget_settings") return Promise.resolve(widgetSettings);
+          if (command === "plugin:autostart|is_enabled") return Promise.resolve(false);
+          if (command === "patch_widget_settings") return defer("widget", widgetSettings);
+          if (command === "save_app_settings") return defer("schedule");
+          if (command === "plugin:dialog|open") {
+            dialogCalls += 1;
+            return Promise.resolve(null);
+          }
+          if (command === "refresh_reminder_schedule") return Promise.resolve(undefined);
+          throw new Error(`未预期的命令：${command}`);
+        },
+      },
+    });
+  });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "作息时间" });
+
+  const invokePdfDialog = () =>
+    page.locator(".pdf-import-button").evaluate((button) => (button as HTMLButtonElement).click());
+  const dialogCalls = () =>
+    page.evaluate(() =>
+      (window as Window & { __pdfDialogRegression: { dialogCalls(): number } }).__pdfDialogRegression.dialogCalls(),
+    );
+
+  await settings.getByRole("button", { name: "保存小组件设置" }).click();
+  await expect(settings.getByRole("button", { name: "保存中…" })).toBeVisible();
+  await invokePdfDialog();
+  await expect.poll(dialogCalls).toBe(1);
+
+  await settings.getByRole("button", { name: "保存作息" }).click();
+  await expect(settings.getByRole("button", { name: "保存中…" })).toHaveCount(2);
+  await invokePdfDialog();
+  await expect.poll(dialogCalls).toBe(2);
+
+  await page.evaluate(() =>
+    (window as Window & { __pdfDialogRegression: { resolve(key: string): void } }).__pdfDialogRegression.resolve("widget"),
+  );
+  await expect(settings.getByRole("button", { name: "保存小组件设置" })).toBeEnabled();
+  await invokePdfDialog();
+  await expect.poll(dialogCalls).toBe(3);
+  await page.evaluate(() =>
+    (window as Window & { __pdfDialogRegression: { reject(key: string, reason: string): void } }).__pdfDialogRegression.reject(
+      "schedule",
+      "模拟保存失败",
+    ),
+  );
+  await expect(settings.getByRole("alert")).toHaveText("模拟保存失败");
+
+  await settings.getByRole("button", { name: "关闭作息设置" }).click();
+  await page.getByRole("button", { name: "导入 PDF" }).click();
+  await expect.poll(dialogCalls).toBe(4);
+});
+
 test("overlap chain is visible in two lanes", async ({ page }) => {
   const first = await box(page.locator('[data-course-id="tuesday-overlap-a"]'));
   const second = await box(page.locator('[data-course-id="tuesday-overlap-b"]'));

@@ -102,6 +102,17 @@ impl CourseState {
             format!("{operation}失败，请稍后重试。")
         })
     }
+
+    async fn run_in_background<T: Send + 'static>(
+        &self,
+        operation: &'static str,
+        action: impl FnOnce(&CourseDatabase) -> Result<T, db::StorageError> + Send + 'static,
+    ) -> Result<T, String> {
+        let state = self.clone();
+        tauri::async_runtime::spawn_blocking(move || state.run(operation, action))
+            .await
+            .map_err(|_| format!("{operation}失败，请稍后重试。"))?
+    }
 }
 
 impl scheduler::HandledStore for SqliteHandledStore {
@@ -219,21 +230,23 @@ fn load_handled_reminder_keys(state: State<'_, CourseState>) -> Result<Vec<Strin
 }
 
 #[tauri::command]
-fn save_app_settings(
+async fn save_app_settings(
     state: State<'_, CourseState>,
     periods: Vec<PeriodTime>,
     term_config: Option<TermConfig>,
     reminder_settings: ReminderSettings,
 ) -> Result<SavedAppSettings, String> {
-    state.run("保存应用设置", |database| {
-        database.save_app_settings(&periods, term_config.as_ref(), &reminder_settings)?;
-        Ok(SavedAppSettings {
-            periods: database
-                .load_period_times()?
-                .ok_or_else(|| db::StorageError::InvalidData("作息保存后无法读取。".into()))?,
-            configuration: database.load_reminder_configuration()?,
+    state
+        .run_in_background("保存应用设置", move |database| {
+            database.save_app_settings(&periods, term_config.as_ref(), &reminder_settings)?;
+            Ok(SavedAppSettings {
+                periods: database
+                    .load_period_times()?
+                    .ok_or_else(|| db::StorageError::InvalidData("作息保存后无法读取。".into()))?,
+                configuration: database.load_reminder_configuration()?,
+            })
         })
-    })
+        .await
 }
 
 #[tauri::command]
@@ -265,15 +278,18 @@ fn restore_backup(state: State<'_, CourseState>, backup: db::BackupData) -> Resu
 }
 
 #[tauri::command]
-fn patch_widget_settings(
+async fn patch_widget_settings(
     app: tauri::AppHandle,
     state: State<'_, CourseState>,
     patch: WidgetSettingsPatch,
 ) -> Result<WidgetSettings, String> {
-    let settings = state.run("保存小组件设置", |database| {
-        database.patch_widget_settings(&patch)
-    })?;
-    if patch.locked.is_some() {
+    let updates_lock_state = patch.locked.is_some();
+    let settings = state
+        .run_in_background("保存小组件设置", move |database| {
+            database.patch_widget_settings(&patch)
+        })
+        .await?;
+    if updates_lock_state {
         let app = app.clone();
         let locked = settings.locked;
         tauri::async_runtime::spawn(async move {

@@ -1,7 +1,7 @@
 # 项目状态
 
 - 最后更新：2026-09-20
-- 当前阶段：**v1.2.0 Release Candidate 收口中**。稳定性提交 `e4d38bb`（Settings / Schedule / Widget）和 `d106720`（Widget drag area）均经人工验收 PASS，除真实回归外保持冻结；尚未创建 v1.2.0 tag 或发布 Release。
+- 当前阶段：**v1.2.0 Release Candidate 收口中**。稳定性提交 `e4d38bb`（Settings / Schedule / Widget）和 `d106720`（Widget drag area）均经人工验收 PASS，除真实回归外保持冻结；已修复同步 settings-save 在 SQLite 等待时挤占 Tauri 命令运行时、连带阻塞 PDF 原生文件选择器的问题，尚未创建 v1.2.0 tag 或发布 Release。
 - v1.2.0 RC：Updater 使用 Tauri 官方签名、GitHub Releases HTTPS endpoint 和 Windows passive installer；启动后台检查、关于页手动检查、更新弹窗、进度、失败重试与 Release 回退均已实现。JSON 备份/恢复在单一 SQLite transaction 中处理课程、作息、学期、提醒、小组件逻辑设置和 5/7 天偏好，恢复后立即刷新 runtime、scheduler 与 widget；不备份 PDF、日志、处理历史、机器几何或 Autostart OS 状态。PDF 导入完成后显示基于实际 ImportPlan 的结果统计。正式签名 NSIS/MSI 及 `.sig` 本地产物已确认；最终 Windows 安装态人工验收与真实 GitHub Release updater E2E 待 RC 接受后完成。
 - 阶段门禁：Phase 7.4 离屏恢复、保存回归修复、自动验证、开发态/安装态启动和 Windows 人工验收均已完成。双显示器移除与 DPI 切换未单独执行，保留为已有 physical geometry fallback 自动覆盖的 documented limitation，不阻断 V1。
 - 已完成：Phase 0；Phase 1 全部；Phase 2 全部；Phase 2.5 节次显示；Phase 2.6 用户可配置作息；Phase 2.7 桌面时间轴与自适应课程文字。
