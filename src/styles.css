@@ -1698,20 +1698,6 @@ select:focus-visible {
     grid-template-columns: 1fr;
   }
 }
-.backup-restore-preview {
-  display: grid;
-  gap: 7px;
-  padding: 11px;
-  border: 1px solid #b9d8c9;
-  border-radius: 8px;
-  background: #edf8f1;
-  color: #315f52;
-}
-
-.backup-restore-preview p {
-  margin: 0;
-}
-
 .import-result-panel {
   display: flex;
   align-items: center;

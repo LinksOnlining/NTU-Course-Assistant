@@ -16,6 +16,7 @@ import { parseNtuPdfTimetable } from "./importers/ntu-pdf/parse.ts";
 import { TEST_COURSES } from "./fixtures/courses.ts";
 import { choosePdfFile, extractPdfText, PdfImportError } from "./services/pdf-import.ts";
 import { subscribeReminderResume } from "./services/reminder-lifecycle.ts";
+import { beginRuntimeTrace } from "./services/runtime-trace.ts";
 import {
   hideWidget,
   notifyWidgetDataChanged,
@@ -110,7 +111,6 @@ export function App() {
   const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
   const [dayCount, setDayCount] = useState<5 | 7>(7);
   const [scrollRequest, setScrollRequest] = useState(0);
-  const [restoreNonce, setRestoreNonce] = useState(0);
   const [updateState, setUpdateState] = useState<
     "idle" | "checking" | "available" | "downloading" | "installing" | "upToDate" | "error"
   >("idle");
@@ -124,6 +124,8 @@ export function App() {
   const timetableScrollRef = useRef<HTMLDivElement>(null);
   const initialScrollDone = useRef(false);
   const widgetSettingsRevision = useRef(0);
+  const courseMutationGeneration = useRef(0);
+  const reminderRefreshGeneration = useRef(0);
   const fixtureCourses = showDevelopmentFixtures ? TEST_COURSES : [];
   const courses = useMemo(() => [...fixtureCourses, ...userCourses], [fixtureCourses, userCourses]);
   const axis = useMemo(() => getTimelineBounds(TEST_TIMETABLE.axis, periods), [periods]);
@@ -171,17 +173,32 @@ export function App() {
   useEffect(() => {
     if (storageStatus !== "ready") return;
     let active = true;
+    const generation = courseMutationGeneration.current;
+    const refreshGeneration = ++reminderRefreshGeneration.current;
     const rebuildSchedule = async () => {
+      const trace = beginRuntimeTrace("reminder.refresh", generation);
       const plans = buildReminderPlans(userCourses, reminderConfiguration);
+      trace(`plans-${plans.length}`);
+      if (plans.length === 0) {
+        if (!active || refreshGeneration !== reminderRefreshGeneration.current) return;
+        await refreshStoredReminderSchedule(reminderConfiguration, []);
+        trace("empty-plan-scheduled");
+        return;
+      }
       try {
         const handled = new Set(await loadHandledReminderKeys());
-        if (!active) return;
+        trace("handled-read");
+        if (!active || refreshGeneration !== reminderRefreshGeneration.current) return;
         await refreshStoredReminderSchedule(
           reminderConfiguration,
           excludeHandledReminderPlans(plans, handled),
         );
+        trace("scheduled");
       } catch {
-        if (active) await refreshStoredReminderSchedule(reminderConfiguration, plans);
+        if (active && refreshGeneration === reminderRefreshGeneration.current) {
+          await refreshStoredReminderSchedule(reminderConfiguration, plans);
+        }
+        trace("scheduled-without-history");
       }
     };
     const resume = () => void rebuildSchedule().catch(() => undefined);
@@ -237,10 +254,6 @@ export function App() {
             }
           });
           setUserCourses(renderableCourses);
-          if (restoreNonce > 0) {
-            notifyWidgetDataChanged();
-            notifyWidgetSettingsChanged();
-          }
           setStorageMessage(warnings.join(" "));
           setStorageStatus("ready");
         },
@@ -253,7 +266,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [restoreNonce]);
+  }, []);
 
   useEffect(() => {
     let timeout: number | undefined;
@@ -402,16 +415,22 @@ export function App() {
 
   async function confirmPdfImport() {
     if (isImporting || importPlan === null || !importEvaluation.canContinue) return;
+    const generation = ++courseMutationGeneration.current;
+    const trace = beginRuntimeTrace("pdf-import", generation);
     setIsImporting(true);
     setImportError("");
     try {
+      trace("transaction-start");
       const inserted =
         pendingImportCourses.length === 0 ? [] : await importStoredCourses(pendingImportCourses);
+      trace("transaction-committed");
       if (inserted.length !== pendingImportCourses.length) {
         throw new Error("数据库返回的课程数量不一致，界面未更新，请重试。");
       }
       setUserCourses((current) => [...current, ...inserted]);
+      trace("courses-published");
       notifyWidgetDataChanged();
+      trace("widget-notified");
       const warnings = importPlan.entries.filter((entry) => {
         if (entry.action !== "insert") return false;
         return importEvaluation.candidates
@@ -430,6 +449,7 @@ export function App() {
       setCandidateEdits({});
       setImportPlan(null);
       setPendingImportCourses([]);
+      trace("return");
     } catch (error) {
       setImportError(
         error instanceof Error ? error.message : "批量导入失败，未保存任何课程，请稍后重试。",
@@ -786,40 +806,47 @@ export function App() {
       )}
       {isPeriodSettingsOpen && (
         <PeriodSettings
-          key={`period-settings-${restoreNonce}`}
           periods={periods}
           isUsingTestSchedule={isUsingTestSchedule}
           reminderConfiguration={reminderConfiguration}
           widgetSettings={widgetSettings}
           onSave={async (nextPeriods, termConfig, reminderSettings) => {
+            const trace = beginRuntimeTrace("period-save", courseMutationGeneration.current);
             const saved = await saveStoredAppSettings(nextPeriods, termConfig, reminderSettings);
+            trace("db-returned");
             setPeriods([...saved.periods]);
             setIsUsingTestSchedule(false);
             setReminderConfiguration(saved.configuration);
             notifyWidgetDataChanged();
+            trace("widget-notified");
             setPeriodMessage("");
             setIsPeriodSettingsOpen(false);
           }}
           onSaveWidgetSettings={async (patch) => {
+            const trace = beginRuntimeTrace("widget-save", courseMutationGeneration.current);
             const saved = await patchStoredWidgetSettings(patch);
+            trace("db-returned");
             // Window creation/showing can take longer than the storage write on Windows.
             // Do not hold the settings dialog in a perpetual "saving" state while it does so.
             void (saved.enabled ? showWidget() : hideWidget()).catch(() => undefined);
             widgetSettingsRevision.current += 1;
             setWidgetSettings(saved);
             notifyWidgetSettingsChanged();
+            trace("widget-notified");
             return saved;
           }}
           courseCount={userCourses.length}
           onClearAllCourses={async () => {
+            const generation = ++courseMutationGeneration.current;
+            const trace = beginRuntimeTrace("clear-courses", generation);
             await clearStoredCourses();
+            trace("transaction-committed");
             setUserCourses([]);
+            trace("courses-published");
             notifyWidgetDataChanged();
+            trace("widget-notified");
           }}
           onCheckUpdates={() => void checkForUpdates(true)}
-          onBackupRestored={() => {
-            setRestoreNonce((value) => value + 1);
-          }}
           onCancel={() => setIsPeriodSettingsOpen(false)}
         />
       )}

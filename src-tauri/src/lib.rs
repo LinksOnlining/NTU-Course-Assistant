@@ -3,7 +3,13 @@ mod models;
 mod notification;
 mod scheduler;
 
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
+    time::Instant,
+};
 
 use db::CourseDatabase;
 use models::{
@@ -21,6 +27,32 @@ use tauri::{
 const TRAY_OPEN_MAIN: &str = "tray-open-main";
 const TRAY_TOGGLE_WIDGET: &str = "tray-toggle-widget";
 const TRAY_QUIT: &str = "tray-quit";
+
+static RUNTIME_OPERATION_ID: AtomicU64 = AtomicU64::new(1);
+
+#[cfg(debug_assertions)]
+fn trace_runtime(stage: &str, request_id: u64, elapsed: std::time::Duration) {
+    eprintln!(
+        "[runtime] request={request_id} stage={stage} elapsed_ms={} thread={:?}",
+        elapsed.as_millis(),
+        std::thread::current().id()
+    );
+}
+
+#[cfg(not(debug_assertions))]
+fn trace_runtime(_stage: &str, _request_id: u64, _elapsed: std::time::Duration) {}
+
+#[tauri::command]
+#[allow(dead_code)]
+fn trace_runtime_event(stage: String, generation: u64, elapsed_ms: u64) {
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[frontend] generation={generation} stage={stage} elapsed_ms={elapsed_ms} thread={:?}",
+        std::thread::current().id()
+    );
+    #[cfg(not(debug_assertions))]
+    let _ = (stage, generation, elapsed_ms);
+}
 
 #[cfg(debug_assertions)]
 fn debug_widget(message: &str) {
@@ -94,17 +126,30 @@ impl CourseState {
         operation: &str,
         action: impl FnOnce(&CourseDatabase) -> Result<T, db::StorageError>,
     ) -> Result<T, String> {
+        let request_id = RUNTIME_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
+        let started = Instant::now();
+        trace_runtime(&format!("{operation}.start"), request_id, started.elapsed());
         let result = {
             let storage = self
                 .0
                 .lock()
                 .map_err(|_| "课程存储当前不可用，请重新启动应用。".to_string())?;
+            trace_runtime(
+                &format!("{operation}.lock-acquired"),
+                request_id,
+                started.elapsed(),
+            );
             let database = match &*storage {
                 StorageAvailability::Ready(database) => database,
                 StorageAvailability::Unavailable { message } => return Err(message.clone()),
             };
             action(database)
         };
+        trace_runtime(
+            &format!("{operation}.db-released"),
+            request_id,
+            started.elapsed(),
+        );
         result.map_err(|error| {
             eprintln!("Course database {operation} failed: {error}");
             format!("{operation}失败，请稍后重试。")
@@ -171,8 +216,12 @@ fn load_courses(state: State<'_, CourseState>) -> Result<LoadCoursesResponse, St
 }
 
 #[tauri::command]
-fn insert_course(state: State<'_, CourseState>, course: Course) -> Result<(), String> {
-    state.run("保存课程", |database| database.insert_course(&course))
+async fn insert_course(state: State<'_, CourseState>, course: Course) -> Result<(), String> {
+    state
+        .run_in_background("保存课程", move |database| {
+            database.insert_course(&course)
+        })
+        .await
 }
 
 #[tauri::command]
@@ -195,13 +244,19 @@ async fn clear_all_courses(state: State<'_, CourseState>) -> Result<(), String> 
 }
 
 #[tauri::command]
-fn update_course(state: State<'_, CourseState>, course: Course) -> Result<(), String> {
-    state.run("更新课程", |database| database.update_course(&course))
+async fn update_course(state: State<'_, CourseState>, course: Course) -> Result<(), String> {
+    state
+        .run_in_background("更新课程", move |database| {
+            database.update_course(&course)
+        })
+        .await
 }
 
 #[tauri::command]
-fn delete_course(state: State<'_, CourseState>, id: String) -> Result<(), String> {
-    state.run("删除课程", |database| database.delete_course(&id))
+async fn delete_course(state: State<'_, CourseState>, id: String) -> Result<(), String> {
+    state
+        .run_in_background("删除课程", move |database| database.delete_course(&id))
+        .await
 }
 
 #[tauri::command]
@@ -215,23 +270,27 @@ fn load_day_count(state: State<'_, CourseState>) -> Result<u8, String> {
 }
 
 #[tauri::command]
-fn save_day_count(state: State<'_, CourseState>, day_count: u8) -> Result<u8, String> {
-    state.run("保存课表视图偏好", |database| {
-        database.save_day_count(day_count)
-    })
+async fn save_day_count(state: State<'_, CourseState>, day_count: u8) -> Result<u8, String> {
+    state
+        .run_in_background("保存课表视图偏好", move |database| {
+            database.save_day_count(day_count)
+        })
+        .await
 }
 
 #[tauri::command]
-fn save_period_times(
+async fn save_period_times(
     state: State<'_, CourseState>,
     periods: Vec<PeriodTime>,
 ) -> Result<Vec<PeriodTime>, String> {
-    state.run("保存作息", |database| {
-        database.save_period_times(&periods)?;
-        database
-            .load_period_times()?
-            .ok_or_else(|| db::StorageError::InvalidData("作息保存后无法读取。".into()))
-    })
+    state
+        .run_in_background("保存作息", move |database| {
+            database.save_period_times(&periods)?;
+            database
+                .load_period_times()?
+                .ok_or_else(|| db::StorageError::InvalidData("作息保存后无法读取。".into()))
+        })
+        .await
 }
 
 #[tauri::command]
@@ -290,16 +349,6 @@ async fn load_widget_data(state: State<'_, CourseState>) -> Result<WidgetDataRes
             })
         })
         .await
-}
-
-#[tauri::command]
-fn export_backup(state: State<'_, CourseState>) -> Result<db::BackupData, String> {
-    state.run("导出备份", CourseDatabase::export_backup)
-}
-
-#[tauri::command]
-fn restore_backup(state: State<'_, CourseState>, backup: db::BackupData) -> Result<(), String> {
-    state.run("恢复备份", |database| database.restore_backup(&backup))
 }
 
 #[tauri::command]
@@ -610,8 +659,7 @@ pub fn run() {
             save_app_settings,
             load_widget_settings,
             load_widget_data,
-            export_backup,
-            restore_backup,
+            trace_runtime_event,
             patch_widget_settings,
             refresh_reminder_schedule,
             reminder_scheduler_status,

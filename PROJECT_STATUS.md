@@ -1,8 +1,8 @@
 # 项目状态
 
 - 最后更新：2026-09-20
-- 当前阶段：**v1.2.0 Release Candidate 收口中**。稳定性提交 `e4d38bb`（Settings / Schedule / Widget）和 `d106720`（Widget drag area）均经人工验收 PASS，除真实回归外保持冻结；已修复同步 settings-save 在 SQLite 等待时挤占 Tauri 命令运行时、连带阻塞 PDF 原生文件选择器的问题。后续白屏回归确认由 Widget 数据读取后台化与窗口元数据短暂不可用保护解决，用户已实机验证连续保存、作息保存和 PDF 选择器均正常；尚未创建 v1.2.0 tag 或发布 Release。
-- v1.2.0 RC：Updater 使用 Tauri 官方签名、GitHub Releases HTTPS endpoint 和 Windows passive installer；启动后台检查、关于页手动检查、更新弹窗、进度、失败重试与 Release 回退均已实现。JSON 备份/恢复在单一 SQLite transaction 中处理课程、作息、学期、提醒、小组件逻辑设置和 5/7 天偏好，恢复后立即刷新 runtime、scheduler 与 widget；不备份 PDF、日志、处理历史、机器几何或 Autostart OS 状态。PDF 导入完成后显示基于实际 ImportPlan 的结果统计。正式签名 NSIS/MSI 及 `.sig` 本地产物已确认；最终 Windows 安装态人工验收与真实 GitHub Release updater E2E 待 RC 接受后完成。
+- 当前阶段：**v1.2.0 本地最终构建，等待 Windows 人工验收**。Backup / Restore 已完整移除且 SQLite schema 保持 4；课程写入与清空命令统一使用后台存储边界，提醒刷新采用 generation 防旧刷新覆盖，小组件刷新采用 single-flight/coalescing 并保留 last-known-good 内容。自动回归、Rust 检查和本地生产构建均通过；尚未创建 v1.2.0 tag 或发布 Release。
+- v1.2.0 RC：Updater 使用 Tauri 官方签名、GitHub Releases HTTPS endpoint 和 Windows passive installer；启动后台检查、关于页手动检查、更新弹窗、进度、失败重试与 Release 回退均已实现。PDF 导入完成后显示基于实际 ImportPlan 的结果统计。正式签名 NSIS/MSI 及 `.sig` 本地产物已确认；最终 Windows 安装态人工验收与真实 GitHub Release updater E2E 待 RC 接受后完成。Backup / Restore 已从 v1.2.0 移除。
 - 阶段门禁：Phase 7.4 离屏恢复、保存回归修复、自动验证、开发态/安装态启动和 Windows 人工验收均已完成。双显示器移除与 DPI 切换未单独执行，保留为已有 physical geometry fallback 自动覆盖的 documented limitation，不阻断 V1。
 - 已完成：Phase 0；Phase 1 全部；Phase 2 全部；Phase 2.5 节次显示；Phase 2.6 用户可配置作息；Phase 2.7 桌面时间轴与自适应课程文字。
 - 核心规则：严格 HH:mm；课程 top/height 只由实际时间及 pxPerMinute 决定；07:00–22:00 轴保留真实空闲比例；重叠链由纯布局函数分配横向 lane；星期列始终为周一至周日。
@@ -35,7 +35,7 @@
 - Phase 3.3 状态：正式 PDF 预览支持总数/固定/实践/ready/warning/blocking 动态统计、状态筛选、单条字段修正、来源定位、整批取消和最终提案摘要。修改值覆盖在不可变解析结果之上；保存作息后无需重新选择 PDF 即可重算。精确重复及已有/候选间时间冲突为 warning，不自动合并或删除。
 - CourseProposal 状态：`prepareCourseProposal` 通过已确认 PeriodTime 映射时间并调用统一 `validateCourseInput`；提案只保留 candidateId 和无 id 的课程数据。test-only 作息、缺星期/节次/周数等继续 blocking；教室或教师缺失为 warning，warning 不阻止继续。
 - Phase 3.4 状态：纯 `prepareImportPlan` 在生成 ID 前稳定计算写入、现有/批内重复跳过及时间冲突；正式确认时仅为待写入项生成一次 UUID 并再次通过统一校验。Rust `import_courses` 在单个 SQLite transaction 中再次校验并批量插入，任一失败整体回滚；React 只在成功返回后合并课程。
-- Phase 3.4 Desktop 验收：备份真实 AppData 数据库后，在 Tauri 独立窗口补齐 3 条实践并将 18 条课程一次写入；`load_courses` 返回 18，当前周立即显示 12 张用户卡片。正常关闭重启后仍恢复 18；再次导入同一 PDF 得到重复 18、写入 0，数据库保持 18。全过程 `period_times=12`、`user_version=2`、integrity=ok，页面/控制台无错误；验收后已恢复原始数据库为 courses=0。
+- Phase 3.4 Desktop 验收：创建临时 AppData 数据库副本后，在 Tauri 独立窗口补齐 3 条实践并将 18 条课程一次写入；`load_courses` 返回 18，当前周立即显示 12 张用户卡片。正常关闭重启后仍恢复 18；再次导入同一 PDF 得到重复 18、写入 0，数据库保持 18。全过程 `period_times=12`、`user_version=2`、integrity=ok，页面/控制台无错误；验收后已恢复原始数据库为 courses=0。
 - v1.1.0 RC2：新增作息后续节次联动、教学周切换、5/7 天视图、当前星期高亮、分钟级当前时间线、首次当前时间定位、离线 OCR 和统一单节时长。设置写入采用数据库回读，小组件采用字段级 patch；用户已确认设置保存问题修复。真实三页 PDF 经当前源码及生产前端构建均得到 3 页、260 个文本块、17 条固定安排和 3 条非固定实践，且不再把课程元数据中的“训练”误判为实践。schema 保持 4。
 - 下一步：**Version 1.0 开发阶段正式结束；v1.1.0 已发布到 Public GitHub Release，后续 Version 2 等待用户重新启动需求。**
 - 验证详情：docs/phase-1-verification.md、docs/phase-2-verification.md、docs/phase-2-5-verification.md、docs/phase-2-6-verification.md、docs/phase-2-7-verification.md、docs/phase-3-1-verification.md、docs/phase-3-2-verification.md、docs/phase-3-3-verification.md、docs/phase-3-4-verification.md、docs/phase-5-1-verification.md、docs/phase-5-2-verification.md、docs/phase-5-3-verification.md、docs/phase-5-4-verification.md、docs/phase-6-verification.md、docs/phase-7-1-verification.md、docs/phase-7-2-verification.md、docs/phase-7-3-verification.md、docs/phase-7-4-verification.md、docs/phase-8-verification.md、docs/phase-9-verification.md、docs/phase-10-verification.md。

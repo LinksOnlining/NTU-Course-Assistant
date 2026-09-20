@@ -15,6 +15,7 @@ import {
   subscribeWidgetDataChanged,
   subscribeWidgetSettingsChanged,
 } from "../services/widget-window.ts";
+import { beginRuntimeTrace } from "../services/runtime-trace.ts";
 import type { Course } from "../types/course.ts";
 import type { TermConfig } from "../types/reminder.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
@@ -46,6 +47,9 @@ export function WidgetPrototype() {
   const [clock, setClock] = useState(shanghaiNow);
   const lockedRef = useRef(settings.locked);
   const settingsOperation = useRef(0);
+  const refreshGeneration = useRef(0);
+  const refreshInFlight = useRef(false);
+  const refreshQueued = useRef(false);
 
   useEffect(() => {
     lockedRef.current = settings.locked;
@@ -54,16 +58,31 @@ export function WidgetPrototype() {
   useEffect(() => {
     let active = true;
     const refreshData = async () => {
+      if (refreshInFlight.current) {
+        refreshQueued.current = true;
+        return;
+      }
+      refreshInFlight.current = true;
+      const trace = beginRuntimeTrace("widget-refresh", ++refreshGeneration.current);
       const settingsRevision = settingsOperation.current;
       try {
         const data = await loadWidgetData();
+        trace("snapshot-returned");
         if (!active) return;
         setCourses(data.courses);
         setTermConfig(data.termConfig);
         if (settingsRevision === settingsOperation.current) setSettings(data.settings);
         setStatus("ready");
+        trace("render-published");
       } catch {
+        trace("snapshot-failed");
         if (active) setStatus("error");
+      } finally {
+        refreshInFlight.current = false;
+        if (active && refreshQueued.current) {
+          refreshQueued.current = false;
+          void refreshData();
+        }
       }
     };
     const refreshSettings = async () => {
@@ -81,6 +100,8 @@ export function WidgetPrototype() {
     const timer = window.setInterval(() => setClock(shanghaiNow()), 60_000);
     return () => {
       active = false;
+      refreshInFlight.current = false;
+      refreshQueued.current = false;
       unsubscribe();
       unsubscribeSettings();
       window.clearInterval(timer);

@@ -133,3 +133,12 @@ test("course clearing remains a single background storage command", () => {
   assert.match(app, /await clearStoredCourses\(\)/);
   assert.match(rust, /async fn clear_all_courses[\s\S]{0,180}run_in_background\("清空全部课程"/);
 });
+
+test("backup and restore are not part of the v1.2 product surface", () => {
+  const app = source("src/App.tsx");
+  const settings = source("src/components/PeriodSettings.tsx");
+  const rust = source("src-tauri/src/lib.rs");
+  assert.doesNotMatch(app, /backup|restore_backup|export_backup/i);
+  assert.doesNotMatch(settings, /backup|restore/i);
+  assert.doesNotMatch(rust, /export_backup|restore_backup|BackupData/);
+});
