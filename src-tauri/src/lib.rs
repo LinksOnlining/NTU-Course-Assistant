@@ -22,6 +22,14 @@ const TRAY_OPEN_MAIN: &str = "tray-open-main";
 const TRAY_TOGGLE_WIDGET: &str = "tray-toggle-widget";
 const TRAY_QUIT: &str = "tray-quit";
 
+#[cfg(debug_assertions)]
+fn debug_widget(message: &str) {
+    eprintln!("[widget] {message}");
+}
+
+#[cfg(not(debug_assertions))]
+fn debug_widget(_message: &str) {}
+
 #[derive(Clone, Copy)]
 struct ScreenRect {
     x: i32,
@@ -250,21 +258,27 @@ async fn save_app_settings(
 }
 
 #[tauri::command]
-fn load_widget_settings(state: State<'_, CourseState>) -> Result<WidgetSettings, String> {
-    state.run("读取小组件设置", CourseDatabase::load_widget_settings)
+async fn load_widget_settings(state: State<'_, CourseState>) -> Result<WidgetSettings, String> {
+    debug_widget("load settings requested");
+    state
+        .run_in_background("读取小组件设置", CourseDatabase::load_widget_settings)
+        .await
 }
 
 #[tauri::command]
-fn load_widget_data(state: State<'_, CourseState>) -> Result<WidgetDataResponse, String> {
-    state.run("读取小组件数据", |database| {
-        let courses = database.load_courses()?.courses;
-        let configuration = database.load_reminder_configuration()?;
-        Ok(WidgetDataResponse {
-            courses,
-            term_config: configuration.term_config,
-            settings: database.load_widget_settings()?,
+async fn load_widget_data(state: State<'_, CourseState>) -> Result<WidgetDataResponse, String> {
+    debug_widget("load data requested");
+    state
+        .run_in_background("读取小组件数据", |database| {
+            let courses = database.load_courses()?.courses;
+            let configuration = database.load_reminder_configuration()?;
+            Ok(WidgetDataResponse {
+                courses,
+                term_config: configuration.term_config,
+                settings: database.load_widget_settings()?,
+            })
         })
-    })
+        .await
 }
 
 #[tauri::command]
@@ -283,12 +297,14 @@ async fn patch_widget_settings(
     state: State<'_, CourseState>,
     patch: WidgetSettingsPatch,
 ) -> Result<WidgetSettings, String> {
+    debug_widget("settings patch requested");
     let updates_lock_state = patch.locked.is_some();
     let settings = state
         .run_in_background("保存小组件设置", move |database| {
             database.patch_widget_settings(&patch)
         })
         .await?;
+    debug_widget("settings patch completed");
     if updates_lock_state {
         let app = app.clone();
         let locked = settings.locked;
@@ -334,6 +350,7 @@ fn send_test_course_notification(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn show_widget(app: &tauri::AppHandle, settings: &WidgetSettings) -> Result<(), String> {
     if let Some(widget) = app.get_webview_window("widget") {
+        debug_widget("show existing window");
         widget
             .show()
             .map_err(|_| "无法显示桌面课程小组件原型。".to_string())?;
@@ -353,10 +370,12 @@ fn show_widget(app: &tauri::AppHandle, settings: &WidgetSettings) -> Result<(), 
             .skip_taskbar(true)
             .always_on_bottom(true)
             .focused(false);
+    debug_widget("create window requested");
     let widget = builder.build().map_err(|error| {
         eprintln!("Widget window creation failed: {error}");
         "无法打开桌面课程小组件原型。".to_string()
     })?;
+    debug_widget("window created");
     let size = (
         settings.width.unwrap_or(360),
         settings.height.unwrap_or(430),

@@ -66,7 +66,8 @@ test("draft schedule editing remains local while the widget uses one native snap
   assert.match(widget, /\}, \[\]\);/);
   assert.match(widgetData, /invoke<WidgetData>\("load_widget_data"\)/);
   const rust = source("src-tauri/src/lib.rs");
-  assert.match(rust, /if patch\.locked\.is_some\(\)/);
+  assert.match(rust, /let updates_lock_state = patch\.locked\.is_some\(\)/);
+  assert.match(rust, /if updates_lock_state/);
   assert.doesNotMatch(rust, /database\.save_widget_settings\(&next\)/);
 });
 

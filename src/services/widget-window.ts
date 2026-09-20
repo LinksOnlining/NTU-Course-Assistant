@@ -100,41 +100,55 @@ export function subscribeWidgetBounds(
   onBounds: (bounds: Pick<WidgetSettings, "x" | "y" | "width" | "height">) => void,
 ): () => void {
   if (usesBrowserPreview()) return () => undefined;
-  const current = getCurrentWindow();
   let active = true;
+  let retry: number | undefined;
   const stops: (() => void)[] = [];
-  void current
-    .onMoved(({ payload }) => {
-      if (!active) return;
-      void current
-        .innerSize()
-        .then((size) => {
-          if (active) onBounds({ x: payload.x, y: payload.y, ...size });
-        })
-        .catch(() => undefined);
-    })
-    .then((stop) => {
-      if (active) stops.push(stop);
-      else void stop();
-    })
-    .catch(() => undefined);
-  void current
-    .onResized(({ payload }) => {
-      if (!active) return;
-      void current
-        .outerPosition()
-        .then((position) => {
-          if (active) onBounds({ ...position, width: payload.width, height: payload.height });
-        })
-        .catch(() => undefined);
-    })
-    .then((stop) => {
-      if (active) stops.push(stop);
-      else void stop();
-    })
-    .catch(() => undefined);
+  const subscribe = (attempt: number) => {
+    let current: ReturnType<typeof getCurrentWindow>;
+    try {
+      current = getCurrentWindow();
+    } catch (error) {
+      // A newly-created WebView can report its window metadata a moment late.
+      // This optional listener must never take down the entire Widget render.
+      console.warn("Widget bounds subscription unavailable", error);
+      if (attempt === 0) retry = window.setTimeout(() => subscribe(1), 100);
+      return;
+    }
+    void current
+      .onMoved(({ payload }) => {
+        if (!active) return;
+        void current
+          .innerSize()
+          .then((size) => {
+            if (active) onBounds({ x: payload.x, y: payload.y, ...size });
+          })
+          .catch(() => undefined);
+      })
+      .then((stop) => {
+        if (active) stops.push(stop);
+        else void stop();
+      })
+      .catch(() => undefined);
+    void current
+      .onResized(({ payload }) => {
+        if (!active) return;
+        void current
+          .outerPosition()
+          .then((position) => {
+            if (active) onBounds({ ...position, width: payload.width, height: payload.height });
+          })
+          .catch(() => undefined);
+      })
+      .then((stop) => {
+        if (active) stops.push(stop);
+        else void stop();
+      })
+      .catch(() => undefined);
+  };
+  subscribe(0);
   return () => {
     active = false;
+    window.clearTimeout(retry);
     stops.forEach((stop) => stop());
   };
 }

@@ -140,6 +140,52 @@ test("widget route provides Today and Week controls without mounting the timetab
   await expect(page.getByRole("button", { name: "打开课程表" })).toBeVisible();
 });
 
+test("widget keeps rendering after settings and data refresh events", async ({ page }) => {
+  await page.addInitScript(() => {
+    let displayMode = "today";
+    const widgetSettings = () => ({
+      enabled: true,
+      displayMode,
+      locked: false,
+      x: null,
+      y: null,
+      width: null,
+      height: null,
+    });
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command === "load_widget_data") {
+            return { courses: [], termConfig: null, settings: widgetSettings() };
+          }
+          if (command === "load_widget_settings") return widgetSettings();
+          if (command === "plugin:event|listen") return 1;
+          if (command === "plugin:event|unlisten") return undefined;
+          throw new Error(`未预期的小组件命令：${command}`);
+        },
+      },
+    });
+    Object.assign(window, {
+      __refreshWidgetSettings: () => {
+        displayMode = "week";
+        window.dispatchEvent(new Event("widget-settings-changed"));
+        window.dispatchEvent(new Event("widget-data-changed"));
+      },
+    });
+  });
+  await page.goto("/?widget");
+  const widget = page.getByLabel("桌面课程小组件");
+  await expect(widget).toBeVisible();
+  await expect(widget.getByText("请先确认学期设置")).toBeVisible();
+  await page.evaluate(() =>
+    (window as Window & { __refreshWidgetSettings(): void }).__refreshWidgetSettings(),
+  );
+  await expect(widget).toBeVisible();
+  await expect(widget.getByRole("tab", { name: "本周" })).toHaveAttribute("aria-selected", "true");
+  await expect(widget.getByText("请先确认学期设置")).toBeVisible();
+});
+
 test("seven fixed days and teaching-week filter", async ({ page }) => {
   await expect(page.getByTestId("day-column")).toHaveCount(7);
   await expect(page.locator(".day-header")).toHaveText([
@@ -646,7 +692,9 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
     page.locator(".pdf-import-button").evaluate((button) => (button as HTMLButtonElement).click());
   const dialogCalls = () =>
     page.evaluate(() =>
-      (window as Window & { __pdfDialogRegression: { dialogCalls(): number } }).__pdfDialogRegression.dialogCalls(),
+      (
+        window as Window & { __pdfDialogRegression: { dialogCalls(): number } }
+      ).__pdfDialogRegression.dialogCalls(),
     );
 
   await settings.getByRole("button", { name: "保存小组件设置" }).click();
@@ -660,16 +708,17 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
   await expect.poll(dialogCalls).toBe(2);
 
   await page.evaluate(() =>
-    (window as Window & { __pdfDialogRegression: { resolve(key: string): void } }).__pdfDialogRegression.resolve("widget"),
+    (
+      window as Window & { __pdfDialogRegression: { resolve(key: string): void } }
+    ).__pdfDialogRegression.resolve("widget"),
   );
   await expect(settings.getByRole("button", { name: "保存小组件设置" })).toBeEnabled();
   await invokePdfDialog();
   await expect.poll(dialogCalls).toBe(3);
   await page.evaluate(() =>
-    (window as Window & { __pdfDialogRegression: { reject(key: string, reason: string): void } }).__pdfDialogRegression.reject(
-      "schedule",
-      "模拟保存失败",
-    ),
+    (
+      window as Window & { __pdfDialogRegression: { reject(key: string, reason: string): void } }
+    ).__pdfDialogRegression.reject("schedule", "模拟保存失败"),
   );
   await expect(settings.getByRole("alert")).toHaveText("模拟保存失败");
 
