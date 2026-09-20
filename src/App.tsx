@@ -30,14 +30,17 @@ import {
   insertStoredCourse,
   loadStoredCourses,
   loadStoredPeriodTimes,
+  loadStoredDayCount,
   loadStoredReminderConfiguration,
   loadStoredWidgetSettings,
   refreshStoredReminderSchedule,
   saveStoredAppSettings,
+  saveStoredDayCount,
   patchStoredWidgetSettings,
   updateStoredCourse,
 } from "./services/course-storage.ts";
 import { DEFAULT_WIDGET_SETTINGS } from "./services/widget-data.ts";
+import { checkForApplicationUpdate, installApplicationUpdate } from "./services/updater.ts";
 import {
   buildReminderPlans,
   DEFAULT_REMINDER_SETTINGS,
@@ -55,6 +58,13 @@ import type { PdfExtraction } from "./types/pdf.ts";
 import type { PeriodTime } from "./types/time.ts";
 import type { ReminderConfiguration } from "./types/reminder.ts";
 import type { WidgetSettings } from "./types/widget-settings.ts";
+
+interface PdfImportResult {
+  readonly inserted: number;
+  readonly skippedDuplicates: number;
+  readonly unselected: number;
+  readonly warnings: number;
+}
 
 type PdfImportState =
   | { readonly kind: "idle" }
@@ -94,13 +104,25 @@ export function App() {
   const [pendingImportCourses, setPendingImportCourses] = useState<readonly Course[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState("");
-  const [importSuccess, setImportSuccess] = useState("");
+  const [importResult, setImportResult] = useState<PdfImportResult | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
   const [dayCount, setDayCount] = useState<5 | 7>(7);
   const [scrollRequest, setScrollRequest] = useState(0);
+  const [restoreNonce, setRestoreNonce] = useState(0);
+  const [updateState, setUpdateState] = useState<
+    "idle" | "checking" | "available" | "downloading" | "installing" | "upToDate" | "error"
+  >("idle");
+  const [availableUpdate, setAvailableUpdate] =
+    useState<Awaited<ReturnType<typeof checkForApplicationUpdate>>>(null);
+  const [updateMessage, setUpdateMessage] = useState("");
+  const [downloadProgress, setDownloadProgress] = useState<{
+    downloaded: number;
+    total: number | null;
+  }>({ downloaded: 0, total: null });
   const timetableScrollRef = useRef<HTMLDivElement>(null);
   const initialScrollDone = useRef(false);
+  const widgetSettingsRevision = useRef(0);
   const fixtureCourses = showDevelopmentFixtures ? TEST_COURSES : [];
   const courses = useMemo(() => [...fixtureCourses, ...userCourses], [fixtureCourses, userCourses]);
   const axis = useMemo(() => getTimelineBounds(TEST_TIMETABLE.axis, periods), [periods]);
@@ -139,6 +161,13 @@ export function App() {
   );
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void checkForUpdates(false);
+    }, 7000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     if (storageStatus !== "ready") return;
     let active = true;
     const rebuildSchedule = async () => {
@@ -170,37 +199,51 @@ export function App() {
       loadStoredPeriodTimes(),
       loadStoredReminderConfiguration(),
       loadStoredWidgetSettings(),
+      loadStoredDayCount(),
     ])
-      .then(([result, storedPeriods, storedReminderConfiguration, storedWidgetSettings]) => {
-        if (!active) return;
-        const activePeriods = storedPeriods ?? TEST_TIMETABLE.periods;
-        setPeriods(activePeriods);
-        setIsUsingTestSchedule(storedPeriods === null);
-        setPeriodMessage(
-          storedPeriods === null
-            ? "尚未确认作息时间，请在设置中保存你的实际作息。"
-            : "已使用自定义作息。",
-        );
-        const displayAxis = getTimelineBounds(TEST_TIMETABLE.axis, activePeriods);
-        const warnings = [...result.warnings, ...storedReminderConfiguration.warnings];
-        setReminderConfiguration({
-          termConfig: storedReminderConfiguration.termConfig,
-          reminderSettings: storedReminderConfiguration.reminderSettings,
-        });
-        setWidgetSettings(storedWidgetSettings);
-        const renderableCourses = result.courses.filter((course) => {
-          try {
-            courseTiming(course, displayAxis);
-            return true;
-          } catch {
-            warnings.push(`课程“${course.name}”超出当前显示范围，已跳过且未修改原数据。`);
-            return false;
+      .then(
+        ([
+          result,
+          storedPeriods,
+          storedReminderConfiguration,
+          storedWidgetSettings,
+          storedDayCount,
+        ]) => {
+          if (!active) return;
+          const activePeriods = storedPeriods ?? TEST_TIMETABLE.periods;
+          setPeriods(activePeriods);
+          setIsUsingTestSchedule(storedPeriods === null);
+          setPeriodMessage(
+            storedPeriods === null
+              ? "尚未确认作息时间，请在设置中保存你的实际作息。"
+              : "已使用自定义作息。",
+          );
+          const displayAxis = getTimelineBounds(TEST_TIMETABLE.axis, activePeriods);
+          const warnings = [...result.warnings, ...storedReminderConfiguration.warnings];
+          setReminderConfiguration({
+            termConfig: storedReminderConfiguration.termConfig,
+            reminderSettings: storedReminderConfiguration.reminderSettings,
+          });
+          setWidgetSettings(storedWidgetSettings);
+          setDayCount(storedDayCount);
+          const renderableCourses = result.courses.filter((course) => {
+            try {
+              courseTiming(course, displayAxis);
+              return true;
+            } catch {
+              warnings.push(`课程“${course.name}”超出当前显示范围，已跳过且未修改原数据。`);
+              return false;
+            }
+          });
+          setUserCourses(renderableCourses);
+          if (restoreNonce > 0) {
+            notifyWidgetDataChanged();
+            notifyWidgetSettingsChanged();
           }
-        });
-        setUserCourses(renderableCourses);
-        setStorageMessage(warnings.join(" "));
-        setStorageStatus("ready");
-      })
+          setStorageMessage(warnings.join(" "));
+          setStorageStatus("ready");
+        },
+      )
       .catch((error: unknown) => {
         if (!active) return;
         setStorageMessage(error instanceof Error ? error.message : "本地课程数据库不可用。");
@@ -209,7 +252,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [restoreNonce]);
 
   useEffect(() => {
     let timeout: number | undefined;
@@ -248,11 +291,50 @@ export function App() {
 
   useEffect(() => {
     return subscribeWidgetSettingsChanged(() => {
+      const revision = ++widgetSettingsRevision.current;
       void loadStoredWidgetSettings()
-        .then(setWidgetSettings)
+        .then((settings) => {
+          if (revision === widgetSettingsRevision.current) setWidgetSettings(settings);
+        })
         .catch(() => undefined);
     });
   }, []);
+
+  async function checkForUpdates(manual: boolean) {
+    if (updateState === "checking" || updateState === "downloading" || updateState === "installing")
+      return;
+    setUpdateState("checking");
+    setUpdateMessage("");
+    try {
+      const update = await checkForApplicationUpdate();
+      if (!update) {
+        setUpdateState(manual ? "upToDate" : "idle");
+        if (manual) setUpdateMessage("当前已是最新版本。");
+        return;
+      }
+      setAvailableUpdate(update);
+      setUpdateState("available");
+    } catch {
+      setUpdateState(manual ? "error" : "idle");
+      if (manual) setUpdateMessage("检查更新失败，你仍可以继续使用当前版本。");
+    }
+  }
+
+  async function installUpdate() {
+    if (!availableUpdate) return;
+    setUpdateState("downloading");
+    setUpdateMessage("");
+    setDownloadProgress({ downloaded: 0, total: null });
+    try {
+      await installApplicationUpdate(availableUpdate, (downloaded, total) =>
+        setDownloadProgress({ downloaded, total }),
+      );
+      setUpdateState("installing");
+    } catch {
+      setUpdateState("error");
+      setUpdateMessage("更新失败，你仍可以继续使用当前版本。");
+    }
+  }
 
   async function importPdf() {
     try {
@@ -261,7 +343,7 @@ export function App() {
       setImportPlan(null);
       setPendingImportCourses([]);
       setImportError("");
-      setImportSuccess("");
+      setImportResult(null);
       setPdfImport({ kind: "reading", fileName: file.fileName });
       const document = await extractPdfText(file, (ocrProgress) =>
         setPdfImport({ kind: "reading", fileName: file.fileName, ocrProgress }),
@@ -322,9 +404,20 @@ export function App() {
       }
       setUserCourses((current) => [...current, ...inserted]);
       notifyWidgetDataChanged();
-      setImportSuccess(
-        `已导入 ${inserted.length} 条课程安排，跳过 ${importPlan.summary.skippedDuplicates} 条重复课程。`,
-      );
+      const warnings = importPlan.entries.filter((entry) => {
+        if (entry.action !== "insert") return false;
+        return importEvaluation.candidates
+          .find((candidate) => candidate.candidate.id === entry.proposal.candidateId)
+          ?.issues.some(
+            (issue) => issue.severity === "warning" && issue.code !== "duplicate-course",
+          );
+      }).length;
+      setImportResult({
+        inserted: inserted.length,
+        skippedDuplicates: importPlan.summary.skippedDuplicates,
+        unselected: Math.max(0, importEvaluation.summary.total - importPlan.summary.total),
+        warnings,
+      });
       setPdfImport({ kind: "idle" });
       setCandidateEdits({});
       setImportPlan(null);
@@ -400,27 +493,34 @@ export function App() {
             <button
               type="button"
               className="secondary-button"
+              aria-label="回到本周"
+              title="回到现在"
               onClick={() => {
                 setSelectedWeek(currentTeachingWeek);
                 setScrollRequest((value) => value + 1);
               }}
-              disabled={isViewingCurrentWeek}
             >
-              回到本周
+              回到现在
             </button>
           </div>
           <div className="day-count-controls" aria-label="课表视图天数">
             <button
               type="button"
               className={dayCount === 5 ? "is-active" : ""}
-              onClick={() => setDayCount(5)}
+              onClick={() => {
+                setDayCount(5);
+                void saveStoredDayCount(5);
+              }}
             >
               5天
             </button>
             <button
               type="button"
               className={dayCount === 7 ? "is-active" : ""}
-              onClick={() => setDayCount(7)}
+              onClick={() => {
+                setDayCount(7);
+                void saveStoredDayCount(7);
+              }}
             >
               7天
             </button>
@@ -442,6 +542,109 @@ export function App() {
           {storageMessage}
         </p>
       )}
+      {updateMessage && (
+        <p className="storage-notice" role="status">
+          {updateMessage}
+        </p>
+      )}
+      {updateState === "available" && availableUpdate && (
+        <div className="course-form-backdrop" role="presentation">
+          <section
+            className="course-form-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="发现新版本"
+          >
+            <div className="course-form-heading">
+              <div>
+                <h2>发现新版本</h2>
+                <p>当前版本 v1.2.0 · 新版本 v{availableUpdate.version}</p>
+              </div>
+            </div>
+            {availableUpdate.date && (
+              <p>发布日期：{new Date(availableUpdate.date).toLocaleDateString("zh-CN")}</p>
+            )}
+            {availableUpdate.body && (
+              <pre className="import-source-text">{availableUpdate.body}</pre>
+            )}
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setUpdateState("idle")}
+              >
+                稍后提醒
+              </button>
+              <button type="button" className="primary-button" onClick={() => void installUpdate()}>
+                立即更新
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {(updateState === "downloading" || updateState === "installing") && (
+        <div className="course-form-backdrop" role="presentation">
+          <section
+            className="course-form-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="正在更新"
+          >
+            <h2>
+              {updateState === "downloading"
+                ? `正在下载 v${availableUpdate?.version ?? ""}`
+                : "正在安装更新"}
+            </h2>
+            <progress
+              value={downloadProgress.total ? downloadProgress.downloaded : undefined}
+              max={downloadProgress.total ?? undefined}
+            />
+            {downloadProgress.total && (
+              <p>
+                {Math.min(
+                  100,
+                  Math.round((downloadProgress.downloaded / downloadProgress.total) * 100),
+                )}
+                %
+              </p>
+            )}
+          </section>
+        </div>
+      )}
+      {updateState === "error" && (
+        <div className="course-form-backdrop" role="presentation">
+          <section
+            className="course-form-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="更新失败"
+          >
+            <h2>更新失败</h2>
+            <p>{updateMessage}</p>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void checkForUpdates(true)}
+              >
+                重试
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() =>
+                  window.open(
+                    "https://github.com/LinksOnlining/NTU-Course-Assistant/releases",
+                    "_blank",
+                  )
+                }
+              >
+                前往 GitHub Release
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       {periodMessage && isUsingTestSchedule && (
         <p className="schedule-notice" role="status" data-testid="schedule-notice">
           {periodMessage}
@@ -459,13 +662,22 @@ export function App() {
           {pdfImport.message}
         </p>
       )}
-      {importSuccess && (
-        <p className="import-success-notice" role="status">
-          <span>{importSuccess}</span>
-          <button type="button" onClick={() => setImportSuccess("")} aria-label="关闭导入结果">
-            ×
+      {importResult && (
+        <section className="import-result-panel" role="status" aria-label="PDF 导入结果">
+          <div>
+            <strong>课表导入完成</strong>
+            <p>已写入课程表，可继续查看和编辑。</p>
+          </div>
+          <div className="import-result-stats">
+            <span>成功导入 {importResult.inserted}</span>
+            <span>重复跳过 {importResult.skippedDuplicates}</span>
+            <span>未导入 {importResult.unselected}</span>
+            <span>需要注意 {importResult.warnings}</span>
+          </div>
+          <button type="button" className="secondary-button" onClick={() => setImportResult(null)}>
+            查看课表
           </button>
-        </p>
+        </section>
       )}
       <Timetable
         courses={courses}
@@ -550,6 +762,7 @@ export function App() {
       )}
       {isPeriodSettingsOpen && (
         <PeriodSettings
+          key={`period-settings-${restoreNonce}`}
           periods={periods}
           isUsingTestSchedule={isUsingTestSchedule}
           reminderConfiguration={reminderConfiguration}
@@ -568,9 +781,14 @@ export function App() {
             // Window creation/showing can take longer than the storage write on Windows.
             // Do not hold the settings dialog in a perpetual "saving" state while it does so.
             void (saved.enabled ? showWidget() : hideWidget()).catch(() => undefined);
+            widgetSettingsRevision.current += 1;
             setWidgetSettings(saved);
             notifyWidgetSettingsChanged();
             return saved;
+          }}
+          onCheckUpdates={() => void checkForUpdates(true)}
+          onBackupRestored={() => {
+            setRestoreNonce((value) => value + 1);
           }}
           onCancel={() => setIsPeriodSettingsOpen(false)}
         />

@@ -182,6 +182,18 @@ fn load_period_times(state: State<'_, CourseState>) -> Result<Option<Vec<PeriodT
 }
 
 #[tauri::command]
+fn load_day_count(state: State<'_, CourseState>) -> Result<u8, String> {
+    state.run("读取课表视图偏好", CourseDatabase::load_day_count)
+}
+
+#[tauri::command]
+fn save_day_count(state: State<'_, CourseState>, day_count: u8) -> Result<u8, String> {
+    state.run("保存课表视图偏好", |database| {
+        database.save_day_count(day_count)
+    })
+}
+
+#[tauri::command]
 fn save_period_times(
     state: State<'_, CourseState>,
     periods: Vec<PeriodTime>,
@@ -227,6 +239,29 @@ fn save_app_settings(
 #[tauri::command]
 fn load_widget_settings(state: State<'_, CourseState>) -> Result<WidgetSettings, String> {
     state.run("读取小组件设置", CourseDatabase::load_widget_settings)
+}
+
+#[tauri::command]
+fn load_widget_data(state: State<'_, CourseState>) -> Result<WidgetDataResponse, String> {
+    state.run("读取小组件数据", |database| {
+        let courses = database.load_courses()?.courses;
+        let configuration = database.load_reminder_configuration()?;
+        Ok(WidgetDataResponse {
+            courses,
+            term_config: configuration.term_config,
+            settings: database.load_widget_settings()?,
+        })
+    })
+}
+
+#[tauri::command]
+fn export_backup(state: State<'_, CourseState>) -> Result<db::BackupData, String> {
+    state.run("导出备份", CourseDatabase::export_backup)
+}
+
+#[tauri::command]
+fn restore_backup(state: State<'_, CourseState>, backup: db::BackupData) -> Result<(), String> {
+    state.run("恢复备份", |database| database.restore_backup(&backup))
 }
 
 #[tauri::command]
@@ -455,6 +490,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
@@ -518,11 +555,16 @@ pub fn run() {
             update_course,
             delete_course,
             load_period_times,
+            load_day_count,
+            save_day_count,
             save_period_times,
             load_reminder_configuration,
             load_handled_reminder_keys,
             save_app_settings,
             load_widget_settings,
+            load_widget_data,
+            export_backup,
+            restore_backup,
             patch_widget_settings,
             refresh_reminder_schedule,
             reminder_scheduler_status,

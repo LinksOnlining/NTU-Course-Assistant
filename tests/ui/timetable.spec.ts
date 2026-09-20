@@ -467,6 +467,7 @@ test("Windows 登录启动失败和系统状态不一致不会显示伪成功", 
               height: null,
             };
           }
+          if (command === "load_day_count") return 7;
           if (command === "load_reminder_configuration") {
             return {
               termConfig: null,
@@ -557,6 +558,7 @@ test("failed schedule save keeps the old timeline", async ({ page }) => {
               height: null,
             };
           }
+          if (command === "load_day_count") return 7;
           if (command === "load_reminder_configuration") {
             return {
               termConfig: null,
@@ -939,6 +941,7 @@ test("storage failures keep the original UI state and show a clear error", async
               height: null,
             };
           }
+          if (command === "load_day_count") return 7;
           if (command === "load_reminder_configuration") {
             return {
               termConfig: null,
@@ -990,6 +993,7 @@ test("a failed insert does not create a course in the UI", async ({ page }) => {
               height: null,
             };
           }
+          if (command === "load_day_count") return 7;
           if (command === "load_reminder_configuration") {
             return {
               termConfig: null,
@@ -1028,6 +1032,7 @@ test("a stored course outside the current axis is skipped without crashing", asy
               height: null,
             };
           }
+          if (command === "load_day_count") return 7;
           if (command === "load_reminder_configuration") {
             return {
               termConfig: null,

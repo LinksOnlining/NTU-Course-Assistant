@@ -188,4 +188,4 @@ Version 1.0 期间：
 
 ## Version 1.0 发布边界
 
-Release Candidate 使用稳定 identifier `com.ntu-course-assistant.desktop`、schema `4` 和单一 Tauri 进程。生产 bundle 不包含 fixture 课程或开发态标签；没有保存作息时，默认时间轴仅作为待确认的编辑起点，不能被表述为学校正式作息。应用完全退出后不运行 scheduler；关闭主窗口到 Tray 时则保持现有提醒、Tray 与可选 Widget 生命周期。正式发布不引入后台服务、自动更新或云端能力。
+Release Candidate 使用稳定 identifier `com.ntu-course-assistant.desktop`、schema `4` 和单一 Tauri 进程。生产 bundle 不包含 fixture 课程或开发态标签；没有保存作息时，默认时间轴仅作为待确认的编辑起点，不能被表述为学校正式作息。应用完全退出后不运行 scheduler；关闭主窗口到 Tray 时则保持现有提醒、Tray 与可选 Widget 生命周期。正式发布不引入后台服务或云端能力。v1.2.0 使用官方 Tauri Updater 从 GitHub Releases HTTPS endpoint 获取已签名更新；私钥仅在仓库外和 GitHub Actions Secret 中存在。更新检查和展示集中在前端 updater service，失败不得阻止课程表；安装由官方 updater 处理。备份由 repository 导出版本化 JSON，恢复先校验再以单个 SQLite transaction 提交，并在成功后重新加载主窗口、提醒与小组件所需的运行时数据。

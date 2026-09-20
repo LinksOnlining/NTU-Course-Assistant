@@ -124,6 +124,17 @@ export async function loadStoredPeriodTimes(): Promise<readonly PeriodTime[] | n
   }
 }
 
+export async function loadStoredDayCount(): Promise<5 | 7> {
+  if (usesDevelopmentMemory()) return 7;
+  const value = await invoke<number>("load_day_count");
+  return value === 5 ? 5 : 7;
+}
+
+export async function saveStoredDayCount(dayCount: 5 | 7): Promise<void> {
+  if (usesDevelopmentMemory()) return;
+  await invoke("save_day_count", { dayCount });
+}
+
 export async function saveStoredPeriodTimes(periods: readonly PeriodTime[]): Promise<void> {
   if (usesDevelopmentMemory()) {
     developmentPeriodTimes = [...periods];

@@ -70,6 +70,17 @@ pub struct ReminderConfiguration {
     pub warnings: Vec<String>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupData {
+    pub courses: Vec<Course>,
+    pub periods: Vec<PeriodTime>,
+    pub term_config: Option<TermConfig>,
+    pub reminder_settings: ReminderSettings,
+    pub widget_settings: WidgetSettings,
+    pub day_count: u8,
+}
+
 pub struct CourseDatabase {
     connection: Connection,
 }
@@ -430,6 +441,93 @@ impl CourseDatabase {
             }
         }
         transaction.execute("INSERT INTO app_settings (key, value) VALUES ('reminder_settings', ?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [serde_json::to_string(reminder_settings)?])?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn export_backup(&self) -> Result<BackupData, StorageError> {
+        let loaded = self.load_courses()?;
+        let periods = self.load_period_times()?.unwrap_or_default();
+        let configuration = self.load_reminder_configuration()?;
+        let mut widget = self.load_widget_settings()?;
+        widget.x = None;
+        widget.y = None;
+        widget.width = None;
+        widget.height = None;
+        Ok(BackupData {
+            courses: loaded.courses,
+            periods,
+            term_config: configuration.term_config,
+            reminder_settings: configuration.reminder_settings,
+            widget_settings: widget,
+            day_count: self.load_day_count()?,
+        })
+    }
+
+    pub fn load_day_count(&self) -> Result<u8, StorageError> {
+        Ok(match self.load_setting("day_count")? {
+            Some(value) if value == "5" => 5,
+            Some(value) if value == "7" => 7,
+            _ => 7,
+        })
+    }
+
+    pub fn save_day_count(&self, day_count: u8) -> Result<u8, StorageError> {
+        if day_count != 5 && day_count != 7 {
+            return Err(StorageError::InvalidData(
+                "课表视图天数必须为 5 或 7".into(),
+            ));
+        }
+        self.connection.execute("INSERT INTO app_settings (key,value) VALUES ('day_count',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [day_count.to_string()])?;
+        Ok(day_count)
+    }
+
+    pub fn restore_backup(&self, backup: &BackupData) -> Result<(), StorageError> {
+        if !backup.periods.is_empty() {
+            validate_period_times(&backup.periods).map_err(StorageError::InvalidData)?;
+        }
+        if let Some(term) = &backup.term_config {
+            validate_term_config(term).map_err(StorageError::InvalidData)?;
+        }
+        validate_reminder_settings(&backup.reminder_settings).map_err(StorageError::InvalidData)?;
+        validate_widget_settings(&backup.widget_settings).map_err(StorageError::InvalidData)?;
+        if backup.day_count != 5 && backup.day_count != 7 {
+            return Err(StorageError::InvalidData("备份中的课表视图天数无效".into()));
+        }
+        for course in &backup.courses {
+            course.validate().map_err(StorageError::InvalidData)?;
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute("DELETE FROM courses", [])?;
+        transaction.execute("DELETE FROM period_times", [])?;
+        for course in &backup.courses {
+            transaction.execute("INSERT INTO courses (id,name,teacher,classroom,weekday,start_time,end_time,start_period,end_period,weeks) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)", params![course.id, course.name, course.teacher, course.classroom, course.weekday, course.start_time, course.end_time, course.start_period, course.end_period, serde_json::to_string(&course.weeks)?])?;
+        }
+        for period in &backup.periods {
+            transaction.execute(
+                "INSERT INTO period_times (period,start_time,end_time) VALUES (?1,?2,?3)",
+                params![period.period, period.start_time, period.end_time],
+            )?;
+        }
+        transaction.execute("DELETE FROM app_settings WHERE key IN ('term_config','reminder_settings','widget_settings','day_count')", [])?;
+        if let Some(term) = &backup.term_config {
+            transaction.execute(
+                "INSERT INTO app_settings (key,value) VALUES ('term_config',?1)",
+                [serde_json::to_string(term)?],
+            )?;
+        }
+        transaction.execute(
+            "INSERT INTO app_settings (key,value) VALUES ('reminder_settings',?1)",
+            [serde_json::to_string(&backup.reminder_settings)?],
+        )?;
+        transaction.execute(
+            "INSERT INTO app_settings (key,value) VALUES ('widget_settings',?1)",
+            [serde_json::to_string(&backup.widget_settings)?],
+        )?;
+        transaction.execute(
+            "INSERT INTO app_settings (key,value) VALUES ('day_count',?1)",
+            [backup.day_count.to_string()],
+        )?;
         transaction.commit()?;
         Ok(())
     }
@@ -1136,6 +1234,38 @@ mod tests {
     }
 
     #[test]
+    fn repeated_widget_geometry_and_preference_patches_keep_the_latest_field_values() {
+        let database = database();
+        for index in 0..20 {
+            database
+                .patch_widget_settings(&WidgetSettingsPatch {
+                    enabled: Some(index % 2 == 0),
+                    display_mode: Some(if index % 2 == 0 { "today" } else { "week" }.into()),
+                    locked: Some(index % 3 == 0),
+                    x: Some(index * 10),
+                    y: Some(index * 20),
+                    width: Some(360 + index as u32),
+                    height: Some(430 + index as u32),
+                })
+                .expect("patch widget settings");
+        }
+        assert_eq!(
+            database
+                .load_widget_settings()
+                .expect("read latest widget settings"),
+            WidgetSettings {
+                enabled: false,
+                display_mode: "week".into(),
+                locked: false,
+                x: Some(190),
+                y: Some(380),
+                width: Some(379),
+                height: Some(449),
+            }
+        );
+    }
+
+    #[test]
     fn malformed_widget_settings_fall_back_without_mutating_storage() {
         let database = database();
         database
@@ -1158,6 +1288,30 @@ mod tests {
             )
             .expect("original setting remains");
         assert!(raw.contains("bad"));
+    }
+
+    #[test]
+    fn backup_restore_round_trips_and_invalid_data_keeps_existing_values() {
+        let database = database();
+        let course = course();
+        database.insert_course(&course).expect("seed course");
+        let backup = database.export_backup().expect("export backup");
+        database.delete_course(&course.id).expect("delete course");
+        database.restore_backup(&backup).expect("restore backup");
+        assert_eq!(
+            database.load_courses().expect("restored courses").courses,
+            vec![course.clone()]
+        );
+        let mut invalid = backup;
+        invalid.courses[0].weekday = 9;
+        assert!(database.restore_backup(&invalid).is_err());
+        assert_eq!(
+            database
+                .load_courses()
+                .expect("unchanged after invalid restore")
+                .courses,
+            vec![course]
+        );
     }
 
     #[test]

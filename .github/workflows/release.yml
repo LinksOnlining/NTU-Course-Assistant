@@ -45,6 +45,8 @@ jobs:
         uses: tauri-apps/tauri-action@action-v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: NTU Course Assistant ${{ github.ref_name }}
@@ -56,3 +58,6 @@ jobs:
             首选下载 NSIS setup.exe；当前版本未进行 Windows Authenticode 商业代码签名。
           releaseDraft: true
           prerelease: false
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+          updaterJsonPreferNsis: true

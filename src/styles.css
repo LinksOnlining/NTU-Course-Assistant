@@ -1678,3 +1678,65 @@ select:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+.backup-restore-preview {
+  display: grid;
+  gap: 7px;
+  padding: 11px;
+  border: 1px solid #b9d8c9;
+  border-radius: 8px;
+  background: #edf8f1;
+  color: #315f52;
+}
+
+.backup-restore-preview p {
+  margin: 0;
+}
+
+.import-result-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0;
+  padding: 11px 14px;
+  border: 1px solid #b8d8c4;
+  border-radius: 9px;
+  background: #edf8f1;
+  color: #306547;
+  font-size: 12px;
+}
+
+.import-result-panel p {
+  margin: 3px 0 0;
+  font-size: 11px;
+}
+
+.import-result-stats {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.import-result-stats span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #fff;
+}
+.window-error-boundary {
+  display: grid;
+  min-height: 100vh;
+  place-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: var(--ink, #183b34);
+  background: var(--surface, #f6fbf8);
+  text-align: center;
+}
+
+.window-error-boundary h1,
+.window-error-boundary p {
+  margin: 0;
+}
+
+.window-error-boundary button {
+  justify-self: center;
+}

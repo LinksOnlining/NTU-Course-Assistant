@@ -12,6 +12,12 @@ import {
 import { durationMinutes, minutesToTime, timeToMinutes } from "../core/time.ts";
 import { loadAutostartEnabled, saveAutostartEnabled } from "../services/autostart.ts";
 import { sendTestCourseNotification } from "../services/reminder-notification.ts";
+import {
+  exportBackup,
+  restoreBackup,
+  selectBackup,
+  type BackupPreview,
+} from "../services/backup.ts";
 import type { ReminderConfiguration, ReminderSettings, TermConfig } from "../types/reminder.ts";
 import type { PeriodTime } from "../types/time.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
@@ -27,6 +33,8 @@ interface PeriodSettingsProps {
     reminderSettings: ReminderSettings,
   ) => Promise<void>;
   readonly onSaveWidgetSettings: (patch: Partial<WidgetSettings>) => Promise<WidgetSettings>;
+  readonly onCheckUpdates: () => void;
+  readonly onBackupRestored: () => void;
   readonly onCancel: () => void;
 }
 
@@ -37,6 +45,8 @@ export function PeriodSettings({
   widgetSettings,
   onSave,
   onSaveWidgetSettings,
+  onCheckUpdates,
+  onBackupRestored,
   onCancel,
 }: PeriodSettingsProps) {
   const [draft, setDraft] = useState<PeriodTime[]>(() => periods.map((period) => ({ ...period })));
@@ -76,6 +86,10 @@ export function PeriodSettings({
   const [widgetLocked, setWidgetLocked] = useState(widgetSettings.locked);
   const [isSavingWidget, setIsSavingWidget] = useState(false);
   const [widgetError, setWidgetError] = useState("");
+  const [backupPreview, setBackupPreview] = useState<BackupPreview | null>(null);
+  const [backupMessage, setBackupMessage] = useState("");
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [isRestoringBackup, setIsRestoringBackup] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -250,6 +264,43 @@ export function PeriodSettings({
     }
   }
 
+  async function createBackup() {
+    setIsExportingBackup(true);
+    setBackupMessage("");
+    try {
+      const saved = await exportBackup();
+      if (saved) setBackupMessage(`备份已导出：${saved.courses} 条课程、${saved.periods} 个节次。`);
+    } catch (caught: unknown) {
+      setBackupMessage(caught instanceof Error ? caught.message : "导出备份失败，请稍后重试。");
+    } finally {
+      setIsExportingBackup(false);
+    }
+  }
+
+  async function chooseBackup() {
+    setBackupMessage("");
+    try {
+      setBackupPreview(await selectBackup());
+    } catch (caught: unknown) {
+      setBackupMessage(caught instanceof Error ? caught.message : "无法读取备份文件。");
+    }
+  }
+
+  async function applyBackup() {
+    if (!backupPreview) return;
+    setIsRestoringBackup(true);
+    setBackupMessage("");
+    try {
+      await restoreBackup(backupPreview.data);
+      setBackupPreview(null);
+      setBackupMessage("备份已恢复，课程表、作息、提醒和小组件设置已立即刷新。");
+      onBackupRestored();
+    } catch (caught: unknown) {
+      setBackupMessage(caught instanceof Error ? caught.message : "恢复失败，当前数据未被修改。");
+    } finally {
+      setIsRestoringBackup(false);
+    }
+  }
   async function saveWidget() {
     setIsSavingWidget(true);
     setWidgetError("");
@@ -511,6 +562,89 @@ export function PeriodSettings({
               {widgetError}
             </p>
           )}
+        </section>
+        <section className="settings-section" aria-labelledby="backup-settings-title">
+          <div>
+            <h3 id="backup-settings-title">数据备份</h3>
+            <p>备份只保存在你选择的位置；恢复会覆盖课程、作息、学期、提醒和界面偏好。</p>
+          </div>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void createBackup()}
+              disabled={isExportingBackup || isRestoringBackup}
+            >
+              {isExportingBackup ? "正在导出…" : "导出备份"}
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void chooseBackup()}
+              disabled={isExportingBackup || isRestoringBackup}
+            >
+              导入备份
+            </button>
+          </div>
+          {backupPreview && (
+            <div className="backup-restore-preview" role="status">
+              <strong>确认恢复</strong>
+              <p>
+                课程 {backupPreview.courses} 条 · 节次 {backupPreview.periods} 个 ·{" "}
+                {backupPreview.hasTermConfig ? "包含学期设置" : "未设置学期"}
+              </p>
+              <p>
+                {backupPreview.remindersEnabled ? "包含已启用的提醒设置" : "包含已关闭的提醒设置"} ·{" "}
+                {backupPreview.dayCount} 天课表视图
+              </p>
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setBackupPreview(null)}
+                  disabled={isRestoringBackup}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => void applyBackup()}
+                  disabled={isRestoringBackup}
+                >
+                  {isRestoringBackup ? "正在恢复…" : "确认恢复"}
+                </button>
+              </div>
+            </div>
+          )}
+          {backupMessage && (
+            <p className="form-message" role="status">
+              {backupMessage}
+            </p>
+          )}
+        </section>{" "}
+        <section className="settings-section" aria-labelledby="about-settings-title">
+          <div>
+            <h3 id="about-settings-title">关于</h3>
+            <p>NTU Course Assistant · Version v1.2.0</p>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="secondary-button" onClick={onCheckUpdates}>
+              检查更新
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() =>
+                window.open(
+                  "https://github.com/LinksOnlining/NTU-Course-Assistant/releases",
+                  "_blank",
+                )
+              }
+            >
+              GitHub Release
+            </button>
+          </div>
         </section>
         {error && (
           <p className="form-error" role="alert">
