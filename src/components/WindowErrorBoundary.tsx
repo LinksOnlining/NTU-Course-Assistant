@@ -9,7 +9,10 @@ interface WindowErrorBoundaryState {
   readonly failed: boolean;
 }
 
-export class WindowErrorBoundary extends Component<WindowErrorBoundaryProps, WindowErrorBoundaryState> {
+export class WindowErrorBoundary extends Component<
+  WindowErrorBoundaryProps,
+  WindowErrorBoundaryState
+> {
   state: WindowErrorBoundaryState = { failed: false };
 
   static getDerivedStateFromError(): WindowErrorBoundaryState {
