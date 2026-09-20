@@ -765,6 +765,10 @@ select:focus-visible {
   backdrop-filter: blur(4px);
 }
 
+.update-dialog-backdrop {
+  z-index: 50;
+}
+
 .course-form-dialog {
   width: min(100%, 570px);
   max-height: calc(100vh - 48px);
@@ -917,6 +921,22 @@ select:focus-visible {
   margin: 0;
   color: #173c32;
   font-size: 24px;
+}
+
+.modal-close {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #c8d8d2;
+  border-radius: 9px;
+  background: #fff;
+  color: #50645c;
+  font-size: 23px;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  background: #eff6f2;
 }
 
 .icon-button {

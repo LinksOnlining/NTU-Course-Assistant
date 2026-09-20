@@ -1170,6 +1170,193 @@ test("a failed insert does not create a course in the UI", async ({ page }) => {
   await expect(page.locator('[data-source="user"]')).toHaveCount(0);
 });
 
+test("confirmed course clearing updates the timetable without touching the settings flow", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const storedCourse = {
+      id: "clear-course",
+      name: "待清空课程",
+      teacher: null,
+      classroom: null,
+      weekday: 1,
+      startPeriod: null,
+      endPeriod: null,
+      startTime: "08:00",
+      endTime: "08:45",
+      weeks: [3],
+    };
+    let clearCalls = 0;
+    Object.assign(window, { __clearCourseRegression: { calls: () => clearCalls } });
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command === "load_courses") return { courses: [storedCourse], warnings: [] };
+          if (command === "load_period_times") return null;
+          if (command === "load_widget_settings") {
+            return {
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            };
+          }
+          if (command === "load_day_count") return 5;
+          if (command === "load_reminder_configuration") {
+            return {
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            };
+          }
+          if (command === "load_handled_reminder_keys") return [];
+          if (command === "refresh_reminder_schedule") return undefined;
+          if (command === "clear_all_courses") {
+            clearCalls += 1;
+            return undefined;
+          }
+          throw `未预期的命令：${command}`;
+        },
+      },
+    });
+  });
+  await page.reload();
+  await expect(page.locator('[data-course-id="clear-course"]')).toBeVisible();
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "作息时间" });
+  await settings.getByRole("button", { name: "清空全部课程" }).click();
+  const confirmation = page.getByRole("alertdialog", { name: "清空全部课程确认" });
+  await expect(confirmation).toContainText("1 门课程");
+  await confirmation.getByRole("button", { name: "确认清空" }).click();
+  await expect(confirmation).toHaveCount(0);
+  await expect(page.locator('[data-course-id="clear-course"]')).toHaveCount(0);
+  await expect(settings.getByRole("status")).toContainText("全部课程已清空");
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as Window & { __clearCourseRegression: { calls(): number } }
+        ).__clearCourseRegression.calls(),
+      ),
+    )
+    .toBe(1);
+});
+
+test("failed course clearing keeps the confirmation and the existing timetable", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const storedCourse = {
+      id: "clear-failure-course",
+      name: "不能丢失的课程",
+      teacher: null,
+      classroom: null,
+      weekday: 1,
+      startPeriod: null,
+      endPeriod: null,
+      startTime: "08:00",
+      endTime: "08:45",
+      weeks: [3],
+    };
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command === "load_courses") return { courses: [storedCourse], warnings: [] };
+          if (command === "load_period_times") return null;
+          if (command === "load_widget_settings") {
+            return {
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            };
+          }
+          if (command === "load_day_count") return 7;
+          if (command === "load_reminder_configuration") {
+            return {
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            };
+          }
+          if (command === "load_handled_reminder_keys") return [];
+          if (command === "refresh_reminder_schedule") return undefined;
+          if (command === "clear_all_courses") throw "模拟清空失败";
+          throw `未预期的命令：${command}`;
+        },
+      },
+    });
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "设置" }).click();
+  await page.getByRole("button", { name: "清空全部课程" }).click();
+  const confirmation = page.getByRole("alertdialog", { name: "清空全部课程确认" });
+  await confirmation.getByRole("button", { name: "确认清空" }).click();
+  await expect(confirmation).toContainText("模拟清空失败");
+  await expect(page.locator('[data-course-id="clear-failure-course"]')).toBeVisible();
+});
+
+test("manual updater failures can be retried and dismissed without blocking the app", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command === "load_courses") return { courses: [], warnings: [] };
+          if (command === "load_period_times") return null;
+          if (command === "load_widget_settings") {
+            return {
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            };
+          }
+          if (command === "load_day_count") return 7;
+          if (command === "load_reminder_configuration") {
+            return {
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            };
+          }
+          if (command === "load_handled_reminder_keys") return [];
+          if (command === "refresh_reminder_schedule") return undefined;
+          throw "模拟更新服务不可用";
+        },
+      },
+    });
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "作息时间" });
+  await settings.getByRole("button", { name: "检查更新" }).click();
+  const updateError = page.getByRole("dialog", { name: "检查更新失败" });
+  await expect(updateError).toBeVisible();
+  await updateError.getByRole("button", { name: "重试" }).click();
+  await expect(updateError).toBeVisible();
+  await updateError.getByLabel("关闭", { exact: true }).click();
+  await expect(updateError).toHaveCount(0);
+  await expect(settings).toBeVisible();
+  await settings.getByRole("button", { name: "检查更新" }).click();
+  await expect(updateError).toBeVisible();
+  await updateError.getByText("关闭", { exact: true }).click();
+  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+});
+
 test("a stored course outside the current axis is skipped without crashing", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", {

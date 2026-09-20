@@ -337,6 +337,13 @@ export function App() {
     }
   }
 
+  function dismissUpdateDialog() {
+    setUpdateState("idle");
+    setAvailableUpdate(null);
+    setUpdateMessage("");
+    setDownloadProgress({ downloaded: 0, total: null });
+  }
+
   async function importPdf() {
     try {
       const file = await choosePdfFile();
@@ -549,7 +556,7 @@ export function App() {
         </p>
       )}
       {updateState === "available" && availableUpdate && (
-        <div className="course-form-backdrop" role="presentation">
+        <div className="course-form-backdrop update-dialog-backdrop" role="presentation">
           <section
             className="course-form-dialog"
             role="dialog"
@@ -584,7 +591,7 @@ export function App() {
         </div>
       )}
       {(updateState === "downloading" || updateState === "installing") && (
-        <div className="course-form-backdrop" role="presentation">
+        <div className="course-form-backdrop update-dialog-backdrop" role="presentation">
           <section
             className="course-form-dialog"
             role="dialog"
@@ -613,15 +620,28 @@ export function App() {
         </div>
       )}
       {updateState === "error" && (
-        <div className="course-form-backdrop" role="presentation">
+        <div className="course-form-backdrop update-dialog-backdrop" role="presentation">
           <section
             className="course-form-dialog"
             role="dialog"
             aria-modal="true"
-            aria-label="更新失败"
+            aria-label="检查更新失败"
           >
-            <h2>更新失败</h2>
-            <p>{updateMessage}</p>
+            <div className="course-form-heading">
+              <div>
+                <h2>检查更新失败</h2>
+                <p>无法获取更新信息。你可以稍后重新检查，或前往 GitHub Releases 手动查看。</p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={dismissUpdateDialog}
+                aria-label="关闭"
+              >
+                ×
+              </button>
+            </div>
+            {updateMessage && <p className="form-error">{updateMessage}</p>}
             <div className="form-actions">
               <button
                 type="button"
@@ -641,6 +661,9 @@ export function App() {
                 }
               >
                 前往 GitHub Release
+              </button>
+              <button type="button" className="secondary-button" onClick={dismissUpdateDialog}>
+                关闭
               </button>
             </div>
           </section>
