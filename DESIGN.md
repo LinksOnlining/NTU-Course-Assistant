@@ -4,9 +4,11 @@
 
 ## 技术方案
 
-采用 Tauri 2 + React + TypeScript + Rust，Vite 构建前端、npm 管理前端依赖。选择基于 Windows 11、时间轴 UI 开发效率和本地系统集成需要。采用系统 WebView2，安装包与内存优势是选型预期，具体体积、CPU、内存必须由实际构建测量，不承诺数字。
+采用 Tauri 2 + React + TypeScript + Rust，Vite 构建前端、npm 管理前端依赖。选择基于 Windows 10（兼容 Windows 11）、时间轴 UI 开发效率和本地系统集成需要。采用系统 WebView2，安装包与内存优势是选型预期，具体体积、CPU、内存必须由实际构建测量，不承诺数字。
 
 Rust 仅负责桌面宿主及必要系统 IO；不引入服务器、全局状态库、UI 大组件库或 ORM。相比 Electron，该选择符合复用系统 WebView 的方向；相比切换 C#/WinUI，保留用户优先评估的 Web UI 技术栈，避免同时改变语言和 UI 开发方式。代价是维护 TypeScript/Rust 两套工具链。
+
+保存运行时边界：初始化阶段只打开一次数据库完成迁移，运行态 `CourseState` 仅持有数据库路径。每个存储 command 在 Tauri `spawn_blocking` 中建立短生命周期 `CourseDatabase::connect`，完成校验、事务和必要回读后释放连接；同步读取也不在 Tauri runtime 线程执行。这样 PDF 导入、课程刷新、作息保存和小组件保存不会共享一个进程级 SQLite guard。前端保存状态显式区分 validating/saving/success/error，失败可重试；不会用不可取消的前端超时伪造完成。
 
 Phase 2.3/2.6 使用 rusqlite 0.40.2 的 bundled SQLite，Rust 存储边界提供课程 CRUD 以及 `load_period_times`、`save_period_times` 两个作息 command；React 通过 `src/services/course-storage.ts` 调用，不接触 SQL。数据库路径由 Tauri `app_local_data_dir()` 解析，实际文件为该目录下 `courses.sqlite3`，不依赖安装目录、源码目录或当前工作目录。
 

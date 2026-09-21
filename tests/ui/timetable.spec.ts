@@ -447,6 +447,27 @@ test("period settings save custom proportions and can add a twelfth period", asy
   await expect(page.locator('[data-period="12"]')).toBeVisible();
 });
 
+test("new periods with edited times round-trip through the save operation", async ({ page }) => {
+  await page.getByRole("button", { name: "设置" }).click();
+  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  await dialog.getByRole("button", { name: "添加节次" }).click();
+  await dialog.getByLabel("第12节开始时间").fill("20:40");
+  await dialog.getByLabel("第12节结束时间").fill("21:25");
+  await dialog.getByRole("button", { name: "添加节次" }).click();
+  await dialog.getByLabel("第13节开始时间").fill("21:30");
+  await dialog.getByLabel("第13节结束时间").fill("22:15");
+  await dialog.getByRole("button", { name: "保存作息" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await page.getByRole("button", { name: "设置" }).click();
+  const reopened = page.getByRole("dialog", { name: "作息时间" });
+  await expect(reopened.getByTestId("period-row")).toHaveCount(13);
+  await expect(reopened.getByLabel("第12节开始时间")).toHaveValue("20:40");
+  await expect(reopened.getByLabel("第12节结束时间")).toHaveValue("21:25");
+  await expect(reopened.getByLabel("第13节开始时间")).toHaveValue("21:30");
+  await expect(reopened.getByLabel("第13节结束时间")).toHaveValue("22:15");
+});
+
 test("term and reminder settings validate and persist with the schedule", async ({ page }) => {
   await page.getByRole("button", { name: "设置" }).click();
   const dialog = page.getByRole("dialog", { name: "作息时间" });
@@ -636,6 +657,72 @@ test("failed schedule save keeps the old timeline", async ({ page }) => {
   await dialog.getByLabel("第1节结束时间").fill("08:30");
   await dialog.getByRole("button", { name: "保存作息" }).click();
   await expect(dialog.getByRole("alert")).toHaveText("保存设置失败，请稍后重试。");
+  await expect(page.locator('[data-period="1"]')).toHaveCSS("height", "45px");
+});
+
+test("failed schedule save can be retried without a permanent saving state", async ({ page }) => {
+  await page.addInitScript(() => {
+    let saveAttempts = 0;
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (command: string) => {
+          if (command === "load_courses") return { courses: [], warnings: [] };
+          if (command === "load_period_times") {
+            return [
+              { period: 1, startTime: "08:00", endTime: "08:45" },
+              { period: 2, startTime: "08:50", endTime: "09:35" },
+            ];
+          }
+          if (command === "load_widget_settings") {
+            return {
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            };
+          }
+          if (command === "load_day_count") return 7;
+          if (command === "load_reminder_configuration") {
+            return {
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            };
+          }
+          if (command === "save_app_settings") {
+            saveAttempts += 1;
+            if (saveAttempts === 1) throw "第一次保存失败";
+            return {
+              periods: [
+                { period: 1, startTime: "08:30", endTime: "09:15" },
+                { period: 2, startTime: "09:20", endTime: "10:05" },
+              ],
+              configuration: {
+                termConfig: null,
+                reminderSettings: { enabled: false, advanceMinutes: 15 },
+              },
+            };
+          }
+          if (command === "refresh_reminder_schedule") return undefined;
+          if (command === "plugin:autostart|is_enabled") return false;
+          throw "未预期的存储命令";
+        },
+      },
+    });
+  });
+  await page.reload();
+  await page.getByRole("button", { name: "设置" }).click();
+  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  await dialog.getByLabel("第1节结束时间").fill("08:30");
+  await dialog.getByRole("button", { name: "保存作息" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("第一次保存失败");
+  await expect(dialog.getByRole("button", { name: "保存作息" })).toBeEnabled();
+  await dialog.getByRole("button", { name: "保存作息" }).click();
+  await expect(dialog).toHaveCount(0);
   await expect(page.locator('[data-period="1"]')).toHaveCSS("height", "45px");
 });
 

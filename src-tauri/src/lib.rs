@@ -4,9 +4,10 @@ mod notification;
 mod scheduler;
 
 use std::{
+    path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
+        Arc,
     },
     time::Instant,
 };
@@ -108,19 +109,45 @@ fn available_screen_rects(app: &tauri::AppHandle) -> Vec<ScreenRect> {
         .collect()
 }
 
-enum StorageAvailability {
-    Ready(CourseDatabase),
-    Unavailable { message: String },
-}
-
 #[derive(Clone)]
-struct CourseState(Arc<Mutex<StorageAvailability>>);
+struct CourseState {
+    database_path: Option<Arc<PathBuf>>,
+    unavailable_message: Option<Arc<String>>,
+}
 
 struct SchedulerState(scheduler::ReminderScheduler);
 
 struct SqliteHandledStore(CourseState);
 
 impl CourseState {
+    fn ready(path: PathBuf) -> Self {
+        Self {
+            database_path: Some(Arc::new(path)),
+            unavailable_message: None,
+        }
+    }
+
+    fn unavailable(message: String) -> Self {
+        Self {
+            database_path: None,
+            unavailable_message: Some(Arc::new(message)),
+        }
+    }
+
+    fn open_database(&self, operation: &str) -> Result<CourseDatabase, String> {
+        if let Some(path) = &self.database_path {
+            return CourseDatabase::connect(path).map_err(|error| {
+                eprintln!("Course database {operation} open failed: {error}");
+                format!("{operation}失败，请稍后重试。")
+            });
+        }
+        Err(self
+            .unavailable_message
+            .as_deref()
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| "课程存储当前不可用，请重新启动应用。".into()))
+    }
+
     fn run<T>(
         &self,
         operation: &str,
@@ -129,31 +156,34 @@ impl CourseState {
         let request_id = RUNTIME_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
         let started = Instant::now();
         trace_runtime(&format!("{operation}.start"), request_id, started.elapsed());
-        let result = {
-            let storage = self
-                .0
-                .lock()
-                .map_err(|_| "课程存储当前不可用，请重新启动应用。".to_string())?;
-            trace_runtime(
-                &format!("{operation}.lock-acquired"),
-                request_id,
-                started.elapsed(),
-            );
-            let database = match &*storage {
-                StorageAvailability::Ready(database) => database,
-                StorageAvailability::Unavailable { message } => return Err(message.clone()),
-            };
-            action(database)
-        };
+        let database = self.open_database(operation)?;
+        trace_runtime(
+            &format!("{operation}.db-opened"),
+            request_id,
+            started.elapsed(),
+        );
+        let result = action(&database);
+        drop(database);
         trace_runtime(
             &format!("{operation}.db-released"),
             request_id,
             started.elapsed(),
         );
-        result.map_err(|error| {
-            eprintln!("Course database {operation} failed: {error}");
-            format!("{operation}失败，请稍后重试。")
-        })
+        match result {
+            Ok(value) => {
+                trace_runtime(
+                    &format!("{operation}.success"),
+                    request_id,
+                    started.elapsed(),
+                );
+                Ok(value)
+            }
+            Err(error) => {
+                eprintln!("Course database {operation} failed: {error}");
+                trace_runtime(&format!("{operation}.error"), request_id, started.elapsed());
+                Err(format!("{operation}失败，请稍后重试。"))
+            }
+        }
     }
 
     async fn run_in_background<T: Send + 'static>(
@@ -205,14 +235,16 @@ struct WidgetDataResponse {
 }
 
 #[tauri::command]
-fn load_courses(state: State<'_, CourseState>) -> Result<LoadCoursesResponse, String> {
-    state.run("读取课程", |database| {
-        let result = database.load_courses()?;
-        Ok(LoadCoursesResponse {
-            courses: result.courses,
-            warnings: result.warnings,
+async fn load_courses(state: State<'_, CourseState>) -> Result<LoadCoursesResponse, String> {
+    state
+        .run_in_background("读取课程", |database| {
+            let result = database.load_courses()?;
+            Ok(LoadCoursesResponse {
+                courses: result.courses,
+                warnings: result.warnings,
+            })
         })
-    })
+        .await
 }
 
 #[tauri::command]
@@ -260,13 +292,19 @@ async fn delete_course(state: State<'_, CourseState>, id: String) -> Result<(), 
 }
 
 #[tauri::command]
-fn load_period_times(state: State<'_, CourseState>) -> Result<Option<Vec<PeriodTime>>, String> {
-    state.run("读取作息", CourseDatabase::load_period_times)
+async fn load_period_times(
+    state: State<'_, CourseState>,
+) -> Result<Option<Vec<PeriodTime>>, String> {
+    state
+        .run_in_background("读取作息", CourseDatabase::load_period_times)
+        .await
 }
 
 #[tauri::command]
-fn load_day_count(state: State<'_, CourseState>) -> Result<u8, String> {
-    state.run("读取课表视图偏好", CourseDatabase::load_day_count)
+async fn load_day_count(state: State<'_, CourseState>) -> Result<u8, String> {
+    state
+        .run_in_background("读取课表视图偏好", CourseDatabase::load_day_count)
+        .await
 }
 
 #[tauri::command]
@@ -294,10 +332,12 @@ async fn save_period_times(
 }
 
 #[tauri::command]
-fn load_reminder_configuration(
+async fn load_reminder_configuration(
     state: State<'_, CourseState>,
 ) -> Result<db::ReminderConfiguration, String> {
-    state.run("读取提醒设置", CourseDatabase::load_reminder_configuration)
+    state
+        .run_in_background("读取提醒设置", CourseDatabase::load_reminder_configuration)
+        .await
 }
 
 #[tauri::command]
@@ -467,13 +507,15 @@ fn show_widget(app: &tauri::AppHandle, settings: &WidgetSettings) -> Result<(), 
 }
 
 #[tauri::command]
-fn open_widget(app: tauri::AppHandle, state: State<'_, CourseState>) -> Result<(), String> {
+async fn open_widget(app: tauri::AppHandle, state: State<'_, CourseState>) -> Result<(), String> {
     if let Some(widget) = app.get_webview_window("widget") {
         return widget
             .show()
             .map_err(|_| "无法显示桌面课程小组件。".to_string());
     }
-    let settings = state.run("读取小组件设置", CourseDatabase::load_widget_settings)?;
+    let settings = state
+        .run_in_background("读取小组件设置", CourseDatabase::load_widget_settings)
+        .await?;
     show_widget(&app, &settings)
 }
 
@@ -590,7 +632,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            let storage = match app.path().app_local_data_dir() {
+            let course_state = match app.path().app_local_data_dir() {
                 Ok(directory) => {
                     let path = directory.join("courses.sqlite3");
                     match CourseDatabase::open(&path) {
@@ -604,27 +646,25 @@ pub fn run() {
                                     eprintln!("Course database schema read failed: {error}")
                                 }
                             }
-                            StorageAvailability::Ready(database)
+                            drop(database);
+                            CourseState::ready(path)
                         }
                         Err(error) => {
                             eprintln!(
                                 "Course database initialization failed at {}: {error}",
                                 path.display()
                             );
-                            StorageAvailability::Unavailable {
-                                message: initialization_message(&error),
-                            }
+                            CourseState::unavailable(initialization_message(&error))
                         }
                     }
                 }
                 Err(error) => {
                     eprintln!("Application data directory resolution failed: {error}");
-                    StorageAvailability::Unavailable {
-                        message: "本地课程数据暂时无法加载，请检查应用数据目录权限后重启。".into(),
-                    }
+                    CourseState::unavailable(
+                        "本地课程数据暂时无法加载，请检查应用数据目录权限后重启。".into(),
+                    )
                 }
             };
-            let course_state = CourseState(Arc::new(Mutex::new(storage)));
             app.manage(course_state.clone());
             app.manage(SchedulerState(scheduler::ReminderScheduler::new(
                 Arc::new(notification::WindowsNotificationAdapter::new(

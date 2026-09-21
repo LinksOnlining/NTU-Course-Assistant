@@ -153,7 +153,7 @@ export async function saveStoredPeriodTimes(periods: readonly PeriodTime[]): Pro
     return;
   }
   try {
-    await invokeWithTimeout("save_period_times", { periods });
+    await invoke("save_period_times", { periods });
   } catch (error) {
     throw storageError(error, "保存作息失败，请稍后重试。");
   }
@@ -194,7 +194,7 @@ export async function patchStoredWidgetSettings(
     return { ...developmentWidgetSettings };
   }
   try {
-    return await invokeWithTimeout<WidgetSettings>("patch_widget_settings", { patch });
+    return await invoke<WidgetSettings>("patch_widget_settings", { patch });
   } catch (error) {
     throw storageError(error, "保存小组件设置失败，请稍后重试。");
   }
@@ -223,7 +223,7 @@ export async function saveStoredAppSettings(
     };
   }
   try {
-    return await invokeWithTimeout<SavedAppSettings>("save_app_settings", {
+    return await invoke<SavedAppSettings>("save_app_settings", {
       periods,
       termConfig,
       reminderSettings,
@@ -245,20 +245,5 @@ export async function refreshStoredReminderSchedule(
     });
   } catch (error) {
     throw storageError(error, "无法更新提醒计划，请重新启动应用。");
-  }
-}
-const SETTINGS_TIMEOUT_MS = 10_000;
-
-async function invokeWithTimeout<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      invoke<T>(command, args),
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("保存操作超时，请重试。")), SETTINGS_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
   }
 }

@@ -125,6 +125,17 @@ test("batch PDF persistence crosses one frontend service and one Rust transactio
   assert.doesNotMatch(app, /for[\s\S]{0,120}insertStoredCourse/);
 });
 
+test("storage commands use short-lived connections instead of a process-wide database mutex", () => {
+  const rust = source("src-tauri/src/lib.rs");
+  const service = source("src/services/course-storage.ts");
+  assert.match(rust, /CourseDatabase::connect\(path\)/);
+  assert.doesNotMatch(rust, /CourseState\(Arc<Mutex/);
+  assert.match(rust, /async fn load_courses/);
+  assert.match(rust, /async fn load_period_times/);
+  assert.match(rust, /async fn load_reminder_configuration/);
+  assert.doesNotMatch(service, /invokeWithTimeout|保存操作超时/);
+});
+
 test("course clearing remains a single background storage command", () => {
   const service = source("src/services/course-storage.ts");
   const app = source("src/App.tsx");

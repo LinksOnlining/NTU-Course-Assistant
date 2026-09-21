@@ -95,6 +95,18 @@ impl CourseDatabase {
         Ok(database)
     }
 
+    /// Open an already-initialized database for one bounded operation.
+    ///
+    /// The application state owns the path, not a process-wide connection or
+    /// mutex. Each command gets a short-lived connection so a failed command
+    /// cannot leave later commands waiting on a stale guard.
+    pub fn connect(path: &Path) -> Result<Self, StorageError> {
+        let connection = Connection::open(path)?;
+        connection.busy_timeout(Duration::from_secs(3))?;
+        connection.execute_batch("PRAGMA foreign_keys = ON;")?;
+        Ok(Self { connection })
+    }
+
     fn migrate(&mut self) -> Result<(), StorageError> {
         let version: i64 = self
             .connection
@@ -977,6 +989,58 @@ mod tests {
                 .expect("load unchanged schedule"),
             Some(periods)
         );
+    }
+
+    #[test]
+    fn repeated_fresh_connections_save_new_and_existing_periods_without_stale_state() {
+        let path = temporary_database_path();
+        remove_database_files(&path);
+        {
+            let database = CourseDatabase::open(&path).expect("create schedule database");
+            database
+                .save_period_times(&[
+                    PeriodTime {
+                        period: 1,
+                        start_time: "08:00".into(),
+                        end_time: "08:45".into(),
+                    },
+                    PeriodTime {
+                        period: 2,
+                        start_time: "08:50".into(),
+                        end_time: "09:35".into(),
+                    },
+                ])
+                .expect("save initial schedule");
+        }
+
+        let expected = vec![
+            PeriodTime {
+                period: 1,
+                start_time: "08:10".into(),
+                end_time: "08:55".into(),
+            },
+            PeriodTime {
+                period: 2,
+                start_time: "09:00".into(),
+                end_time: "09:45".into(),
+            },
+            PeriodTime {
+                period: 3,
+                start_time: "09:50".into(),
+                end_time: "10:35".into(),
+            },
+        ];
+        for _ in 0..4 {
+            let database = CourseDatabase::connect(&path).expect("connect schedule database");
+            database
+                .save_period_times(&expected)
+                .expect("replace schedule using a fresh connection");
+            assert_eq!(
+                database.load_period_times().expect("read schedule"),
+                Some(expected.clone())
+            );
+        }
+        remove_database_files(&path);
     }
 
     #[test]

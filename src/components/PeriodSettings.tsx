@@ -13,6 +13,7 @@ import { durationMinutes, minutesToTime, timeToMinutes } from "../core/time.ts";
 import { loadAutostartEnabled, saveAutostartEnabled } from "../services/autostart.ts";
 import { sendTestCourseNotification } from "../services/reminder-notification.ts";
 import type { ReminderConfiguration, ReminderSettings, TermConfig } from "../types/reminder.ts";
+import type { SaveOperationState } from "../types/save-operation.ts";
 import type { PeriodTime } from "../types/time.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
 
@@ -31,6 +32,10 @@ interface PeriodSettingsProps {
   readonly onClearAllCourses: () => Promise<void>;
   readonly onCheckUpdates: () => void;
   readonly onCancel: () => void;
+}
+
+function isSaveOperationBusy(state: SaveOperationState): boolean {
+  return state.kind === "validating" || state.kind === "saving";
 }
 
 export function PeriodSettings({
@@ -71,7 +76,9 @@ export function PeriodSettings({
     String(reminderConfiguration.reminderSettings.advanceMinutes),
   );
   const [error, setError] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const saveStateRef = useRef<SaveOperationState>({ kind: "idle" });
+  const [saveState, setSaveState] = useState<SaveOperationState>({ kind: "idle" });
+  const isSaving = isSaveOperationBusy(saveState);
   const [isSendingTestReminder, setIsSendingTestReminder] = useState(false);
   const [testReminderMessage, setTestReminderMessage] = useState("");
   const [autostartEnabled, setAutostartEnabled] = useState<boolean | null>(null);
@@ -80,7 +87,9 @@ export function PeriodSettings({
   const [widgetEnabled, setWidgetEnabled] = useState(widgetSettings.enabled);
   const [widgetMode, setWidgetMode] = useState<WidgetDisplayMode>(widgetSettings.displayMode);
   const [widgetLocked, setWidgetLocked] = useState(widgetSettings.locked);
-  const [isSavingWidget, setIsSavingWidget] = useState(false);
+  const widgetSaveStateRef = useRef<SaveOperationState>({ kind: "idle" });
+  const [widgetSaveState, setWidgetSaveState] = useState<SaveOperationState>({ kind: "idle" });
+  const isSavingWidget = isSaveOperationBusy(widgetSaveState);
   const [widgetError, setWidgetError] = useState("");
   const [isConfirmingClearCourses, setIsConfirmingClearCourses] = useState(false);
   const [isClearingCourses, setIsClearingCourses] = useState(false);
@@ -185,6 +194,10 @@ export function PeriodSettings({
   }
 
   async function save() {
+    if (isSaveOperationBusy(saveStateRef.current)) return;
+    saveStateRef.current = { kind: "validating" };
+    setSaveState(saveStateRef.current);
+    setError("");
     try {
       if (
         draft.some(
@@ -210,12 +223,19 @@ export function PeriodSettings({
       if (reminderSettings.enabled && termConfig === null) {
         throw new RangeError("启用提醒前请设置第 1 教学周的星期一");
       }
-      setIsSaving(true);
+      saveStateRef.current = { kind: "saving" };
+      setSaveState(saveStateRef.current);
       await onSave(draft, termConfig, reminderSettings);
     } catch (caught: unknown) {
-      setError(caught instanceof Error ? caught.message : "保存作息失败，请稍后重试。");
+      const message = caught instanceof Error ? caught.message : "保存作息失败，请稍后重试。";
+      setError(message);
+      saveStateRef.current = { kind: "error", message };
+      setSaveState(saveStateRef.current);
     } finally {
-      setIsSaving(false);
+      if (saveStateRef.current.kind !== "error") {
+        saveStateRef.current = { kind: "idle" };
+        setSaveState(saveStateRef.current);
+      }
     }
   }
 
@@ -277,9 +297,13 @@ export function PeriodSettings({
     }
   }
   async function saveWidget() {
-    setIsSavingWidget(true);
+    if (isSaveOperationBusy(widgetSaveStateRef.current)) return;
+    widgetSaveStateRef.current = { kind: "validating" };
+    setWidgetSaveState(widgetSaveStateRef.current);
     setWidgetError("");
     try {
+      widgetSaveStateRef.current = { kind: "saving" };
+      setWidgetSaveState(widgetSaveStateRef.current);
       const saved = await onSaveWidgetSettings({
         enabled: widgetEnabled,
         displayMode: widgetMode,
@@ -288,10 +312,18 @@ export function PeriodSettings({
       setWidgetEnabled(saved.enabled);
       setWidgetMode(saved.displayMode);
       setWidgetLocked(saved.locked);
+      widgetSaveStateRef.current = { kind: "success" };
+      setWidgetSaveState(widgetSaveStateRef.current);
     } catch (caught: unknown) {
-      setWidgetError(caught instanceof Error ? caught.message : "保存小组件设置失败，请稍后重试。");
+      const message = caught instanceof Error ? caught.message : "保存小组件设置失败，请稍后重试。";
+      setWidgetError(message);
+      widgetSaveStateRef.current = { kind: "error", message };
+      setWidgetSaveState(widgetSaveStateRef.current);
     } finally {
-      setIsSavingWidget(false);
+      if (widgetSaveStateRef.current.kind !== "error") {
+        widgetSaveStateRef.current = { kind: "idle" };
+        setWidgetSaveState(widgetSaveStateRef.current);
+      }
     }
   }
 
