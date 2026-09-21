@@ -45,6 +45,21 @@ PDF 文件选择器和 `import_courses` 仍使用独立的 Tauri 命令。导入
 
 `.sig` 与安装包在本次构建窗口内生成，未将签名内容或私钥写入仓库。
 
+## GitHub v1.2.1 发布产物
+
+Release workflow `35608176021` 已成功完成，GitHub Draft Release 已核验后发布为：
+
+- Release：<https://github.com/LinksOnlining/NTU-Course-Assistant/releases/tag/v1.2.1>
+- Tag：`v1.2.1`，指向提交 `6b34024889d9e271062a3f736e2022190a8cb57f`；
+- `latest.json`：版本 `1.2.1`，包含 `windows-x86_64`、`windows-x86_64-nsis`、`windows-x86_64-msi` 三个平台条目；
+- GitHub NSIS：`NTU.Course.Assistant_1.2.1_x64-setup.exe`，51,952,353 bytes，SHA-256 `892EE4CEE70D557FEB473E1B94A5A42C7F029F7A77E787759D666F56F6AD5230`；
+- GitHub NSIS 签名：436 bytes，SHA-256 `A1614653CB44E809E6423CF6032D2420F19A8CB04CFE1F18EDA2CA8BBE046655`；
+- GitHub MSI：`NTU.Course.Assistant_1.2.1_x64_en-US.msi`，53,673,984 bytes，SHA-256 `E695AAB975371E5FDE4298DD8EB925EF52D0B25E9547CE5EFB9BAD595E9C3BEC`；
+- GitHub MSI 签名：436 bytes，SHA-256 `36B7BF740A28E9E0BF7E28AE717B95B1029526F9320FE143B064E4252C8B7584`；
+- GitHub `latest.json` SHA-256：`A13EB9A4B8F3B44658EBB2C9D787337BCFEC4CCD51E37F8A3BDC3426B09CCC3D`。
+
+以上哈希来自发布页实际下载的 GitHub 产物；私钥、密码和签名内容未写入仓库或文档。
+
 新增/强化覆盖：
 
 - 多次使用新连接保存已有和新增作息，验证连接释放后仍可回读；

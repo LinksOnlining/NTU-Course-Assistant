@@ -1,8 +1,8 @@
 # 项目状态
 
 - 最后更新：2026-09-21
-- 当前阶段：**v1.2.1 发布准备完成，等待 GitHub Release**。保存系统重构已完成并通过 Windows 10 安装态人工验收：针对 PDF 导入后课程保存、作息保存长期 pending 的共同运行时风险，已移除进程级 `CourseDatabase`/Mutex 持有；应用状态只保存数据库路径，每个命令在后台线程创建短生命周期 SQLite 连接，完成事务/回读后立即释放；同步读取命令也不再占用 Tauri runtime。前端作息与小组件保存使用显式 validating/saving/success/error 状态并支持失败重试；移除无法取消后端调用的前端超时包装。SQLite schema 保持 4，自动回归、Rust 检查和当前版本生产构建均通过。
-- v1.2.1 Release status: **Ready / Pending GitHub Release**。本版本是基于 v1.2.0 的稳定性修复 patch release；Updater 使用 Tauri 官方签名、GitHub Releases HTTPS endpoint 和 Windows passive installer。Backup / Restore 已从 v1.2.0 移除，SQLite schema 保持 4。
+- 当前阶段：**v1.2.1 已正式发布**。保存系统重构已完成并通过 Windows 10 安装态人工验收：针对 PDF 导入后课程保存、作息保存长期 pending 的共同运行时风险，已移除进程级 `CourseDatabase`/Mutex 持有；应用状态只保存数据库路径，每个命令在后台线程创建短生命周期 SQLite 连接，完成事务/回读后立即释放；同步读取命令也不再占用 Tauri runtime。前端作息与小组件保存使用显式 validating/saving/success/error 状态并支持失败重试；移除无法取消后端调用的前端超时包装。SQLite schema 保持 4，自动回归、Rust 检查、生产构建和 Windows 10 安装态验收均通过。
+- v1.2.1 Release status: **RELEASED**。GitHub Release、NSIS/MSI 安装包及 updater `latest.json`/签名已生成并发布；tag `v1.2.1` 指向稳定提交 `6b34024889d9e271062a3f736e2022190a8cb57f`。本版本是基于 v1.2.0 的稳定性修复 patch release；Updater 使用 Tauri 官方签名、GitHub Releases HTTPS endpoint 和 Windows passive installer。Backup / Restore 已从 v1.2.0 移除，SQLite schema 保持 4。
 - 阶段门禁：Phase 7.4 离屏恢复、保存回归修复、自动验证、开发态/安装态启动和 Windows 人工验收均已完成。双显示器移除与 DPI 切换未单独执行，保留为已有 physical geometry fallback 自动覆盖的 documented limitation，不阻断 V1。
 - 已完成：Phase 0；Phase 1 全部；Phase 2 全部；Phase 2.5 节次显示；Phase 2.6 用户可配置作息；Phase 2.7 桌面时间轴与自适应课程文字。
 - 核心规则：严格 HH:mm；课程 top/height 只由实际时间及 pxPerMinute 决定；07:00–22:00 轴保留真实空闲比例；重叠链由纯布局函数分配横向 lane；星期列始终为周一至周日。
@@ -25,7 +25,7 @@
 - Phase 9：用户人工体验验收已完成。课程卡片不再显示来源标记，内容按可用空间缩小字体；课程表主体上移；实际文字型课表 PDF 的导入复核通过。**Phase 9 PASS。**
 - Phase 10：产品版本、Tauri 和 Cargo metadata 均为 `1.0.0`，schema 保持 `4`。发布版不再显示 fixture、原型或测试数据标签；未确认作息时仅提示用户设置实际作息。README、MIT LICENSE、隐私清理和 `.gitignore` 已完成。`npm run verify`、Rust 33 项测试、fmt、clippy 与 `npm run tauri build` 均通过；EXE、MSI、NSIS RC 已完成卸载、重装与唯一实例启动烟雾验收。**Phase 10 PASS / Version 1.0 Release Candidate ready。**
 - Version 1.0 路线：Phase 5 课程提醒 → Phase 6 开机自启动 → Phase 7 桌面课程小组件 → 托盘 / 发布。Phase 7 使用同一 Tauri 应用的多窗口模式，复用 Course、PeriodTime、TermConfig 和 CourseOccurrence；不建立第二套课程模型，不使用置顶窗口或 Explorer/壁纸注入。
-- 尚未实现：正式发布。
+- 已发布：GitHub Public Release `v1.2.1`；不创建或移动旧版本 tag。
 - 已知非阻断项：Rust 的 linker_messages 创建库/对象输出警告仍存在，编译和运行正常。没有忽略失败测试。
 - PDF：已有真实样本检查，15 条固定安排和 3 条非固定实践课程；原件不入 Git，实际钟点和学期起点仍需用户确认。
 - Phase 3.1 状态：新增 PDF.js 原始文本层提取与 Tauri Dialog/FS 适配器。提取结果只驻留 React 内存，保留文件名、页码、页面宽高、文本、x/y、文本宽高；不判断星期、课程、教室、周数或节次，不创建 Course，也不调用 SQLite。PDF.js CMap 在本机构建时从依赖复制到被忽略的 `public/pdfjs/cmaps`，用于中文字体映射。
@@ -37,7 +37,7 @@
 - Phase 3.4 状态：纯 `prepareImportPlan` 在生成 ID 前稳定计算写入、现有/批内重复跳过及时间冲突；正式确认时仅为待写入项生成一次 UUID 并再次通过统一校验。Rust `import_courses` 在单个 SQLite transaction 中再次校验并批量插入，任一失败整体回滚；React 只在成功返回后合并课程。
 - Phase 3.4 Desktop 验收：创建临时 AppData 数据库副本后，在 Tauri 独立窗口补齐 3 条实践并将 18 条课程一次写入；`load_courses` 返回 18，当前周立即显示 12 张用户卡片。正常关闭重启后仍恢复 18；再次导入同一 PDF 得到重复 18、写入 0，数据库保持 18。全过程 `period_times=12`、`user_version=2`、integrity=ok，页面/控制台无错误；验收后已恢复原始数据库为 courses=0。
 - v1.1.0 RC2：新增作息后续节次联动、教学周切换、5/7 天视图、当前星期高亮、分钟级当前时间线、首次当前时间定位、离线 OCR 和统一单节时长。设置写入采用数据库回读，小组件采用字段级 patch；用户已确认设置保存问题修复。真实三页 PDF 经当前源码及生产前端构建均得到 3 页、260 个文本块、17 条固定安排和 3 条非固定实践，且不再把课程元数据中的“训练”误判为实践。schema 保持 4。
-- 下一步：**Version 1.0 开发阶段正式结束；v1.1.0 已发布到 Public GitHub Release，后续 Version 2 等待用户重新启动需求。**
+- 下一步：**v1.2.1 已发布；当前版本开发阶段停止，等待用户提出下一阶段需求。**
 - 验证详情：docs/phase-1-verification.md、docs/phase-2-verification.md、docs/phase-2-5-verification.md、docs/phase-2-6-verification.md、docs/phase-2-7-verification.md、docs/phase-3-1-verification.md、docs/phase-3-2-verification.md、docs/phase-3-3-verification.md、docs/phase-3-4-verification.md、docs/phase-5-1-verification.md、docs/phase-5-2-verification.md、docs/phase-5-3-verification.md、docs/phase-5-4-verification.md、docs/phase-6-verification.md、docs/phase-7-1-verification.md、docs/phase-7-2-verification.md、docs/phase-7-3-verification.md、docs/phase-7-4-verification.md、docs/phase-8-verification.md、docs/phase-9-verification.md、docs/phase-10-verification.md。
 - Git：Phase 3.1–3.4 的改动按特别规则合并为一个稳定提交；未创建 tag，未 push。
 
