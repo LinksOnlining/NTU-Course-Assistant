@@ -1,9 +1,10 @@
 # 项目状态
 
 - 最后更新：2026-09-22
-- 当前阶段：**v1.3.0 Academic Hub Release Candidate**。CourseOccurrence/CourseOverride 统一读取模型、停课/调课/换教室/补课、学习事项、考试、今日学习中心、Widget NEXT/DEADLINES 模式与 ACTIVE/ARCHIVED 学期数据基础已完成；本轮 RC UI 收口修复 Academic Hub 内容 viewport、occurrence 内联操作、操作级 busy/finally 清理及“已停课”状态泄漏，自动门禁与 v1.3.0 生产构建 PASS，等待 Ethan 完成 Windows 10 最新 NSIS 安装态人工验收，尚未创建 v1.3.0 tag 或发布 Release。
+- 当前阶段：**v1.3.0 Academic Hub Release Candidate**。CourseOccurrence/CourseOverride 统一读取模型、停课/调课/换教室/补课、学习事项、考试、今日学习中心、Widget NEXT/DEADLINES 模式与 ACTIVE/ARCHIVED 学期数据基础已完成；本轮 RC 收口进一步将课表变化选择/展开/编辑/操作状态隔离到页面级 hook，加入 tab/卸载 generation cleanup，并移除跨分区 global busy 对课表变化控件的影响。自动门禁与 v1.3.0 生产构建 PASS，最新 NSIS 已重新安装并启动，等待 Ethan 完成 Windows 10 最新安装态人工验收，尚未创建 v1.3.0 tag 或发布 Release。
 - v1.3.0 数据安全：SQLite 从 schema 4 通过非破坏 migration 升至 schema 5，新增 semesters、course_overrides、academic_tasks、exams、reminder_rules、reminder_instances；原有 courses、period_times、app_settings、handled_reminders 保留，未来 schema 仍安全拒绝。
 - v1.3.0 统一数据流：课程表、今日中心、Widget 和提醒均优先消费 `resolveCourseOccurrences` 产生的 canonical occurrence；基础 Course 不被单次变化直接改写。
+- v1.3.0 页面状态边界：Academic Hub 的课程变化页只持有自身的 selected course、expanded occurrence、搜索/筛选、编辑器和 typed operation；离开分区会清理瞬态状态，异步操作以 generation 防止旧结果回写。任务/考试/学期的忙碌状态不再控制课表变化按钮；当前产品已移除 Backup / Restore，因此不存在“备份管理”运行时路由可供跨页复现。
 - v1.3.0 自动门禁：`npm run verify` PASS（UI 450 项，435 通过、15 跳过；TypeScript 单元测试 128 项，架构测试 60 项），Rust 39 项测试、fmt、clippy PASS；`npm run tauri build` 已按本轮修复重新生成 v1.3.0 NSIS/MSI 与 updater signatures。最新 NSIS 已重新安装并启动，安装态进程响应正常。剩余门禁仅为最新安装包的 Windows 10 人工验收；完成前不创建 tag、不发布 Release。
 
 - 最后更新：2026-09-21

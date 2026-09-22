@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { resolveCourseOccurrences } from "../core/course-occurrence.ts";
 import { getTodayDashboard } from "../core/today-dashboard.ts";
 import { summarizeCourseChanges } from "../core/course-change.ts";
@@ -151,6 +151,248 @@ function confirmScheduleConflict(
   );
 }
 
+type CourseChangeAction = "cancel" | "reschedule" | "modify" | "makeup" | "revoke";
+type CourseChangeOperation =
+  | { readonly status: "idle" }
+  | {
+      readonly status: "saving";
+      readonly action: CourseChangeAction;
+      readonly occurrenceKey: string;
+    };
+
+type CourseChangeEditor = {
+  readonly kind: Exclude<CourseOverrideKind, "CANCEL">;
+  readonly occurrenceKey: string;
+  readonly targetDate: string;
+  readonly startTime: string;
+  readonly endTime: string;
+  readonly room: string;
+};
+
+interface CourseChangePageStateOptions {
+  readonly tab: HubTab;
+  readonly courses: readonly Course[];
+  readonly occurrences: readonly ReturnType<typeof resolveCourseOccurrences>[number][];
+  readonly overrides: readonly CourseOverride[];
+  readonly setOverrides: Dispatch<SetStateAction<readonly CourseOverride[]>>;
+  readonly semester: Semester | null;
+  readonly termConfig: TermConfig | null;
+  readonly onDataChanged?: () => void;
+}
+
+function useCourseChangePageState({
+  tab,
+  courses,
+  occurrences,
+  overrides,
+  setOverrides,
+  semester,
+  termConfig,
+  onDataChanged,
+}: CourseChangePageStateOptions) {
+  const [changeCourseId, setChangeCourseId] = useState<string | null>(null);
+  const [changeOccurrenceKey, setChangeOccurrenceKey] = useState<string | null>(null);
+  const [changeSearch, setChangeSearch] = useState("");
+  const [changeFilter, setChangeFilter] = useState<ChangeFilter>("all");
+  const [changeEditor, setChangeEditor] = useState<CourseChangeEditor | null>(null);
+  const [occurrenceMessage, setOccurrenceMessage] = useState("");
+  const [operation, setOperation] = useState<CourseChangeOperation>({ status: "idle" });
+  const operationRef = useRef<CourseChangeOperation>({ status: "idle" });
+  const operationGeneration = useRef(0);
+  const activeTabRef = useRef(tab);
+  activeTabRef.current = tab;
+  const updateOperation = (next: CourseChangeOperation) => {
+    operationRef.current = next;
+    setOperation(next);
+  };
+
+  useEffect(() => {
+    if (tab !== "changes") {
+      operationGeneration.current += 1;
+      setChangeCourseId(null);
+      setChangeOccurrenceKey(null);
+      setChangeEditor(null);
+      setOccurrenceMessage("");
+      updateOperation({ status: "idle" });
+      setChangeSearch("");
+      setChangeFilter("all");
+    }
+    return () => {
+      operationGeneration.current += 1;
+    };
+  }, [tab]);
+
+  const changeSummaries = useMemo(
+    () => summarizeCourseChanges(courses, occurrences, overrides),
+    [courses, occurrences, overrides],
+  );
+  const visibleChangeSummaries = useMemo(() => {
+    const query = changeSearch.trim().toLocaleLowerCase("zh-CN");
+    return changeSummaries.filter((summary) => {
+      if (changeFilter === "changed" && summary.changedCount === 0) return false;
+      if (!query) return true;
+      const haystack = [
+        summary.course.name,
+        summary.course.teacher ?? "",
+        summary.course.classroom ?? "",
+      ]
+        .join(" ")
+        .toLocaleLowerCase("zh-CN");
+      return haystack.includes(query);
+    });
+  }, [changeFilter, changeSearch, changeSummaries]);
+  const selectedChangeSummary = changeSummaries.find(
+    (summary) => summary.course.id === changeCourseId,
+  );
+  const selectedChangeTemplate =
+    selectedChangeSummary?.occurrences.find((item) => item.occurrenceKey === changeOccurrenceKey) ??
+    selectedChangeSummary?.occurrences[0];
+  const currentTeachingWeek = termConfig
+    ? getTeachingWeek(getShanghaiDate(Date.now()), termConfig)
+    : null;
+  const selectedCourseCurrentWeek = selectedChangeSummary?.occurrences.filter(
+    (item) => item.teachingWeek === currentTeachingWeek,
+  );
+  const occurrenceBusyKey = operation.status === "saving" ? operation.occurrenceKey : null;
+
+  useEffect(() => {
+    if (tab !== "changes" || !changeCourseId) return;
+    if (!selectedChangeSummary) {
+      setChangeCourseId(null);
+      setChangeOccurrenceKey(null);
+      setChangeEditor(null);
+      setOccurrenceMessage("");
+      return;
+    }
+    if (
+      changeOccurrenceKey &&
+      !selectedChangeSummary.occurrences.some((item) => item.occurrenceKey === changeOccurrenceKey)
+    ) {
+      setChangeOccurrenceKey(null);
+      setChangeEditor(null);
+      setOccurrenceMessage("");
+    }
+  }, [changeCourseId, changeOccurrenceKey, selectedChangeSummary, tab]);
+
+  async function runOccurrence(
+    action: CourseChangeAction,
+    occurrenceKey: string,
+    save: () => Promise<void>,
+    success: string,
+  ) {
+    if (operationRef.current.status === "saving") return;
+    const generation = ++operationGeneration.current;
+    const trace = beginRuntimeTrace(`${action}-occurrence`, generation);
+    updateOperation({ status: "saving", action, occurrenceKey });
+    setOccurrenceMessage("");
+    trace("confirmed");
+    trace("save-start");
+    try {
+      await save();
+      trace("save-success");
+      trace("canonical-refresh-start");
+      onDataChanged?.();
+      trace("canonical-refresh-end");
+      if (generation === operationGeneration.current && activeTabRef.current === "changes") {
+        setOccurrenceMessage(success);
+        trace("ui-update");
+      }
+    } catch (error: unknown) {
+      if (generation === operationGeneration.current && activeTabRef.current === "changes") {
+        setOccurrenceMessage(error instanceof Error ? error.message : "操作失败，请稍后重试。");
+      }
+    } finally {
+      if (generation === operationGeneration.current) updateOperation({ status: "idle" });
+      trace("operation-complete");
+    }
+  }
+
+  function openChangeEditor(
+    item: ReturnType<typeof resolveCourseOccurrences>[number],
+    kind: Exclude<CourseOverrideKind, "CANCEL">,
+  ) {
+    setChangeOccurrenceKey(item.occurrenceKey);
+    setOccurrenceMessage("");
+    setChangeEditor({
+      kind,
+      occurrenceKey: item.occurrenceKey,
+      targetDate: item.date,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      room: item.room ?? "",
+    });
+  }
+
+  function updateChangeEditor(patch: Partial<CourseChangeEditor>) {
+    setChangeEditor((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  function submitChangeEditor(item: ReturnType<typeof resolveCourseOccurrences>[number]) {
+    const editor = changeEditor;
+    if (!editor || editor.occurrenceKey !== item.occurrenceKey || !semester) return;
+    if (editor.kind !== "MODIFY" && (!editor.targetDate || !editor.startTime || !editor.endTime))
+      return;
+    if (
+      editor.kind !== "MODIFY" &&
+      !confirmScheduleConflict(
+        occurrences,
+        item,
+        editor.targetDate,
+        editor.startTime,
+        editor.endTime,
+      )
+    )
+      return;
+    void runOccurrence(
+      editor.kind === "RESCHEDULE" ? "reschedule" : editor.kind === "MAKEUP" ? "makeup" : "modify",
+      item.occurrenceKey,
+      async () => {
+        const saved = await saveCourseOverride(
+          makeOverride(
+            item,
+            editor.kind,
+            editor.kind === "MODIFY" ? null : editor.targetDate,
+            editor.kind === "MODIFY" ? null : editor.startTime,
+            editor.kind === "MODIFY" ? null : editor.endTime,
+            editor.room.trim() || null,
+          ),
+        );
+        setOverrides((current) => [...current, saved]);
+        setChangeEditor(null);
+      },
+      editor.kind === "RESCHEDULE"
+        ? "已保存调课"
+        : editor.kind === "MAKEUP"
+          ? "已添加补课"
+          : "已修改本次教室",
+    );
+  }
+
+  return {
+    changeCourseId,
+    setChangeCourseId,
+    changeOccurrenceKey,
+    setChangeOccurrenceKey,
+    changeSearch,
+    setChangeSearch,
+    changeFilter,
+    setChangeFilter,
+    changeEditor,
+    setChangeEditor,
+    occurrenceMessage,
+    setOccurrenceMessage,
+    occurrenceBusyKey,
+    visibleChangeSummaries,
+    selectedChangeSummary,
+    selectedChangeTemplate,
+    selectedCourseCurrentWeek,
+    runOccurrence,
+    openChangeEditor,
+    updateChangeEditor,
+    submitChangeEditor,
+  };
+}
+
 export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubProps) {
   const [tab, setTab] = useState<HubTab>("today");
   const [semesters, setSemesters] = useState<readonly Semester[]>([]);
@@ -159,9 +401,7 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
   const [tasks, setTasks] = useState<readonly AcademicTask[]>([]);
   const [exams, setExams] = useState<readonly Exam[]>([]);
   const [message, setMessage] = useState("");
-  const [occurrenceMessage, setOccurrenceMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [occurrenceBusyKey, setOccurrenceBusyKey] = useState<string | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDueAt, setTaskDueAt] = useState("");
   const [taskType, setTaskType] = useState<AcademicTaskType>("ASSIGNMENT");
@@ -172,19 +412,12 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
   const [examLocation, setExamLocation] = useState("");
   const [examCourseId, setExamCourseId] = useState("");
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
-  const [changeCourseId, setChangeCourseId] = useState<string | null>(null);
-  const [changeOccurrenceKey, setChangeOccurrenceKey] = useState<string | null>(null);
-  const [changeSearch, setChangeSearch] = useState("");
-  const [changeFilter, setChangeFilter] = useState<ChangeFilter>("all");
-  const [changeEditor, setChangeEditor] = useState<{
-    readonly kind: Exclude<CourseOverrideKind, "CANCEL">;
-    readonly occurrenceKey: string;
-    readonly targetDate: string;
-    readonly startTime: string;
-    readonly endTime: string;
-    readonly room: string;
-  } | null>(null);
-  const occurrenceOperationGeneration = useRef(0);
+  const activeTabRef = useRef(tab);
+  activeTabRef.current = tab;
+
+  useEffect(() => {
+    setMessage("");
+  }, [tab]);
 
   useEffect(() => {
     let active = true;
@@ -210,16 +443,6 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
       active = false;
     };
   }, [termConfig]);
-
-  useEffect(() => {
-    if (tab === "changes") return;
-    setChangeCourseId(null);
-    setChangeOccurrenceKey(null);
-    setChangeEditor(null);
-    setOccurrenceMessage("");
-    setChangeSearch("");
-    setChangeFilter("all");
-  }, [tab]);
 
   useEffect(() => {
     if (!semester) {
@@ -263,146 +486,60 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
     () => new Map(courses.map((course) => [course.id, course])),
     [courses],
   );
-  const changeSummaries = useMemo(
-    () => summarizeCourseChanges(courses, occurrences, overrides),
-    [courses, occurrences, overrides],
-  );
-  const visibleChangeSummaries = useMemo(() => {
-    const query = changeSearch.trim().toLocaleLowerCase("zh-CN");
-    return changeSummaries.filter((summary) => {
-      if (changeFilter === "changed" && summary.changedCount === 0) return false;
-      if (!query) return true;
-      const haystack = [
-        summary.course.name,
-        summary.course.teacher ?? "",
-        summary.course.classroom ?? "",
-      ]
-        .join(" ")
-        .toLocaleLowerCase("zh-CN");
-      return haystack.includes(query);
-    });
-  }, [changeFilter, changeSearch, changeSummaries]);
-  const selectedChangeSummary = changeSummaries.find(
-    (summary) => summary.course.id === changeCourseId,
-  );
-  const selectedChangeTemplate =
-    selectedChangeSummary?.occurrences.find((item) => item.occurrenceKey === changeOccurrenceKey) ??
-    selectedChangeSummary?.occurrences[0];
-  const currentTeachingWeek = termConfig
-    ? getTeachingWeek(getShanghaiDate(Date.now()), termConfig)
-    : null;
-  const selectedCourseCurrentWeek = selectedChangeSummary?.occurrences.filter(
-    (item) => item.teachingWeek === currentTeachingWeek,
-  );
+  const {
+    changeCourseId,
+    setChangeCourseId,
+    changeOccurrenceKey,
+    setChangeOccurrenceKey,
+    changeSearch,
+    setChangeSearch,
+    changeFilter,
+    setChangeFilter,
+    changeEditor,
+    setChangeEditor,
+    occurrenceMessage,
+    setOccurrenceMessage,
+    occurrenceBusyKey,
+    visibleChangeSummaries,
+    selectedChangeSummary,
+    selectedChangeTemplate,
+    selectedCourseCurrentWeek,
+    runOccurrence,
+    openChangeEditor,
+    updateChangeEditor,
+    submitChangeEditor,
+  } = useCourseChangePageState({
+    tab,
+    courses,
+    occurrences,
+    overrides,
+    setOverrides,
+    semester,
+    termConfig,
+    onDataChanged,
+  });
   const readOnly = semester?.status === "ARCHIVED";
 
   async function run(action: () => Promise<void>, success: string) {
+    const actionTab = activeTabRef.current;
     setBusy(true);
     setMessage("");
     try {
       await action();
-      setMessage(success);
+      if (activeTabRef.current === actionTab) setMessage(success);
       onDataChanged?.();
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "操作失败，请稍后重试。");
+      if (activeTabRef.current === actionTab) {
+        setMessage(error instanceof Error ? error.message : "操作失败，请稍后重试。");
+      }
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function runOccurrence(
-    operation: "cancel" | "reschedule" | "modify" | "makeup" | "revoke",
-    occurrenceKey: string,
-    action: () => Promise<void>,
-    success: string,
-  ) {
-    if (occurrenceBusyKey) return;
-    const trace = beginRuntimeTrace(
-      `${operation}-occurrence`,
-      ++occurrenceOperationGeneration.current,
-    );
-    setOccurrenceBusyKey(occurrenceKey);
-    setOccurrenceMessage("");
-    trace("confirmed");
-    trace("save-start");
-    try {
-      await action();
-      trace("save-success");
-      trace("canonical-refresh-start");
-      onDataChanged?.();
-      trace("canonical-refresh-end");
-      setOccurrenceMessage(success);
-      trace("ui-update");
-    } catch (error: unknown) {
-      setOccurrenceMessage(error instanceof Error ? error.message : "操作失败，请稍后重试。");
-    } finally {
-      setOccurrenceBusyKey(null);
-      trace("operation-complete");
     }
   }
 
   function refreshSemester(next: Semester) {
     setSemester(next);
     setSemesters((current) => [next, ...current.filter((item) => item.id !== next.id)]);
-  }
-
-  function openChangeEditor(
-    item: ReturnType<typeof resolveCourseOccurrences>[number],
-    kind: Exclude<CourseOverrideKind, "CANCEL">,
-  ) {
-    setChangeEditor({
-      kind,
-      occurrenceKey: item.occurrenceKey,
-      targetDate: item.date,
-      startTime: item.startTime,
-      endTime: item.endTime,
-      room: item.room ?? "",
-    });
-  }
-
-  function updateChangeEditor(patch: Partial<NonNullable<typeof changeEditor>>) {
-    setChangeEditor((current) => (current ? { ...current, ...patch } : current));
-  }
-
-  function submitChangeEditor(item: ReturnType<typeof resolveCourseOccurrences>[number]) {
-    const editor = changeEditor;
-    if (!editor || editor.occurrenceKey !== item.occurrenceKey || !semester) return;
-    if (editor.kind !== "MODIFY" && (!editor.targetDate || !editor.startTime || !editor.endTime))
-      return;
-    if (
-      editor.kind !== "MODIFY" &&
-      !confirmScheduleConflict(
-        occurrences,
-        item,
-        editor.targetDate,
-        editor.startTime,
-        editor.endTime,
-      )
-    )
-      return;
-    void runOccurrence(
-      editor.kind === "RESCHEDULE" ? "reschedule" : editor.kind === "MAKEUP" ? "makeup" : "modify",
-      item.occurrenceKey,
-      async () => {
-        const saved = await saveCourseOverride(
-          makeOverride(
-            item,
-            editor.kind,
-            editor.kind === "MODIFY" ? null : editor.targetDate,
-            editor.kind === "MODIFY" ? null : editor.startTime,
-            editor.kind === "MODIFY" ? null : editor.endTime,
-            editor.room.trim() || null,
-          ),
-        );
-        setOverrides((current) => [...current, saved]);
-        setChangeEditor(null);
-      },
-      editor.kind === "RESCHEDULE"
-        ? "已保存调课"
-        : editor.kind === "MAKEUP"
-          ? "已添加补课"
-          : "已修改本次教室",
-    );
   }
 
   const taskForm = (
@@ -697,7 +834,7 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
           </div>
         )}
         {semester && tab === "changes" && (
-          <div className="hub-card">
+          <div className="hub-card" data-testid="course-change-page">
             {!changeCourseId ? (
               <>
                 <h2>课表变化</h2>
@@ -795,7 +932,7 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
                   <button
                     type="button"
                     className="primary-button"
-                    disabled={busy || readOnly || !selectedChangeTemplate}
+                    disabled={readOnly || !selectedChangeTemplate}
                     onClick={() => {
                       if (!selectedChangeTemplate) return;
                       setChangeOccurrenceKey(selectedChangeTemplate.occurrenceKey);
@@ -811,7 +948,12 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
                       {selectedChangeSummary.course.teacher ?? "教师待定"} ·{" "}
                       {selectedChangeSummary.course.classroom ?? "地点待定"}
                     </p>
-                    <p className="hub-week-status" role="status">
+                    <p
+                      className="hub-week-status"
+                      role="status"
+                      aria-label="本周状态"
+                      data-testid="course-change-week-status"
+                    >
                       {!selectedCourseCurrentWeek || selectedCourseCurrentWeek.length === 0
                         ? "本周无课"
                         : selectedCourseCurrentWeek.every((item) => item.status === "CANCELLED")

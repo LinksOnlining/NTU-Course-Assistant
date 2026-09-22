@@ -155,6 +155,30 @@ test("academic hub tabs stay compact and course changes use a course-first picke
     .click();
   await expect(page.locator(".hub-operation-message")).toHaveCount(0);
   await expect(page.getByText("已停课", { exact: true })).toHaveCount(0);
+
+  const runtimeState = await page.evaluate(() => ({
+    bodyInert: document.body.inert,
+    rootInert: document.getElementById("root")?.inert ?? false,
+    bodyPointerEvents: getComputedStyle(document.body).pointerEvents,
+    activeBackdrops: document.querySelectorAll(
+      ".course-form-backdrop, .period-settings-backdrop, .pdf-preview-backdrop",
+    ).length,
+  }));
+  expect(runtimeState).toEqual({
+    bodyInert: false,
+    rootInert: false,
+    bodyPointerEvents: "auto",
+    activeBackdrops: 0,
+  });
+
+  await tabs.nth(2).click();
+  await tabs.nth(1).click();
+  await expect(page.getByTestId("course-change-page")).toBeVisible();
+  await page.getByRole("button", { name: "管理变化" }).first().click();
+  await page.locator(".hub-occurrence-item").first().click();
+  await expect(
+    page.locator(".hub-occurrence-actions button:not([disabled])").first(),
+  ).toBeVisible();
 });
 
 test("widget settings default to disabled and save the requested mode and lock", async ({

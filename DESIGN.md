@@ -202,3 +202,5 @@ schema 5 使用非破坏 migration 新增 `semesters`、`course_overrides`、`ac
 课表变化页面在展示层按稳定 `courseId` 聚合为课程列表，再进入 occurrence 选择和单次操作；课程搜索/筛选与中文日期、状态徽章均为展示逻辑，实际停课、调课、换教室、补课和撤销仍统一经 resolver 生成 canonical read model。学习中心分区标签保持内容高度并在窄窗口横向滚动，避免 CSS Grid 纵向拉伸。
 
 课程变化详情的每条 occurrence 使用 `hub-occurrence-item-wrap` 包含条目和其唯一的 `hub-occurrence-actions` 内联操作区；操作 busy 与成功/错误消息按 occurrence 隔离，操作完成无论成功或失败都在 `finally` 释放。Hub 内容位于独立 `hub-content-viewport`，不得通过负 margin、绝对定位或固定偏移修正标签与内容间距。
+
+课表变化页的选择、展开 occurrence、搜索/筛选、编辑器和操作状态由 `useCourseChangePageState` 页面级 hook 管理，不放入跨页面全局状态。`CourseChangeOperation` 只锁定当前 occurrence；切换到其他学习中心分区或卸载时递增 generation 并清理瞬态状态，旧的异步成功/失败结果不得回写当前页面。任务、考试和学期页面可以保留各自的保存 busy，但不得将该状态作为课表变化控件的 disabled 条件。canonical occurrence 写入完成后触发既有数据变化通知，派生 Today/Widget/Reminder 刷新不作为当前 occurrence 操作完成的等待条件。

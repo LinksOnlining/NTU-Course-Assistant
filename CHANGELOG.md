@@ -26,6 +26,8 @@
 - 修复 Academic Hub 内容与标签的垂直布局，内容使用独立 viewport 从顶部排列。
 - 修复课程变化操作区不在 occurrence 下方的问题；操作按钮现在以内联子区域呈现，并保持单条 occurrence 选择。
 - 修复停课完成后按钮长期忙碌/等待光标，以及“已停课”消息泄漏到其他学习中心分区的问题；操作状态与消息现在按 occurrence 隔离并在 finally 清理。
+- 重构 Academic Hub 课表变化页状态边界：课程选择、展开 occurrence、搜索/筛选、编辑器和操作状态现在由页面级 hook 管理，离开分区会清理瞬态状态；跨分区的任务忙碌状态不再禁用课表变化控件。
+- 为异步课表变化操作增加 generation/cleanup 防护，切换分区或卸载页面后不会把旧成功/失败消息写回当前页面；canonical 刷新仍独立于当前 occurrence 的操作完成。
 
 ### Status
 
