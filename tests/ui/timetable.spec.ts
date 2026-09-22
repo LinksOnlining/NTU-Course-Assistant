@@ -124,12 +124,48 @@ test("academic hub tabs stay compact and course changes use a course-first picke
   await page.getByRole("tab", { name: "今日", exact: true }).first().click();
   await expect(page.getByRole("tablist", { name: "学习中心分区" })).toBeVisible();
   const tabs = page.getByRole("tablist", { name: "学习中心分区" }).getByRole("tab");
+  const academicShell = page.locator(".academic-page-shell");
   const firstBox = await box(tabs.first());
   await expect(tabs).toHaveCount(5);
+  await expect(academicShell).toBeVisible();
+  const academicSpacing = await page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>(".academic-page-shell");
+    const content = shell?.querySelector<HTMLElement>(":scope > .hub-grid, :scope > .hub-card");
+    if (!shell || !content) throw new Error("Academic page shell content is not mounted");
+    const style = getComputedStyle(shell);
+    return {
+      paddingTop: style.paddingTop,
+      rowGap: style.rowGap,
+      contentOffset: Math.round(
+        content.getBoundingClientRect().top - shell.getBoundingClientRect().top,
+      ),
+    };
+  });
+  expect(academicSpacing).toEqual({ paddingTop: "18px", rowGap: "16px", contentOffset: 18 });
   for (const index of [1, 2, 3, 4]) {
     await tabs.nth(index).click();
     const activeBox = await box(tabs.nth(index));
     expect(activeBox.height).toBeLessThanOrEqual(firstBox.height + 2);
+    await expect(academicShell).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const shell = document.querySelector<HTMLElement>(".academic-page-shell");
+          const content = shell?.querySelector<HTMLElement>(
+            ":scope > .hub-grid, :scope > .hub-card",
+          );
+          if (!shell || !content) return null;
+          const style = getComputedStyle(shell);
+          return {
+            paddingTop: style.paddingTop,
+            rowGap: style.rowGap,
+            contentOffset: Math.round(
+              content.getBoundingClientRect().top - shell.getBoundingClientRect().top,
+            ),
+          };
+        }),
+      )
+      .toEqual(academicSpacing);
   }
   await tabs.nth(1).click();
   await expect(page.getByLabel("搜索课程")).toBeVisible();

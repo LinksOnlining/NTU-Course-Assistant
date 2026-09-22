@@ -1,4 +1,8 @@
 :root {
+  --academic-tabs-to-content-gap: 18px;
+  --academic-page-horizontal-padding: 0px;
+  --academic-section-gap: 16px;
+  --academic-page-bottom-padding: 24px;
   font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
   color: #18251f;
   background: #eaf2ee;
@@ -1804,11 +1808,11 @@ select:focus-visible {
 }
 
 .academic-hub {
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   flex: 1 1 auto;
-  gap: 18px;
+  gap: 0;
   margin: 12px 24px 36px;
   overflow-x: hidden;
   overflow-y: auto;
@@ -1818,10 +1822,17 @@ select:focus-visible {
 }
 
 .hub-content-viewport {
+  min-width: 0;
+}
+
+.academic-page-shell {
   display: grid;
   align-content: start;
-  gap: 18px;
+  flex: 0 0 auto;
+  gap: var(--academic-section-gap);
   min-width: 0;
+  padding: var(--academic-tabs-to-content-gap) var(--academic-page-horizontal-padding)
+    var(--academic-page-bottom-padding);
 }
 
 .hub-tabs {

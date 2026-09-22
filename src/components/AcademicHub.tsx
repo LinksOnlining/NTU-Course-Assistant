@@ -755,7 +755,7 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
           </button>
         ))}
       </div>
-      <div className="hub-content-viewport">
+      <div className="hub-content-viewport academic-page-shell">
         {message && (
           <p className="hub-message" role="status">
             {message}
