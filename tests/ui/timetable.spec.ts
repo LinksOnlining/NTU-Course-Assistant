@@ -136,7 +136,25 @@ test("academic hub tabs stay compact and course changes use a course-first picke
   await expect(page.getByRole("button", { name: "管理变化" }).first()).toBeVisible();
   await page.getByRole("button", { name: "管理变化" }).first().click();
   await expect(page.getByRole("button", { name: "返回课程列表" })).toBeVisible();
-  await expect(page.locator(".hub-occurrence-item").first()).toBeVisible();
+  const firstOccurrence = page.locator(".hub-occurrence-item").first();
+  await expect(firstOccurrence).toBeVisible();
+  await firstOccurrence.click();
+  await expect(page.locator(".hub-occurrence-actions")).toHaveCount(1);
+  await expect(page.locator(".hub-occurrence-panel")).toHaveCount(0);
+  await firstOccurrence.click();
+  await expect(page.locator(".hub-occurrence-actions")).toHaveCount(0);
+  await firstOccurrence.click();
+  await expect(page.getByRole("button", { name: "本次停课" })).toBeVisible();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "本次停课" }).click();
+  await expect(page.locator(".hub-operation-message")).toHaveText("已停课");
+  await expect(page.getByRole("button", { name: "撤销停课" })).toBeEnabled();
+  await page
+    .getByRole("tablist", { name: "学习中心分区" })
+    .getByRole("tab", { name: "今日", exact: true })
+    .click();
+  await expect(page.locator(".hub-operation-message")).toHaveCount(0);
+  await expect(page.getByText("已停课", { exact: true })).toHaveCount(0);
 });
 
 test("widget settings default to disabled and save the requested mode and lock", async ({

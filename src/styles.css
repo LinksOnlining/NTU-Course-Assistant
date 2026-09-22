@@ -1817,6 +1817,13 @@ select:focus-visible {
   scrollbar-width: thin;
 }
 
+.hub-content-viewport {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-width: 0;
+}
+
 .hub-tabs {
   justify-self: start;
   height: auto;
@@ -1945,6 +1952,10 @@ select:focus-visible {
   min-width: 0;
 }
 
+.hub-occurrence-item-wrap {
+  min-width: 0;
+}
+
 .hub-course-card {
   display: flex;
   align-items: center;
@@ -1961,8 +1972,7 @@ select:focus-visible {
   min-width: 0;
 }
 
-.hub-course-card h3,
-.hub-occurrence-panel h3 {
+.hub-course-card h3 {
   margin: 0 0 5px;
   color: #1d4a3e;
   font-size: 17px;
@@ -1970,6 +1980,17 @@ select:focus-visible {
 
 .hub-course-card p {
   margin: 3px 0;
+}
+
+.hub-week-status {
+  display: inline-flex;
+  margin: 0 0 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #e3f2eb;
+  color: #27715f;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .hub-course-card-actions {
@@ -2026,28 +2047,44 @@ select:focus-visible {
   background: #eff8f3;
 }
 
+.hub-occurrence-item.is-selected {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
 .hub-occurrence-item > span {
   min-width: 0;
 }
 
-.hub-occurrence-item small,
-.hub-occurrence-panel small {
+.hub-occurrence-item small {
   display: block;
   margin-top: 3px;
   color: #6b8178;
   font-size: 12px;
 }
 
-.hub-occurrence-panel {
-  margin-top: 14px;
+.hub-occurrence-actions {
+  margin: 0;
   padding: 14px;
   border: 1px solid #cfe2d9;
-  border-radius: 14px;
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
   background: #f3f8f5;
 }
 
-.hub-occurrence-panel p {
+.hub-occurrence-actions h3 {
+  margin: 0 0 5px;
+  color: #1d4a3e;
+  font-size: 15px;
+}
+
+.hub-occurrence-actions p {
   margin: 6px 0 12px;
+}
+
+.hub-operation-message {
+  color: #2f735e;
+  font-weight: 700;
 }
 
 @media (max-width: 760px) {

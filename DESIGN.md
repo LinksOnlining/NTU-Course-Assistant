@@ -200,3 +200,5 @@ schema 5 使用非破坏 migration 新增 `semesters`、`course_overrides`、`ac
 
 今日学习中心由 `getTodayDashboard` 组合下一节、今日课程、变化、待办、逾期任务与最近考试；Widget 通过 `getWidgetSnapshot` 和 canonical occurrence 读取 NEXT、TODAY、DEADLINES。Reminder 继续复用现有 Rust scheduler，只由统一计划构建器加入任务和考试目标；应用完全退出后仍不提供后台提醒。Academic Hub 作为固定窗口布局中的独立纵向滚动区域；Task、Exam 和课程变化编辑使用可见的中文年/月/日输入组件，向存储层传递 ISO 日期字符串。课程变化操作按 occurrence 提供独立编辑器，不持有共享顶部字段或跨对话框数据库锁。
 课表变化页面在展示层按稳定 `courseId` 聚合为课程列表，再进入 occurrence 选择和单次操作；课程搜索/筛选与中文日期、状态徽章均为展示逻辑，实际停课、调课、换教室、补课和撤销仍统一经 resolver 生成 canonical read model。学习中心分区标签保持内容高度并在窄窗口横向滚动，避免 CSS Grid 纵向拉伸。
+
+课程变化详情的每条 occurrence 使用 `hub-occurrence-item-wrap` 包含条目和其唯一的 `hub-occurrence-actions` 内联操作区；操作 busy 与成功/错误消息按 occurrence 隔离，操作完成无论成功或失败都在 `finally` 释放。Hub 内容位于独立 `hub-content-viewport`，不得通过负 margin、绝对定位或固定偏移修正标签与内容间距。

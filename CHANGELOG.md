@@ -23,6 +23,9 @@
 - 修复停课 occurrence 仍出现在正式周课表的问题；补课改为独立 occurrence，撤销变化可恢复基础安排。
 - 调课、换教室和补课改为逐条编辑并保存对应的 `CourseOverride`，不再依赖共享且禁用的顶部字段。
 - 课表变化详情显示中文日期、状态徽章、现有覆盖与撤销入口；补课从课程详情顶部进入，仍由 canonical occurrence/resolver 驱动后续刷新。
+- 修复 Academic Hub 内容与标签的垂直布局，内容使用独立 viewport 从顶部排列。
+- 修复课程变化操作区不在 occurrence 下方的问题；操作按钮现在以内联子区域呈现，并保持单条 occurrence 选择。
+- 修复停课完成后按钮长期忙碌/等待光标，以及“已停课”消息泄漏到其他学习中心分区的问题；操作状态与消息现在按 occurrence 隔离并在 finally 清理。
 
 ### Status
 
