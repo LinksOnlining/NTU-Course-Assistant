@@ -186,7 +186,10 @@ export function layoutCourseOccurrences(
   return ([1, 2, 3, 4, 5, 6, 7] as const).map((weekday) =>
     positionOccurrenceDay(
       occurrences.filter(
-        (occurrence) => occurrence.weekday === weekday && occurrence.teachingWeek === currentWeek,
+        (occurrence) =>
+          occurrence.status !== "CANCELLED" &&
+          occurrence.weekday === weekday &&
+          occurrence.teachingWeek === currentWeek,
       ),
       coursesById,
       axis,

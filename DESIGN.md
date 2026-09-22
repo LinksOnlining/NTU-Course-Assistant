@@ -194,8 +194,8 @@ Release Candidate 使用稳定 identifier `com.ntu-course-assistant.desktop`、s
 
 ## v1.3.0 Academic Hub
 
-v1.3.0 在不破坏 v1.2.1 数据的前提下把课程表扩展为学习中心。基础 `Course` 表示固定安排；`Semester` 表示学期生命周期；`CourseOverride` 表示一次停课、调课、换教室或补课；`resolveCourseOccurrences` 动态输出 `AcademicCourseOccurrence[]`。周课表、今日中心、Widget 和 Reminder 只能消费该 canonical read model，不在组件内重复推导调课规则。
+v1.3.0 在不破坏 v1.2.1 数据的前提下把课程表扩展为学习中心。基础 `Course` 表示固定安排；`Semester` 表示学期生命周期；`CourseOverride` 表示一次停课、调课、换教室或补课；`resolveCourseOccurrences` 动态输出 `AcademicCourseOccurrence[]`。周课表、今日中心、Widget 和 Reminder 只能消费该 canonical read model，不在组件内重复推导调课规则；周课表布局过滤 `CANCELLED` occurrence，`MAKEUP` 保留为额外 occurrence，同一目标 occurrence 的最新 active override 优先。
 
 schema 5 使用非破坏 migration 新增 `semesters`、`course_overrides`、`academic_tasks`、`exams`、`reminder_rules` 和 `reminder_instances`，旧的 courses、period_times、app_settings 与 handled_reminders 保持不变。已有 v1.2.1 课程没有 semester 外键时按 legacy active semester 兼容读取；新建的学期相关记录始终带有 semesterId。ACTIVE 学期最多一个，ARCHIVED 学期默认只读，恢复操作通过统一保存事务切换当前学期。
 
-今日学习中心由 `getTodayDashboard` 组合下一节、今日课程、变化、待办、逾期任务与最近考试；Widget 通过 `getWidgetSnapshot` 和 canonical occurrence 读取 NEXT、TODAY、DEADLINES。Reminder 继续复用现有 Rust scheduler，只由统一计划构建器加入任务和考试目标；应用完全退出后仍不提供后台提醒。
+今日学习中心由 `getTodayDashboard` 组合下一节、今日课程、变化、待办、逾期任务与最近考试；Widget 通过 `getWidgetSnapshot` 和 canonical occurrence 读取 NEXT、TODAY、DEADLINES。Reminder 继续复用现有 Rust scheduler，只由统一计划构建器加入任务和考试目标；应用完全退出后仍不提供后台提醒。Academic Hub 作为固定窗口布局中的独立纵向滚动区域；Task、Exam 和课程变化编辑使用可见的中文年/月/日输入组件，向存储层传递 ISO 日期字符串。课程变化操作按 occurrence 提供独立编辑器，不持有共享顶部字段或跨对话框数据库锁。

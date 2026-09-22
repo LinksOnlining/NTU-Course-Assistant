@@ -1794,8 +1794,15 @@ select:focus-visible {
 
 .academic-hub {
   display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
   gap: 18px;
   margin: 12px 24px 36px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-color: #aebdb7 transparent;
+  scrollbar-width: thin;
 }
 
 .hub-tabs {
@@ -1883,6 +1890,102 @@ select:focus-visible {
   background: #fff;
   color: #20463e;
   font: inherit;
+}
+
+.hub-change-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hub-change-item {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #e0ebe6;
+  border-radius: 11px;
+  background: rgb(255 255 255 / 54%);
+}
+
+.hub-change-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border-radius: 9px;
+  background: #f1f7f4;
+}
+
+.hub-change-editor input[type="time"],
+.hub-change-editor > input:not(.localized-date-part) {
+  min-height: 34px;
+  min-width: 112px;
+  padding: 0 8px;
+  border: 1px solid #bfd6ce;
+  border-radius: 8px;
+  background: #fff;
+  color: #2d5045;
+}
+
+.localized-date-input,
+.localized-datetime-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.localized-date-input {
+  position: relative;
+}
+
+.localized-date-part {
+  width: 42px;
+  min-height: 34px;
+  padding: 0 5px;
+  border: 1px solid #bfd6ce;
+  border-radius: 8px;
+  background: #fff;
+  color: #2d5045;
+  text-align: center;
+}
+
+.localized-date-year {
+  width: 58px;
+}
+
+.localized-date-input > span {
+  color: #5b746b;
+  font-size: 12px;
+}
+
+.localized-date-picker-button {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid #bfd6ce;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+}
+
+.localized-date-picker {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.localized-datetime-input > input[type="time"] {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid #bfd6ce;
+  border-radius: 8px;
+  background: #fff;
+  color: #2d5045;
 }
 
 .hub-list {

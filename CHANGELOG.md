@@ -15,6 +15,13 @@
 
 - Reminder 计划扩展到课程 occurrence、学习事项和考试，并为调课、停课、补课重建有效计划。
 
+### Fixed
+
+- 日期编辑改为稳定的中文“年/月/日”输入并保留 ISO 存储格式，补充日历按钮；任务、考试和课程变化编辑不再显示原生 `yyyy/mm/dd` 占位文本。
+- 修复 Academic Hub 课表变化列表无法完整滚动的问题。
+- 修复停课 occurrence 仍出现在正式周课表的问题；补课改为独立 occurrence，撤销变化可恢复基础安排。
+- 调课、换教室和补课改为逐条编辑并保存对应的 `CourseOverride`，不再依赖共享且禁用的顶部字段。
+
 ### Status
 
 - 当前仅为 Release Candidate 开发版本，尚未创建 `v1.3.0` tag 或发布 GitHub Release；等待自动回归和 Windows 10 人工验收。

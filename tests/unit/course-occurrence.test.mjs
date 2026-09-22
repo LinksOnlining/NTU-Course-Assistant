@@ -130,6 +130,53 @@ test("makeup adds an extra occurrence and range filtering is stable", () => {
   assert.equal(result[0].room, "实验楼 101");
 });
 
+test("makeup does not replace the original occurrence", () => {
+  const result = resolveCourseOccurrences([course], semester, [
+    override({
+      id: "makeup-2",
+      kind: "MAKEUP",
+      originalOccurrenceKey: null,
+      originalDate: null,
+      targetDate: "2026-03-14",
+      startTime: "08:00",
+      endTime: "09:35",
+    }),
+  ]);
+  assert.equal(result.filter((item) => item.status === "NORMAL").length, 5);
+  assert.equal(result.filter((item) => item.status === "MAKEUP").length, 1);
+  assert.equal(result.find((item) => item.date === "2026-03-10")?.status, "NORMAL");
+});
+
+test("revoking an override restores the base occurrence", () => {
+  const result = resolveCourseOccurrences([course], semester, [override({ active: false })]);
+  assert.equal(result.find((item) => item.date === "2026-03-10")?.status, "NORMAL");
+});
+
+test("the newest active override wins for the same occurrence", () => {
+  const result = resolveCourseOccurrences([course], semester, [
+    override({
+      id: "older",
+      kind: "RESCHEDULE",
+      targetDate: "2026-03-12",
+      startTime: "14:00",
+      endTime: "15:35",
+      updatedAt: "2026-03-01T00:00:00+08:00",
+    }),
+    override({
+      id: "newer",
+      kind: "MODIFY",
+      classroom: "C303",
+      updatedAt: "2026-03-02T00:00:00+08:00",
+    }),
+  ]);
+  const item = result.find((occurrence) => occurrence.date === "2026-03-10");
+  assert.equal(item?.room, "C303");
+  assert.equal(
+    result.some((occurrence) => occurrence.date === "2026-03-12"),
+    false,
+  );
+});
+
 test("same input produces the same ordering and keys", () => {
   const first = resolveCourseOccurrences([course], semester, [override({})]);
   const second = resolveCourseOccurrences([course], semester, [override({})]);

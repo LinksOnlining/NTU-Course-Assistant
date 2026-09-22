@@ -109,10 +109,10 @@ function resolveBase(
 ): AcademicCourseOccurrence {
   const base = baseOccurrence(course, semester, week);
   const override = overrides
-    .filter((item) => matchesBase(base, item))
+    .filter((item) => item.kind !== "MAKEUP" && matchesBase(base, item))
     .sort(
       (left, right) =>
-        left.updatedAt.localeCompare(right.updatedAt) || left.id.localeCompare(right.id),
+        right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id),
     )[0];
   if (override === undefined) return base;
   if (override.kind === "CANCEL") {

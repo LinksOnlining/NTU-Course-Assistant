@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { resolveCourseOccurrences } from "../core/course-occurrence.ts";
 import { getTodayDashboard } from "../core/today-dashboard.ts";
 import { getShanghaiDate, getShanghaiTime } from "../core/reminder.ts";
+import { ChineseDateInput, ChineseDateTimeInput } from "./ChineseDateInput.tsx";
 import {
   archiveSemester,
   deleteAcademicTask,
@@ -79,8 +80,9 @@ function makeOverride(
     courseId: occurrence.courseId,
     semesterId: occurrence.semesterId,
     kind,
-    originalOccurrenceKey: occurrence.originalOccurrenceKey ?? occurrence.occurrenceKey,
-    originalDate: occurrence.date,
+    originalOccurrenceKey:
+      kind === "MAKEUP" ? null : (occurrence.originalOccurrenceKey ?? occurrence.occurrenceKey),
+    originalDate: kind === "MAKEUP" ? null : occurrence.date,
     targetDate,
     startPeriod: occurrence.startPeriod,
     endPeriod: occurrence.endPeriod,
@@ -137,10 +139,14 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
   const [examLocation, setExamLocation] = useState("");
   const [examCourseId, setExamCourseId] = useState("");
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
-  const [changeTargetDate, setChangeTargetDate] = useState("");
-  const [changeStartTime, setChangeStartTime] = useState("");
-  const [changeEndTime, setChangeEndTime] = useState("");
-  const [changeRoom, setChangeRoom] = useState("");
+  const [changeEditor, setChangeEditor] = useState<{
+    readonly kind: Exclude<CourseOverrideKind, "CANCEL">;
+    readonly occurrenceKey: string;
+    readonly targetDate: string;
+    readonly startTime: string;
+    readonly endTime: string;
+    readonly room: string;
+  } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -230,6 +236,63 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
     setSemesters((current) => [next, ...current.filter((item) => item.id !== next.id)]);
   }
 
+  function openChangeEditor(
+    item: ReturnType<typeof resolveCourseOccurrences>[number],
+    kind: Exclude<CourseOverrideKind, "CANCEL">,
+  ) {
+    setChangeEditor({
+      kind,
+      occurrenceKey: item.occurrenceKey,
+      targetDate: item.date,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      room: item.room ?? "",
+    });
+  }
+
+  function updateChangeEditor(patch: Partial<NonNullable<typeof changeEditor>>) {
+    setChangeEditor((current) => (current ? { ...current, ...patch } : current));
+  }
+
+  function submitChangeEditor(item: ReturnType<typeof resolveCourseOccurrences>[number]) {
+    const editor = changeEditor;
+    if (!editor || editor.occurrenceKey !== item.occurrenceKey || !semester) return;
+    if (editor.kind !== "MODIFY" && (!editor.targetDate || !editor.startTime || !editor.endTime))
+      return;
+    if (
+      editor.kind !== "MODIFY" &&
+      !confirmScheduleConflict(
+        occurrences,
+        item,
+        editor.targetDate,
+        editor.startTime,
+        editor.endTime,
+      )
+    )
+      return;
+    void run(
+      async () => {
+        const saved = await saveCourseOverride(
+          makeOverride(
+            item,
+            editor.kind,
+            editor.kind === "MODIFY" ? null : editor.targetDate,
+            editor.kind === "MODIFY" ? null : editor.startTime,
+            editor.kind === "MODIFY" ? null : editor.endTime,
+            editor.room.trim() || null,
+          ),
+        );
+        setOverrides((current) => [...current, saved]);
+        setChangeEditor(null);
+      },
+      editor.kind === "RESCHEDULE"
+        ? "已保存调课"
+        : editor.kind === "MAKEUP"
+          ? "已添加补课"
+          : "已修改本次教室",
+    );
+  }
+
   const taskForm = (
     <form
       className="hub-inline-form"
@@ -284,11 +347,11 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
           </option>
         ))}
       </select>
-      <input
-        type="datetime-local"
+      <ChineseDateTimeInput
         value={taskDueAt}
-        onChange={(event) => setTaskDueAt(event.target.value)}
-        aria-label="截止时间"
+        onChange={setTaskDueAt}
+        ariaLabel="截止时间"
+        disabled={busy || readOnly}
       />
       <select
         value={taskCourseId}
@@ -370,11 +433,11 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
         placeholder="例如：大学物理期末考试"
         aria-label="考试名称"
       />
-      <input
-        type="datetime-local"
+      <ChineseDateTimeInput
         value={examStartsAt}
-        onChange={(event) => setExamStartsAt(event.target.value)}
-        aria-label="考试时间"
+        onChange={setExamStartsAt}
+        ariaLabel="考试时间"
+        disabled={busy || readOnly}
       />
       <input
         value={examLocation}
@@ -519,145 +582,143 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
       {semester && tab === "changes" && (
         <div className="hub-card">
           <h2>课表变化</h2>
-          <p className="hub-muted">选择当前学期课程，保存单次停课或调课；基础课程不会被修改。</p>
+          <p className="hub-muted">
+            每条课程都可以单独处理本次停课、调课、换教室或补课；基础课程不会被修改。
+          </p>
           {readOnly && <p className="hub-muted">历史学期默认只读；恢复为当前学期后才能编辑。</p>}
-          <div className="hub-change-controls">
-            <input
-              type="date"
-              value={changeTargetDate}
-              onChange={(event) => setChangeTargetDate(event.target.value)}
-              aria-label="调课日期"
-            />
-            <input
-              type="time"
-              value={changeStartTime}
-              onChange={(event) => setChangeStartTime(event.target.value)}
-              aria-label="调课开始时间"
-            />
-            <input
-              type="time"
-              value={changeEndTime}
-              onChange={(event) => setChangeEndTime(event.target.value)}
-              aria-label="调课结束时间"
-            />
-            <input
-              value={changeRoom}
-              onChange={(event) => setChangeRoom(event.target.value)}
-              placeholder="新教室（可选）"
-              aria-label="新教室"
-            />
+          <div className="hub-change-list">
+            {occurrences
+              .filter((item) => item.status !== "CANCELLED")
+              .slice(0, 30)
+              .map((item) => {
+                const editor =
+                  changeEditor?.occurrenceKey === item.occurrenceKey ? changeEditor : null;
+                return (
+                  <div className="hub-change-item" key={item.occurrenceKey}>
+                    <div className="hub-list-row">
+                      <span>
+                        {item.date} · {courseById.get(item.courseId)?.name ?? "课程"} ·{" "}
+                        {item.startTime}–{item.endTime}
+                      </span>
+                      <span className="hub-button-group">
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={busy || readOnly}
+                          onClick={() => {
+                            if (!window.confirm("确认只取消这一次课程吗？")) return;
+                            void run(async () => {
+                              const saved = await saveCourseOverride(
+                                makeOverride(item, "CANCEL", null, null, null, null),
+                              );
+                              setOverrides((current) => [...current, saved]);
+                            }, "已停课");
+                          }}
+                        >
+                          本次停课
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={busy || readOnly}
+                          onClick={() => openChangeEditor(item, "RESCHEDULE")}
+                        >
+                          调课
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={busy || readOnly}
+                          onClick={() => openChangeEditor(item, "MODIFY")}
+                        >
+                          换教室
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={busy || readOnly}
+                          onClick={() => openChangeEditor(item, "MAKEUP")}
+                        >
+                          补课
+                        </button>
+                      </span>
+                    </div>
+                    {editor && (
+                      <form
+                        className="hub-change-editor"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          submitChangeEditor(item);
+                        }}
+                      >
+                        {editor.kind !== "MODIFY" && (
+                          <ChineseDateInput
+                            value={editor.targetDate}
+                            onChange={(value) => updateChangeEditor({ targetDate: value })}
+                            ariaLabel={editor.kind === "MAKEUP" ? "补课日期" : "调课日期"}
+                            disabled={busy}
+                          />
+                        )}
+                        {editor.kind !== "MODIFY" && (
+                          <input
+                            type="time"
+                            value={editor.startTime}
+                            onChange={(event) =>
+                              updateChangeEditor({ startTime: event.target.value })
+                            }
+                            aria-label={editor.kind === "MAKEUP" ? "补课开始时间" : "调课开始时间"}
+                            disabled={busy}
+                          />
+                        )}
+                        {editor.kind !== "MODIFY" && (
+                          <input
+                            type="time"
+                            value={editor.endTime}
+                            onChange={(event) =>
+                              updateChangeEditor({ endTime: event.target.value })
+                            }
+                            aria-label={editor.kind === "MAKEUP" ? "补课结束时间" : "调课结束时间"}
+                            disabled={busy}
+                          />
+                        )}
+                        <input
+                          value={editor.room}
+                          onChange={(event) => updateChangeEditor({ room: event.target.value })}
+                          placeholder={editor.kind === "MODIFY" ? "新教室" : "教室（可选）"}
+                          aria-label={editor.kind === "MODIFY" ? "新教室" : "教室"}
+                          disabled={busy}
+                        />
+                        <button
+                          type="submit"
+                          className="primary-button"
+                          disabled={
+                            busy ||
+                            (editor.kind !== "MODIFY" &&
+                              (!editor.targetDate || !editor.startTime || !editor.endTime)) ||
+                            (editor.kind === "MODIFY" && !editor.room.trim())
+                          }
+                        >
+                          保存
+                          {editor.kind === "RESCHEDULE"
+                            ? "调课"
+                            : editor.kind === "MAKEUP"
+                              ? "补课"
+                              : "教室"}
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={busy}
+                          onClick={() => setChangeEditor(null)}
+                        >
+                          取消
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                );
+              })}
           </div>
-          {occurrences
-            .filter((item) => item.status !== "CANCELLED")
-            .slice(0, 30)
-            .map((item) => (
-              <div className="hub-list-row" key={item.occurrenceKey}>
-                <span>
-                  {item.date} · {courseById.get(item.courseId)?.name ?? "课程"} · {item.startTime}–
-                  {item.endTime}
-                </span>
-                <span>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={busy || readOnly}
-                    onClick={() =>
-                      void run(async () => {
-                        const saved = await saveCourseOverride(
-                          makeOverride(item, "CANCEL", null, null, null, null),
-                        );
-                        setOverrides((current) => [...current, saved]);
-                      }, "已停课")
-                    }
-                  >
-                    本次停课
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={
-                      busy || readOnly || !changeTargetDate || !changeStartTime || !changeEndTime
-                    }
-                    onClick={() =>
-                      void run(async () => {
-                        if (
-                          !confirmScheduleConflict(
-                            occurrences,
-                            item,
-                            changeTargetDate,
-                            changeStartTime,
-                            changeEndTime,
-                          )
-                        )
-                          return;
-                        const saved = await saveCourseOverride(
-                          makeOverride(
-                            item,
-                            "RESCHEDULE",
-                            changeTargetDate,
-                            changeStartTime,
-                            changeEndTime,
-                            changeRoom || null,
-                          ),
-                        );
-                        setOverrides((current) => [...current, saved]);
-                      }, "已保存调课")
-                    }
-                  >
-                    调课
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={busy || readOnly || !changeRoom}
-                    onClick={() =>
-                      void run(async () => {
-                        const saved = await saveCourseOverride(
-                          makeOverride(item, "MODIFY", null, null, null, changeRoom),
-                        );
-                        setOverrides((current) => [...current, saved]);
-                      }, "已修改本次教室")
-                    }
-                  >
-                    换教室
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={
-                      busy || readOnly || !changeTargetDate || !changeStartTime || !changeEndTime
-                    }
-                    onClick={() =>
-                      void run(async () => {
-                        if (
-                          !confirmScheduleConflict(
-                            occurrences,
-                            item,
-                            changeTargetDate,
-                            changeStartTime,
-                            changeEndTime,
-                          )
-                        )
-                          return;
-                        const saved = await saveCourseOverride(
-                          makeOverride(
-                            item,
-                            "MAKEUP",
-                            changeTargetDate,
-                            changeStartTime,
-                            changeEndTime,
-                            changeRoom || null,
-                          ),
-                        );
-                        setOverrides((current) => [...current, saved]);
-                      }, "已添加补课")
-                    }
-                  >
-                    补课
-                  </button>
-                </span>
-              </div>
-            ))}
           {overrides
             .filter((item) => item.active)
             .map((item) => (

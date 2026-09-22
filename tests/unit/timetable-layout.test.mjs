@@ -147,3 +147,28 @@ test("canonical occurrences drive the weekly layout and preserve the source cour
   assert.equal(monday[0].occurrenceStatus, "RESCHEDULED");
   assert.equal(monday[0].course.classroom, "B203");
 });
+
+test("cancelled canonical occurrences are not rendered in the weekly layout", () => {
+  const source = course({ id: "cancelled", weekday: 1, weeks: [3] });
+  const occurrence = {
+    courseId: source.id,
+    semesterId: "semester",
+    date: "2026-09-14",
+    teachingWeek: 3,
+    weekday: 1,
+    startPeriod: 1,
+    endPeriod: 1,
+    startTime: "08:00",
+    endTime: "08:45",
+    room: null,
+    teacher: null,
+    status: "CANCELLED",
+    source: "OVERRIDE",
+    originalOccurrenceKey: "cancelled:semester:2026-09-14:08:00",
+    occurrenceKey: "cancelled:semester:2026-09-14:08:00:override",
+    appliedOverrideId: "override",
+    appliedOverrideKind: "CANCEL",
+  };
+  const [monday] = layoutCourseOccurrences([source], [occurrence], 3, TEST_TIMETABLE.axis);
+  assert.equal(monday.length, 0);
+});
