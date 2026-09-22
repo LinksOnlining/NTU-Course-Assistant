@@ -1768,20 +1768,31 @@ select:focus-visible {
 .main-view-tabs,
 .hub-tabs {
   display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  flex: 0 0 auto;
+  max-width: 100%;
   gap: 4px;
   padding: 4px;
   border: 1px solid rgba(105, 151, 137, 0.24);
   border-radius: 999px;
   background: rgba(238, 247, 243, 0.8);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .main-view-tabs button,
 .hub-tabs button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  white-space: nowrap;
   border: 0;
   border-radius: 999px;
   background: transparent;
   color: #537168;
   padding: 8px 14px;
+  line-height: 1.2;
   font: inherit;
   cursor: pointer;
 }
@@ -1794,6 +1805,7 @@ select:focus-visible {
 
 .academic-hub {
   display: grid;
+  align-content: start;
   min-height: 0;
   flex: 1 1 auto;
   gap: 18px;
@@ -1807,6 +1819,8 @@ select:focus-visible {
 
 .hub-tabs {
   justify-self: start;
+  height: auto;
+  min-height: 0;
 }
 
 .hub-message,
@@ -1896,6 +1910,164 @@ select:focus-visible {
   display: grid;
   gap: 8px;
   min-width: 0;
+}
+
+.hub-change-toolbar,
+.hub-detail-header,
+.hub-button-group,
+.hub-course-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hub-change-toolbar {
+  margin: 14px 0 16px;
+}
+
+.hub-change-toolbar input,
+.hub-change-toolbar select {
+  min-height: 38px;
+  min-width: 180px;
+  border: 1px solid #bfd6ce;
+  border-radius: 10px;
+  padding: 0 10px;
+  background: #fff;
+  color: #20463e;
+  font: inherit;
+}
+
+.hub-course-list,
+.hub-occurrence-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.hub-course-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid #d9e7e1;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 64%);
+}
+
+.hub-course-card-main {
+  min-width: 0;
+}
+
+.hub-course-card h3,
+.hub-occurrence-panel h3 {
+  margin: 0 0 5px;
+  color: #1d4a3e;
+  font-size: 17px;
+}
+
+.hub-course-card p {
+  margin: 3px 0;
+}
+
+.hub-course-card-actions {
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.hub-change-count,
+.hub-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #e3f2eb;
+  color: #27715f;
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.hub-detail-header {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.hub-detail-header > div {
+  flex: 1 1 auto;
+  min-width: 180px;
+}
+
+.hub-detail-header h2 {
+  margin-bottom: 2px;
+}
+
+.hub-occurrence-item {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.75fr) minmax(160px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid #d9e7e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #2d5045;
+  text-align: left;
+}
+
+.hub-occurrence-item:hover,
+.hub-occurrence-item.is-selected {
+  border-color: #66a995;
+  background: #eff8f3;
+}
+
+.hub-occurrence-item > span {
+  min-width: 0;
+}
+
+.hub-occurrence-item small,
+.hub-occurrence-panel small {
+  display: block;
+  margin-top: 3px;
+  color: #6b8178;
+  font-size: 12px;
+}
+
+.hub-occurrence-panel {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #cfe2d9;
+  border-radius: 14px;
+  background: #f3f8f5;
+}
+
+.hub-occurrence-panel p {
+  margin: 6px 0 12px;
+}
+
+@media (max-width: 760px) {
+  .hub-course-card,
+  .hub-detail-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hub-course-card-actions {
+    justify-content: flex-start;
+  }
+
+  .hub-occurrence-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .hub-occurrence-item > span:nth-child(2) {
+    grid-column: 1 / -1;
+  }
 }
 
 .hub-change-item {

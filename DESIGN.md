@@ -199,3 +199,4 @@ v1.3.0 在不破坏 v1.2.1 数据的前提下把课程表扩展为学习中心�
 schema 5 使用非破坏 migration 新增 `semesters`、`course_overrides`、`academic_tasks`、`exams`、`reminder_rules` 和 `reminder_instances`，旧的 courses、period_times、app_settings 与 handled_reminders 保持不变。已有 v1.2.1 课程没有 semester 外键时按 legacy active semester 兼容读取；新建的学期相关记录始终带有 semesterId。ACTIVE 学期最多一个，ARCHIVED 学期默认只读，恢复操作通过统一保存事务切换当前学期。
 
 今日学习中心由 `getTodayDashboard` 组合下一节、今日课程、变化、待办、逾期任务与最近考试；Widget 通过 `getWidgetSnapshot` 和 canonical occurrence 读取 NEXT、TODAY、DEADLINES。Reminder 继续复用现有 Rust scheduler，只由统一计划构建器加入任务和考试目标；应用完全退出后仍不提供后台提醒。Academic Hub 作为固定窗口布局中的独立纵向滚动区域；Task、Exam 和课程变化编辑使用可见的中文年/月/日输入组件，向存储层传递 ISO 日期字符串。课程变化操作按 occurrence 提供独立编辑器，不持有共享顶部字段或跨对话框数据库锁。
+课表变化页面在展示层按稳定 `courseId` 聚合为课程列表，再进入 occurrence 选择和单次操作；课程搜索/筛选与中文日期、状态徽章均为展示逻辑，实际停课、调课、换教室、补课和撤销仍统一经 resolver 生成 canonical read model。学习中心分区标签保持内容高度并在窄窗口横向滚动，避免 CSS Grid 纵向拉伸。

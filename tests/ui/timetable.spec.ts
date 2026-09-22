@@ -112,6 +112,33 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByText("开发数据", { exact: true })).toBeVisible();
 });
 
+test("academic hub tabs stay compact and course changes use a course-first picker", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "作息时间" });
+  await settings.getByLabel("第 1 教学周星期一").fill("2026-09-07");
+  await settings.getByLabel("总教学周数").fill("16");
+  await settings.getByRole("button", { name: "保存作息" }).click();
+  await expect(settings).toHaveCount(0);
+  await page.getByRole("tab", { name: "今日", exact: true }).first().click();
+  await expect(page.getByRole("tablist", { name: "学习中心分区" })).toBeVisible();
+  const tabs = page.getByRole("tablist", { name: "学习中心分区" }).getByRole("tab");
+  const firstBox = await box(tabs.first());
+  await expect(tabs).toHaveCount(5);
+  for (const index of [1, 2, 3, 4]) {
+    await tabs.nth(index).click();
+    const activeBox = await box(tabs.nth(index));
+    expect(activeBox.height).toBeLessThanOrEqual(firstBox.height + 2);
+  }
+  await tabs.nth(1).click();
+  await expect(page.getByLabel("搜索课程")).toBeVisible();
+  await expect(page.getByRole("button", { name: "管理变化" }).first()).toBeVisible();
+  await page.getByRole("button", { name: "管理变化" }).first().click();
+  await expect(page.getByRole("button", { name: "返回课程列表" })).toBeVisible();
+  await expect(page.locator(".hub-occurrence-item").first()).toBeVisible();
+});
+
 test("widget settings default to disabled and save the requested mode and lock", async ({
   page,
 }) => {
