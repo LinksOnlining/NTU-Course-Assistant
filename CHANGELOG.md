@@ -1,6 +1,6 @@
 # 变更记录
 
-## 1.3.0 — Academic Hub Release Candidate（开发中）
+## 1.3.0 — 2026-09-22
 
 ### Added
 
@@ -15,6 +15,7 @@
 
 - Reminder 计划扩展到课程 occurrence、学习事项和考试，并为调课、停课、补课重建有效计划。
 - 学习中心标签保持紧凑高度，窄窗口支持横向滚动；课表变化改为按课程去重后再选择具体发生次数和操作。
+- Academic Hub 五个页面复用统一 UI Shell，Tabs 到内容的垂直节奏在最大化、中等和窄窗口保持一致。
 
 ### Fixed
 
@@ -28,10 +29,12 @@
 - 修复停课完成后按钮长期忙碌/等待光标，以及“已停课”消息泄漏到其他学习中心分区的问题；操作状态与消息现在按 occurrence 隔离并在 finally 清理。
 - 重构 Academic Hub 课表变化页状态边界：课程选择、展开 occurrence、搜索/筛选、编辑器和操作状态现在由页面级 hook 管理，离开分区会清理瞬态状态；跨分区的任务忙碌状态不再禁用课表变化控件。
 - 为异步课表变化操作增加 generation/cleanup 防护，切换分区或卸载页面后不会把旧成功/失败消息写回当前页面；canonical 刷新仍独立于当前 occurrence 的操作完成。
+- 修复 Academic Hub 页面在不同窗口尺寸下的内容起始位置不一致与 Tabs 重叠问题。
 
 ### Status
 
-- 当前仅为 Release Candidate 开发版本，尚未创建 `v1.3.0` tag 或发布 GitHub Release；等待自动回归和 Windows 10 人工验收。
+- v1.3.0 已正式发布：Windows 10 最终安装态人工验收 ALL PASS，GitHub Release 与 v1.3.0 tag 已生成。
+- 已知限制：旧版无 `semesterId` 的课程继续按兼容策略处理；应用完全退出后不发送提醒。
 
 ## 1.2.1 — 2026-09-21
 

@@ -53,10 +53,19 @@ jobs:
           releaseBody: |
             NTU Course Assistant ${{ github.ref_name }}
 
-            修复 PDF 导入确认后可能长期停留在“保存中”的问题，以及新增/修改节次时间后的保存失败问题。
-            重构受影响的持久化连接与保存状态生命周期，并完成 Windows 10 安装态回归验证。
+            这次更新加入了完整的 Academic Hub。
 
-            Windows 10 本地课程表、PDF 导入、课程提醒、桌面小组件和系统托盘。
+            新功能：
+            - 单次停课、调课、换教室、补课和撤销变化
+            - 学习事项与考试管理
+            - Today 学习中心与升级后的课程提醒
+            - Widget NEXT / DEADLINES 模式
+            - 学期归档与历史查看
+
+            界面与稳定性：
+            - 统一 Academic Hub 页面布局和滚动体验
+            - 修复课程变化状态泄漏与操作长期 Busy
+            - 完成 Windows 10 安装态人工回归验证
 
             首选下载 NSIS setup.exe；当前版本未进行 Windows Authenticode 商业代码签名。
           releaseDraft: true
