@@ -543,6 +543,8 @@ export function PeriodSettings({
               >
                 <option value="today">今日</option>
                 <option value="week">本周</option>
+                <option value="next">下一节</option>
+                <option value="deadlines">Deadline</option>
               </select>
             </label>
             <label className="settings-toggle">
@@ -623,7 +625,7 @@ export function PeriodSettings({
         <section className="settings-section" aria-labelledby="about-settings-title">
           <div>
             <h3 id="about-settings-title">关于</h3>
-            <p>NTU Course Assistant · Version v1.2.0</p>
+            <p>NTU Course Assistant · Version v1.3.0</p>
           </div>
           <div className="form-actions">
             <button type="button" className="secondary-button" onClick={onCheckUpdates}>

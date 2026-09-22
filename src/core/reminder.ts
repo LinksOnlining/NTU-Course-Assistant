@@ -115,6 +115,13 @@ function reminderInstant(value: string): number {
   return instant(matched[1], matched[2]);
 }
 
+/** Parse the local Shanghai datetime representation used by persisted academic items. */
+export function parseShanghaiDateTime(value: string): number {
+  const matched = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2})?\+08:00$/.exec(value);
+  if (matched === null) throw new RangeError("上海本地时间格式无效");
+  return instant(matched[1], matched[2]);
+}
+
 export function validateTermConfig(config: TermConfig): TermConfig {
   const firstDay = dayNumber(config.firstWeekMonday);
   if ((firstDay + 4) % 7 !== 1) throw new RangeError("第 1 教学周日期必须是星期一");

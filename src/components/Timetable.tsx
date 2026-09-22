@@ -1,7 +1,8 @@
 import type { CSSProperties, RefObject } from "react";
 import { durationMinutes, offsetMinutes } from "../core/time.ts";
-import { layoutCourses } from "../core/timetable-layout.ts";
+import { layoutCourseOccurrences, layoutCourses } from "../core/timetable-layout.ts";
 import type { Course } from "../types/course.ts";
+import type { AcademicCourseOccurrence } from "../types/academic-occurrence.ts";
 import type { PeriodTime, TimeRange } from "../types/time.ts";
 import { DayColumn } from "./DayColumn.tsx";
 import { TimeAxis } from "./TimeAxis.tsx";
@@ -10,6 +11,7 @@ const DAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周�
 
 interface TimetableProps {
   readonly courses: readonly Course[];
+  readonly occurrences?: readonly AcademicCourseOccurrence[];
   readonly userCourseIds?: ReadonlySet<string>;
   readonly currentWeek: number;
   readonly axis: TimeRange;
@@ -25,6 +27,7 @@ interface TimetableProps {
 
 export function Timetable({
   courses,
+  occurrences,
   userCourseIds = new Set(),
   currentWeek,
   axis,
@@ -40,7 +43,9 @@ export function Timetable({
   if (!Number.isFinite(pxPerMinute) || pxPerMinute <= 0) {
     throw new RangeError("每分钟像素比例必须大于零");
   }
-  const days = layoutCourses(courses, currentWeek, axis);
+  const days = occurrences
+    ? layoutCourseOccurrences(courses, occurrences, currentWeek, axis)
+    : layoutCourses(courses, currentWeek, axis);
   const timelineHeight = durationMinutes(axis) * pxPerMinute;
   const gridStyle = { "--hour-height": `${60 * pxPerMinute}px` } as CSSProperties;
 

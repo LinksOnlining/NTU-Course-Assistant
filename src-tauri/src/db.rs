@@ -4,11 +4,12 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::models::{
     default_widget_settings, merge_widget_settings, validate_period_times,
-    validate_reminder_settings, validate_term_config, validate_widget_settings, Course, PeriodTime,
-    ReminderSettings, TermConfig, WidgetSettings, WidgetSettingsPatch,
+    validate_reminder_settings, validate_term_config, validate_widget_settings, AcademicTask,
+    AcademicTaskStatus, Course, CourseOverride, CourseOverrideKind, Exam, ExamStatus, PeriodTime,
+    ReminderSettings, Semester, SemesterStatus, TermConfig, WidgetSettings, WidgetSettingsPatch,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 4;
+const CURRENT_SCHEMA_VERSION: i64 = 5;
 const HANDLED_REMINDER_RETENTION_MILLISECONDS: i64 = 400 * 24 * 60 * 60 * 1_000;
 
 #[derive(Debug)]
@@ -174,6 +175,107 @@ impl CourseDatabase {
                 CREATE INDEX handled_reminders_handled_at ON handled_reminders(handled_at_milliseconds);",
             )?;
             transaction.pragma_update(None, "user_version", 4)?;
+            transaction.commit()?;
+        }
+        let version: i64 = self
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version < 5 {
+            let transaction = self.connection.transaction()?;
+            transaction.execute_batch(
+                "CREATE TABLE semesters (
+                    id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) > 0),
+                    name TEXT NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 80),
+                    first_week_monday TEXT NOT NULL CHECK(length(first_week_monday) = 10),
+                    total_weeks INTEGER NOT NULL CHECK(total_weeks BETWEEN 1 AND 30),
+                    timezone TEXT NOT NULL CHECK(timezone = 'Asia/Shanghai'),
+                    status TEXT NOT NULL CHECK(status IN ('ACTIVE', 'ARCHIVED')),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE UNIQUE INDEX semesters_one_active ON semesters(status) WHERE status = 'ACTIVE';
+
+                CREATE TABLE course_overrides (
+                    id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) > 0),
+                    course_id TEXT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                    semester_id TEXT NOT NULL REFERENCES semesters(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL CHECK(kind IN ('CANCEL', 'RESCHEDULE', 'MODIFY', 'MAKEUP')),
+                    original_occurrence_key TEXT NULL,
+                    original_date TEXT NULL CHECK(original_date IS NULL OR length(original_date) = 10),
+                    target_date TEXT NULL CHECK(target_date IS NULL OR length(target_date) = 10),
+                    start_period INTEGER NULL CHECK(start_period IS NULL OR start_period BETWEEN 1 AND 30),
+                    end_period INTEGER NULL CHECK(end_period IS NULL OR end_period BETWEEN 1 AND 30),
+                    start_time TEXT NULL CHECK(start_time IS NULL OR length(start_time) = 5),
+                    end_time TEXT NULL CHECK(end_time IS NULL OR length(end_time) = 5),
+                    classroom TEXT NULL CHECK(classroom IS NULL OR length(trim(classroom)) BETWEEN 1 AND 100),
+                    teacher TEXT NULL CHECK(teacher IS NULL OR length(trim(teacher)) BETWEEN 1 AND 100),
+                    note TEXT NULL CHECK(note IS NULL OR length(trim(note)) <= 500),
+                    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    CHECK((start_period IS NULL AND end_period IS NULL) OR
+                          (start_period IS NOT NULL AND end_period IS NOT NULL AND end_period >= start_period)),
+                    CHECK((start_time IS NULL AND end_time IS NULL) OR
+                          (start_time IS NOT NULL AND end_time IS NOT NULL))
+                );
+                CREATE INDEX course_overrides_lookup ON course_overrides(semester_id, original_date, active);
+                CREATE INDEX course_overrides_course ON course_overrides(course_id, semester_id, active);
+
+                CREATE TABLE academic_tasks (
+                    id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) > 0),
+                    semester_id TEXT NOT NULL REFERENCES semesters(id) ON DELETE CASCADE,
+                    course_id TEXT NULL REFERENCES courses(id) ON DELETE SET NULL,
+                    type TEXT NOT NULL CHECK(type IN ('ASSIGNMENT', 'LAB_REPORT', 'PRESENTATION', 'PROJECT', 'CUSTOM')),
+                    title TEXT NOT NULL CHECK(length(trim(title)) BETWEEN 1 AND 160),
+                    note TEXT NULL CHECK(note IS NULL OR length(trim(note)) <= 2_000),
+                    due_at TEXT NOT NULL,
+                    priority INTEGER NOT NULL DEFAULT 0 CHECK(priority BETWEEN 0 AND 2),
+                    status TEXT NOT NULL CHECK(status IN ('TODO', 'COMPLETED')),
+                    completed_at TEXT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX academic_tasks_due ON academic_tasks(semester_id, status, due_at);
+
+                CREATE TABLE exams (
+                    id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) > 0),
+                    semester_id TEXT NOT NULL REFERENCES semesters(id) ON DELETE CASCADE,
+                    course_id TEXT NULL REFERENCES courses(id) ON DELETE SET NULL,
+                    title TEXT NOT NULL CHECK(length(trim(title)) BETWEEN 1 AND 160),
+                    starts_at TEXT NOT NULL,
+                    ends_at TEXT NULL,
+                    location TEXT NULL CHECK(location IS NULL OR length(trim(location)) <= 160),
+                    seat_info TEXT NULL CHECK(seat_info IS NULL OR length(trim(seat_info)) <= 160),
+                    note TEXT NULL CHECK(note IS NULL OR length(trim(note)) <= 2_000),
+                    status TEXT NOT NULL CHECK(status IN ('SCHEDULED', 'CANCELLED')),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX exams_start ON exams(semester_id, status, starts_at);
+
+                CREATE TABLE reminder_rules (
+                    id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) > 0),
+                    target_type TEXT NOT NULL CHECK(target_type IN ('COURSE', 'TASK', 'EXAM')),
+                    target_id TEXT NOT NULL CHECK(length(trim(target_id)) > 0),
+                    offsets_minutes TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX reminder_rules_target ON reminder_rules(target_type, target_id, enabled);
+
+                CREATE TABLE reminder_instances (
+                    id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) > 0),
+                    rule_id TEXT NOT NULL REFERENCES reminder_rules(id) ON DELETE CASCADE,
+                    occurrence_key TEXT NOT NULL CHECK(length(trim(occurrence_key)) > 0),
+                    trigger_at_milliseconds INTEGER NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('PENDING', 'SENT', 'CANCELLED')),
+                    handled_at_milliseconds INTEGER NULL,
+                    UNIQUE(rule_id, occurrence_key)
+                );
+                CREATE INDEX reminder_instances_pending ON reminder_instances(status, trigger_at_milliseconds);
+                PRAGMA user_version = 5;",
+            )?;
             transaction.commit()?;
         }
         Ok(())
@@ -507,6 +609,268 @@ impl CourseDatabase {
         Ok(())
     }
 
+    pub fn load_semesters(&self) -> Result<Vec<Semester>, StorageError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, name, first_week_monday, total_weeks, timezone, status, created_at, updated_at
+             FROM semesters ORDER BY status DESC, first_week_monday DESC, id",
+        )?;
+        let mut rows = statement.query([])?;
+        let mut semesters = Vec::new();
+        while let Some(row) = rows.next()? {
+            semesters.push(row_to_semester(row)?);
+        }
+        Ok(semesters)
+    }
+
+    pub fn save_semester(&self, semester: &Semester) -> Result<Semester, StorageError> {
+        validate_semester(semester)?;
+        let transaction = self.connection.unchecked_transaction()?;
+        if matches!(semester.status, SemesterStatus::Active) {
+            transaction.execute(
+                "UPDATE semesters SET status='ARCHIVED', updated_at=?1 WHERE status='ACTIVE' AND id<>?2",
+                params![&semester.updated_at, &semester.id],
+            )?;
+        }
+        transaction.execute(
+            "INSERT INTO semesters (id, name, first_week_monday, total_weeks, timezone, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(id) DO UPDATE SET name=excluded.name, first_week_monday=excluded.first_week_monday,
+               total_weeks=excluded.total_weeks, timezone=excluded.timezone, status=excluded.status,
+               updated_at=excluded.updated_at",
+            params![
+                &semester.id,
+                &semester.name,
+                &semester.first_week_monday,
+                semester.total_weeks,
+                &semester.timezone,
+                semester_status_value(&semester.status),
+                &semester.created_at,
+                &semester.updated_at,
+            ],
+        )?;
+        transaction.commit()?;
+        self.connection
+            .query_row(
+                "SELECT id, name, first_week_monday, total_weeks, timezone, status, created_at, updated_at FROM semesters WHERE id=?1",
+                [&semester.id],
+                row_to_semester,
+            )
+            .map_err(StorageError::from)
+    }
+
+    pub fn archive_semester(&self, id: &str, updated_at: &str) -> Result<(), StorageError> {
+        if id.trim().is_empty() {
+            return Err(StorageError::InvalidData("学期 ID 无效".into()));
+        }
+        if self.connection.execute(
+            "UPDATE semesters SET status='ARCHIVED', updated_at=?2 WHERE id=?1",
+            params![id, updated_at],
+        )? == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        Ok(())
+    }
+
+    pub fn load_course_overrides(
+        &self,
+        semester_id: &str,
+    ) -> Result<Vec<CourseOverride>, StorageError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, course_id, semester_id, kind, original_occurrence_key, original_date,
+                    target_date, start_period, end_period, start_time, end_time, classroom, teacher,
+                    note, active, created_at, updated_at
+             FROM course_overrides WHERE semester_id=?1 ORDER BY original_date, created_at, id",
+        )?;
+        let mut rows = statement.query([semester_id])?;
+        let mut overrides = Vec::new();
+        while let Some(row) = rows.next()? {
+            overrides.push(row_to_course_override(row)?);
+        }
+        Ok(overrides)
+    }
+
+    pub fn save_course_override(
+        &self,
+        value: &CourseOverride,
+    ) -> Result<CourseOverride, StorageError> {
+        validate_course_override(value)?;
+        self.connection.execute(
+            "INSERT INTO course_overrides
+             (id, course_id, semester_id, kind, original_occurrence_key, original_date, target_date,
+              start_period, end_period, start_time, end_time, classroom, teacher, note, active, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+             ON CONFLICT(id) DO UPDATE SET course_id=excluded.course_id, semester_id=excluded.semester_id,
+               kind=excluded.kind, original_occurrence_key=excluded.original_occurrence_key,
+               original_date=excluded.original_date, target_date=excluded.target_date,
+               start_period=excluded.start_period, end_period=excluded.end_period,
+               start_time=excluded.start_time, end_time=excluded.end_time, classroom=excluded.classroom,
+               teacher=excluded.teacher, note=excluded.note, active=excluded.active, updated_at=excluded.updated_at",
+            params![
+                &value.id,
+                &value.course_id,
+                &value.semester_id,
+                course_override_kind_value(&value.kind),
+                &value.original_occurrence_key,
+                &value.original_date,
+                &value.target_date,
+                value.start_period,
+                value.end_period,
+                &value.start_time,
+                &value.end_time,
+                &value.classroom,
+                &value.teacher,
+                &value.note,
+                value.active,
+                &value.created_at,
+                &value.updated_at,
+            ],
+        )?;
+        self.connection
+            .query_row(
+                "SELECT id, course_id, semester_id, kind, original_occurrence_key, original_date,
+                        target_date, start_period, end_period, start_time, end_time, classroom, teacher,
+                        note, active, created_at, updated_at FROM course_overrides WHERE id=?1",
+                [&value.id],
+                row_to_course_override,
+            )
+            .map_err(StorageError::from)
+    }
+
+    pub fn revoke_course_override(&self, id: &str, updated_at: &str) -> Result<(), StorageError> {
+        if self.connection.execute(
+            "UPDATE course_overrides SET active=0, updated_at=?2 WHERE id=?1",
+            params![id, updated_at],
+        )? == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        Ok(())
+    }
+
+    pub fn load_academic_tasks(
+        &self,
+        semester_id: &str,
+    ) -> Result<Vec<AcademicTask>, StorageError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, semester_id, course_id, type, title, note, due_at, priority, status,
+                    completed_at, created_at, updated_at
+             FROM academic_tasks WHERE semester_id=?1 ORDER BY status, due_at, priority DESC, id",
+        )?;
+        let mut rows = statement.query([semester_id])?;
+        let mut tasks = Vec::new();
+        while let Some(row) = rows.next()? {
+            tasks.push(row_to_academic_task(row)?);
+        }
+        Ok(tasks)
+    }
+
+    pub fn save_academic_task(&self, task: &AcademicTask) -> Result<AcademicTask, StorageError> {
+        validate_academic_task(task)?;
+        self.connection.execute(
+            "INSERT INTO academic_tasks
+             (id, semester_id, course_id, type, title, note, due_at, priority, status, completed_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+             ON CONFLICT(id) DO UPDATE SET semester_id=excluded.semester_id, course_id=excluded.course_id,
+               type=excluded.type, title=excluded.title, note=excluded.note, due_at=excluded.due_at,
+               priority=excluded.priority, status=excluded.status, completed_at=excluded.completed_at,
+               updated_at=excluded.updated_at",
+            params![
+                &task.id,
+                &task.semester_id,
+                &task.course_id,
+                academic_task_type_value(&task.task_type),
+                &task.title,
+                &task.note,
+                &task.due_at,
+                task.priority,
+                academic_task_status_value(&task.status),
+                &task.completed_at,
+                &task.created_at,
+                &task.updated_at,
+            ],
+        )?;
+        self.connection
+            .query_row(
+                "SELECT id, semester_id, course_id, type, title, note, due_at, priority, status,
+                        completed_at, created_at, updated_at FROM academic_tasks WHERE id=?1",
+                [&task.id],
+                row_to_academic_task,
+            )
+            .map_err(StorageError::from)
+    }
+
+    pub fn delete_academic_task(&self, id: &str) -> Result<(), StorageError> {
+        if self
+            .connection
+            .execute("DELETE FROM academic_tasks WHERE id=?1", [id])?
+            == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        Ok(())
+    }
+
+    pub fn load_exams(&self, semester_id: &str) -> Result<Vec<Exam>, StorageError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, semester_id, course_id, title, starts_at, ends_at, location, seat_info,
+                    note, status, created_at, updated_at
+             FROM exams WHERE semester_id=?1 ORDER BY status, starts_at, id",
+        )?;
+        let mut rows = statement.query([semester_id])?;
+        let mut exams = Vec::new();
+        while let Some(row) = rows.next()? {
+            exams.push(row_to_exam(row)?);
+        }
+        Ok(exams)
+    }
+
+    pub fn save_exam(&self, exam: &Exam) -> Result<Exam, StorageError> {
+        validate_exam(exam)?;
+        self.connection.execute(
+            "INSERT INTO exams
+             (id, semester_id, course_id, title, starts_at, ends_at, location, seat_info, note, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+             ON CONFLICT(id) DO UPDATE SET semester_id=excluded.semester_id, course_id=excluded.course_id,
+               title=excluded.title, starts_at=excluded.starts_at, ends_at=excluded.ends_at,
+               location=excluded.location, seat_info=excluded.seat_info, note=excluded.note,
+               status=excluded.status, updated_at=excluded.updated_at",
+            params![
+                &exam.id,
+                &exam.semester_id,
+                &exam.course_id,
+                &exam.title,
+                &exam.starts_at,
+                &exam.ends_at,
+                &exam.location,
+                &exam.seat_info,
+                &exam.note,
+                exam_status_value(&exam.status),
+                &exam.created_at,
+                &exam.updated_at,
+            ],
+        )?;
+        self.connection
+            .query_row(
+                "SELECT id, semester_id, course_id, title, starts_at, ends_at, location, seat_info,
+                        note, status, created_at, updated_at FROM exams WHERE id=?1",
+                [&exam.id],
+                row_to_exam,
+            )
+            .map_err(StorageError::from)
+    }
+
+    pub fn delete_exam(&self, id: &str) -> Result<(), StorageError> {
+        if self
+            .connection
+            .execute("DELETE FROM exams WHERE id=?1", [id])?
+            == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        Ok(())
+    }
+
     fn load_setting(&self, key: &str) -> Result<Option<String>, StorageError> {
         Ok(self
             .connection
@@ -516,6 +880,98 @@ impl CourseDatabase {
                 |row| row.get(0),
             )
             .optional()?)
+    }
+}
+
+fn validate_semester(value: &Semester) -> Result<(), StorageError> {
+    if value.id.trim().is_empty() || value.name.trim().is_empty() || value.name.len() > 80 {
+        return Err(StorageError::InvalidData("学期信息无效".into()));
+    }
+    validate_term_config(&TermConfig {
+        first_week_monday: value.first_week_monday.clone(),
+        total_weeks: value.total_weeks,
+        timezone: value.timezone.clone(),
+    })
+    .map_err(StorageError::InvalidData)
+}
+
+fn validate_course_override(value: &CourseOverride) -> Result<(), StorageError> {
+    if value.id.trim().is_empty() || value.semester_id.trim().is_empty() {
+        return Err(StorageError::InvalidData("课表变更 ID 无效".into()));
+    }
+    if value.kind != CourseOverrideKind::Makeup && value.course_id.is_none() {
+        return Err(StorageError::InvalidData("课表变更必须关联课程".into()));
+    }
+    if let (Some(start), Some(end)) = (value.start_period, value.end_period) {
+        if start == 0 || end < start || end > 30 {
+            return Err(StorageError::InvalidData("课表变更节次无效".into()));
+        }
+    } else if value.start_period.is_some() || value.end_period.is_some() {
+        return Err(StorageError::InvalidData("课表变更节次必须成对填写".into()));
+    }
+    Ok(())
+}
+
+fn validate_academic_task(value: &AcademicTask) -> Result<(), StorageError> {
+    if value.id.trim().is_empty()
+        || value.semester_id.trim().is_empty()
+        || value.title.trim().is_empty()
+    {
+        return Err(StorageError::InvalidData("学习事项信息无效".into()));
+    }
+    if value.priority > 2 {
+        return Err(StorageError::InvalidData("学习事项优先级无效".into()));
+    }
+    Ok(())
+}
+
+fn validate_exam(value: &Exam) -> Result<(), StorageError> {
+    if value.id.trim().is_empty()
+        || value.semester_id.trim().is_empty()
+        || value.title.trim().is_empty()
+    {
+        return Err(StorageError::InvalidData("考试信息无效".into()));
+    }
+    Ok(())
+}
+
+fn semester_status_value(value: &SemesterStatus) -> &'static str {
+    match value {
+        SemesterStatus::Active => "ACTIVE",
+        SemesterStatus::Archived => "ARCHIVED",
+    }
+}
+
+fn course_override_kind_value(value: &CourseOverrideKind) -> &'static str {
+    match value {
+        CourseOverrideKind::Cancel => "CANCEL",
+        CourseOverrideKind::Reschedule => "RESCHEDULE",
+        CourseOverrideKind::Modify => "MODIFY",
+        CourseOverrideKind::Makeup => "MAKEUP",
+    }
+}
+
+fn academic_task_type_value(value: &crate::models::AcademicTaskType) -> &'static str {
+    match value {
+        crate::models::AcademicTaskType::Assignment => "ASSIGNMENT",
+        crate::models::AcademicTaskType::LabReport => "LAB_REPORT",
+        crate::models::AcademicTaskType::Presentation => "PRESENTATION",
+        crate::models::AcademicTaskType::Project => "PROJECT",
+        crate::models::AcademicTaskType::Custom => "CUSTOM",
+    }
+}
+
+fn academic_task_status_value(value: &AcademicTaskStatus) -> &'static str {
+    match value {
+        AcademicTaskStatus::Todo => "TODO",
+        AcademicTaskStatus::Completed => "COMPLETED",
+    }
+}
+
+fn exam_status_value(value: &ExamStatus) -> &'static str {
+    match value {
+        ExamStatus::Scheduled => "SCHEDULED",
+        ExamStatus::Cancelled => "CANCELLED",
     }
 }
 
@@ -532,6 +988,110 @@ fn row_to_course(row: &Row<'_>) -> Result<Course, StorageError> {
         start_period: row.get(7)?,
         end_period: row.get(8)?,
         weeks: serde_json::from_str(&weeks_json)?,
+    })
+}
+
+fn row_to_semester(row: &Row<'_>) -> rusqlite::Result<Semester> {
+    let status: String = row.get(5)?;
+    let status = match status.as_str() {
+        "ACTIVE" => SemesterStatus::Active,
+        "ARCHIVED" => SemesterStatus::Archived,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+    };
+    Ok(Semester {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        first_week_monday: row.get(2)?,
+        total_weeks: row.get(3)?,
+        timezone: row.get(4)?,
+        status,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+    })
+}
+
+fn row_to_course_override(row: &Row<'_>) -> rusqlite::Result<CourseOverride> {
+    let kind: String = row.get(3)?;
+    let kind = match kind.as_str() {
+        "CANCEL" => CourseOverrideKind::Cancel,
+        "RESCHEDULE" => CourseOverrideKind::Reschedule,
+        "MODIFY" => CourseOverrideKind::Modify,
+        "MAKEUP" => CourseOverrideKind::Makeup,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+    };
+    Ok(CourseOverride {
+        id: row.get(0)?,
+        course_id: row.get(1)?,
+        semester_id: row.get(2)?,
+        kind,
+        original_occurrence_key: row.get(4)?,
+        original_date: row.get(5)?,
+        target_date: row.get(6)?,
+        start_period: row.get(7)?,
+        end_period: row.get(8)?,
+        start_time: row.get(9)?,
+        end_time: row.get(10)?,
+        classroom: row.get(11)?,
+        teacher: row.get(12)?,
+        note: row.get(13)?,
+        active: row.get::<_, i64>(14)? != 0,
+        created_at: row.get(15)?,
+        updated_at: row.get(16)?,
+    })
+}
+
+fn row_to_academic_task(row: &Row<'_>) -> rusqlite::Result<AcademicTask> {
+    let task_type: String = row.get(3)?;
+    let task_type = match task_type.as_str() {
+        "ASSIGNMENT" => crate::models::AcademicTaskType::Assignment,
+        "LAB_REPORT" => crate::models::AcademicTaskType::LabReport,
+        "PRESENTATION" => crate::models::AcademicTaskType::Presentation,
+        "PROJECT" => crate::models::AcademicTaskType::Project,
+        "CUSTOM" => crate::models::AcademicTaskType::Custom,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+    };
+    let status: String = row.get(8)?;
+    let status = match status.as_str() {
+        "TODO" => AcademicTaskStatus::Todo,
+        "COMPLETED" => AcademicTaskStatus::Completed,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+    };
+    Ok(AcademicTask {
+        id: row.get(0)?,
+        semester_id: row.get(1)?,
+        course_id: row.get(2)?,
+        task_type,
+        title: row.get(4)?,
+        note: row.get(5)?,
+        due_at: row.get(6)?,
+        priority: row.get(7)?,
+        status,
+        completed_at: row.get(9)?,
+        created_at: row.get(10)?,
+        updated_at: row.get(11)?,
+    })
+}
+
+fn row_to_exam(row: &Row<'_>) -> rusqlite::Result<Exam> {
+    let status: String = row.get(9)?;
+    let status = match status.as_str() {
+        "SCHEDULED" => ExamStatus::Scheduled,
+        "CANCELLED" => ExamStatus::Cancelled,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+    };
+    Ok(Exam {
+        id: row.get(0)?,
+        semester_id: row.get(1)?,
+        course_id: row.get(2)?,
+        title: row.get(3)?,
+        starts_at: row.get(4)?,
+        ends_at: row.get(5)?,
+        location: row.get(6)?,
+        seat_info: row.get(7)?,
+        note: row.get(8)?,
+        status,
+        created_at: row.get(10)?,
+        updated_at: row.get(11)?,
     })
 }
 
@@ -577,9 +1137,84 @@ mod tests {
     }
 
     #[test]
+    fn schema_four_database_migrates_to_academic_hub_without_losing_data() {
+        let path = temporary_database_path();
+        remove_database_files(&path);
+        let expected = course();
+        {
+            let connection = Connection::open(&path).expect("open schema four database");
+            connection
+                .execute_batch(
+                    "CREATE TABLE courses (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        name TEXT NOT NULL,
+                        teacher TEXT,
+                        classroom TEXT,
+                        weekday INTEGER NOT NULL,
+                        start_time TEXT NOT NULL,
+                        end_time TEXT NOT NULL,
+                        start_period INTEGER,
+                        end_period INTEGER,
+                        weeks TEXT NOT NULL
+                    );
+                    CREATE TABLE period_times (
+                        period INTEGER PRIMARY KEY NOT NULL,
+                        start_time TEXT NOT NULL,
+                        end_time TEXT NOT NULL
+                    );
+                    CREATE TABLE app_settings (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
+                    CREATE TABLE handled_reminders (
+                        occurrence_key TEXT PRIMARY KEY NOT NULL,
+                        handled_at_milliseconds INTEGER NOT NULL
+                    );
+                    PRAGMA user_version = 4;",
+                )
+                .expect("create schema four tables");
+            connection
+                .execute(
+                    "INSERT INTO courses
+                     (id, name, teacher, classroom, weekday, start_time, end_time,
+                      start_period, end_period, weeks)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    params![
+                        &expected.id,
+                        &expected.name,
+                        &expected.teacher,
+                        &expected.classroom,
+                        expected.weekday,
+                        &expected.start_time,
+                        &expected.end_time,
+                        expected.start_period,
+                        expected.end_period,
+                        serde_json::to_string(&expected.weeks).expect("serialize weeks"),
+                    ],
+                )
+                .expect("insert legacy course");
+        }
+        let migrated = CourseDatabase::open(&path).expect("migrate schema four database");
+        assert_eq!(migrated.schema_version().expect("schema version"), 5);
+        assert_eq!(
+            migrated.load_courses().expect("load legacy course").courses,
+            vec![expected]
+        );
+        let academic_table_count: i64 = migrated
+            .connection
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN
+                 ('semesters', 'course_overrides', 'academic_tasks', 'exams', 'reminder_rules', 'reminder_instances')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("academic tables");
+        assert_eq!(academic_table_count, 6);
+        drop(migrated);
+        remove_database_files(&path);
+    }
+
+    #[test]
     fn empty_database_runs_versioned_migration() {
         let database = database();
-        assert_eq!(database.schema_version().expect("schema version"), 4);
+        assert_eq!(database.schema_version().expect("schema version"), 5);
         let table_count: i64 = database
             .connection
             .query_row(
@@ -589,6 +1224,15 @@ mod tests {
             )
             .expect("courses table");
         assert_eq!(table_count, 4);
+        let academic_table_count: i64 = database
+            .connection
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('semesters', 'course_overrides', 'academic_tasks', 'exams', 'reminder_rules', 'reminder_instances')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("academic tables");
+        assert_eq!(academic_table_count, 6);
     }
 
     #[test]
@@ -881,7 +1525,7 @@ mod tests {
         let mut expected = course();
         {
             let database = CourseDatabase::open(&path).expect("create database file");
-            assert_eq!(database.schema_version().expect("new schema version"), 4);
+            assert_eq!(database.schema_version().expect("new schema version"), 5);
             assert!(database
                 .load_courses()
                 .expect("new database is empty")
@@ -932,13 +1576,13 @@ mod tests {
             .execute_batch(
                 "CREATE TABLE sentinel(value TEXT NOT NULL);
                  INSERT INTO sentinel VALUES ('keep-me');
-                 PRAGMA user_version = 5;",
+                 PRAGMA user_version = 6;",
             )
             .expect("create future database");
         drop(connection);
         assert!(matches!(
             CourseDatabase::open(&path),
-            Err(StorageError::UnsupportedSchema(5))
+            Err(StorageError::UnsupportedSchema(6))
         ));
         let unchanged = Connection::open(&path).expect("reopen future database");
         let version: i64 = unchanged
@@ -950,7 +1594,7 @@ mod tests {
         let value: String = unchanged
             .query_row("SELECT value FROM sentinel", [], |row| row.get(0))
             .expect("future data remains");
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
         assert_eq!(journal_mode, "delete");
         assert_eq!(value, "keep-me");
         drop(unchanged);
@@ -1068,7 +1712,7 @@ mod tests {
             .expect("create schema one database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema one");
-        assert_eq!(database.schema_version().expect("migrated version"), 4);
+        assert_eq!(database.schema_version().expect("migrated version"), 5);
         assert_eq!(
             database
                 .load_courses()
@@ -1110,7 +1754,7 @@ mod tests {
             .expect("create schema two database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema two");
-        assert_eq!(database.schema_version().expect("schema version"), 4);
+        assert_eq!(database.schema_version().expect("schema version"), 5);
         assert_eq!(database.load_courses().expect("courses").courses.len(), 1);
         assert_eq!(
             database
@@ -1155,7 +1799,7 @@ mod tests {
             .expect("create schema three database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema three");
-        assert_eq!(database.schema_version().expect("schema version"), 4);
+        assert_eq!(database.schema_version().expect("schema version"), 5);
         assert_eq!(database.load_courses().expect("courses").courses.len(), 1);
         assert_eq!(
             database
@@ -1248,7 +1892,7 @@ mod tests {
                 .term_config,
             before.term_config
         );
-        assert_eq!(database.schema_version().expect("schema version"), 4);
+        assert_eq!(database.schema_version().expect("schema version"), 5);
     }
 
     #[test]
@@ -1373,5 +2017,98 @@ mod tests {
         drop(lock);
         drop(database);
         remove_database_files(&path);
+    }
+
+    #[test]
+    fn academic_records_round_trip_without_touching_legacy_courses() {
+        let database = database();
+        let timestamp = "2026-09-01T00:00:00+08:00".to_string();
+        let semester = Semester {
+            id: "semester-1".into(),
+            name: "2026 秋季学期".into(),
+            first_week_monday: "2026-09-07".into(),
+            total_weeks: 16,
+            timezone: "Asia/Shanghai".into(),
+            status: SemesterStatus::Active,
+            created_at: timestamp.clone(),
+            updated_at: timestamp.clone(),
+        };
+        database.save_semester(&semester).expect("save semester");
+        let original_course = course();
+        database
+            .insert_course(&original_course)
+            .expect("save course");
+        let override_value = CourseOverride {
+            id: "override-1".into(),
+            course_id: Some(original_course.id.clone()),
+            semester_id: semester.id.clone(),
+            kind: CourseOverrideKind::Cancel,
+            original_occurrence_key: None,
+            original_date: Some("2026-09-15".into()),
+            target_date: None,
+            start_period: None,
+            end_period: None,
+            start_time: None,
+            end_time: None,
+            classroom: None,
+            teacher: None,
+            note: Some("临时停课".into()),
+            active: true,
+            created_at: timestamp.clone(),
+            updated_at: timestamp.clone(),
+        };
+        database
+            .save_course_override(&override_value)
+            .expect("save override");
+        let task = AcademicTask {
+            id: "task-1".into(),
+            semester_id: semester.id.clone(),
+            course_id: Some(original_course.id.clone()),
+            task_type: crate::models::AcademicTaskType::Assignment,
+            title: "完成练习".into(),
+            note: None,
+            due_at: "2026-09-20T18:00:00+08:00".into(),
+            priority: 1,
+            status: AcademicTaskStatus::Todo,
+            completed_at: None,
+            created_at: timestamp.clone(),
+            updated_at: timestamp.clone(),
+        };
+        database.save_academic_task(&task).expect("save task");
+        let exam = Exam {
+            id: "exam-1".into(),
+            semester_id: semester.id.clone(),
+            course_id: None,
+            title: "期末考试".into(),
+            starts_at: "2026-12-20T14:00:00+08:00".into(),
+            ends_at: None,
+            location: Some("B203".into()),
+            seat_info: None,
+            note: None,
+            status: ExamStatus::Scheduled,
+            created_at: timestamp.clone(),
+            updated_at: timestamp,
+        };
+        database.save_exam(&exam).expect("save exam");
+        assert_eq!(database.load_semesters().expect("semesters").len(), 1);
+        assert_eq!(
+            database
+                .load_course_overrides(&semester.id)
+                .expect("overrides")
+                .len(),
+            1
+        );
+        assert_eq!(
+            database
+                .load_academic_tasks(&semester.id)
+                .expect("tasks")
+                .len(),
+            1
+        );
+        assert_eq!(database.load_exams(&semester.id).expect("exams").len(), 1);
+        assert_eq!(
+            database.load_courses().expect("legacy courses").courses,
+            vec![original_course]
+        );
     }
 }

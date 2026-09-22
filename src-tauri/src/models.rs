@@ -74,7 +74,10 @@ pub fn default_widget_settings() -> WidgetSettings {
 }
 
 pub fn validate_widget_settings(settings: &WidgetSettings) -> Result<(), String> {
-    if settings.display_mode != "today" && settings.display_mode != "week" {
+    if !matches!(
+        settings.display_mode.as_str(),
+        "today" | "week" | "next" | "deadlines"
+    ) {
         return Err("小组件显示模式无效".into());
     }
     if settings.x.is_some() != settings.y.is_some() {
@@ -177,6 +180,129 @@ pub struct Course {
     pub start_time: String,
     pub end_time: String,
     pub weeks: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum SemesterStatus {
+    Active,
+    Archived,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum CourseOverrideKind {
+    #[serde(rename = "CANCEL")]
+    Cancel,
+    #[serde(rename = "RESCHEDULE")]
+    Reschedule,
+    #[serde(rename = "MODIFY")]
+    Modify,
+    #[serde(rename = "MAKEUP")]
+    Makeup,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum AcademicTaskType {
+    #[serde(rename = "ASSIGNMENT")]
+    Assignment,
+    #[serde(rename = "LAB_REPORT")]
+    LabReport,
+    #[serde(rename = "PRESENTATION")]
+    Presentation,
+    #[serde(rename = "PROJECT")]
+    Project,
+    #[serde(rename = "CUSTOM")]
+    Custom,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum AcademicTaskStatus {
+    #[serde(rename = "TODO")]
+    Todo,
+    #[serde(rename = "COMPLETED")]
+    Completed,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum ExamStatus {
+    #[serde(rename = "SCHEDULED")]
+    Scheduled,
+    #[serde(rename = "CANCELLED")]
+    Cancelled,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Semester {
+    pub id: String,
+    pub name: String,
+    pub first_week_monday: String,
+    pub total_weeks: u8,
+    pub timezone: String,
+    pub status: SemesterStatus,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CourseOverride {
+    pub id: String,
+    pub course_id: Option<String>,
+    pub semester_id: String,
+    pub kind: CourseOverrideKind,
+    pub original_occurrence_key: Option<String>,
+    pub original_date: Option<String>,
+    pub target_date: Option<String>,
+    pub start_period: Option<u16>,
+    pub end_period: Option<u16>,
+    pub start_time: Option<String>,
+    pub end_time: Option<String>,
+    pub classroom: Option<String>,
+    pub teacher: Option<String>,
+    pub note: Option<String>,
+    pub active: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcademicTask {
+    pub id: String,
+    pub semester_id: String,
+    pub course_id: Option<String>,
+    #[serde(rename = "type")]
+    pub task_type: AcademicTaskType,
+    pub title: String,
+    pub note: Option<String>,
+    pub due_at: String,
+    pub priority: u8,
+    pub status: AcademicTaskStatus,
+    pub completed_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Exam {
+    pub id: String,
+    pub semester_id: String,
+    pub course_id: Option<String>,
+    pub title: String,
+    pub starts_at: String,
+    pub ends_at: Option<String>,
+    pub location: Option<String>,
+    pub seat_info: Option<String>,
+    pub note: Option<String>,
+    pub status: ExamStatus,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 impl Course {

@@ -1,5 +1,11 @@
 # 项目状态
 
+- 最后更新：2026-09-22
+- 当前阶段：**v1.3.0 Academic Hub Release Candidate**。CourseOccurrence/CourseOverride 统一读取模型、停课/调课/换教室/补课、学习事项、考试、今日学习中心、Widget NEXT/DEADLINES 模式与 ACTIVE/ARCHIVED 学期数据基础已完成；自动门禁与 v1.3.0 生产构建 PASS，等待 Ethan 完成 Windows 10 安装态人工验收，尚未创建 v1.3.0 tag 或发布 Release。
+- v1.3.0 数据安全：SQLite 从 schema 4 通过非破坏 migration 升至 schema 5，新增 semesters、course_overrides、academic_tasks、exams、reminder_rules、reminder_instances；原有 courses、period_times、app_settings、handled_reminders 保留，未来 schema 仍安全拒绝。
+- v1.3.0 统一数据流：课程表、今日中心、Widget 和提醒均优先消费 `resolveCourseOccurrences` 产生的 canonical occurrence；基础 Course 不被单次变化直接改写。
+- v1.3.0 自动门禁：`npm run verify` PASS（UI 441 项，426 通过、15 跳过），Rust 39 项测试、fmt、clippy PASS；`npm run tauri build` 已生成 v1.3.0 NSIS/MSI 与 updater signatures。剩余门禁仅为最新安装包的 Windows 10 人工验收；完成前不创建 tag、不发布 Release。
+
 - 最后更新：2026-09-21
 - 当前阶段：**v1.2.1 已正式发布**。保存系统重构已完成并通过 Windows 10 安装态人工验收：针对 PDF 导入后课程保存、作息保存长期 pending 的共同运行时风险，已移除进程级 `CourseDatabase`/Mutex 持有；应用状态只保存数据库路径，每个命令在后台线程创建短生命周期 SQLite 连接，完成事务/回读后立即释放；同步读取命令也不再占用 Tauri runtime。前端作息与小组件保存使用显式 validating/saving/success/error 状态并支持失败重试；移除无法取消后端调用的前端超时包装。SQLite schema 保持 4，自动回归、Rust 检查、生产构建和 Windows 10 安装态验收均通过。
 - v1.2.1 Release status: **RELEASED**。GitHub Release、NSIS/MSI 安装包及 updater `latest.json`/签名已生成并发布；tag `v1.2.1` 指向稳定提交 `6b34024889d9e271062a3f736e2022190a8cb57f`。本版本是基于 v1.2.0 的稳定性修复 patch release；Updater 使用 Tauri 官方签名、GitHub Releases HTTPS endpoint 和 Windows passive installer。Backup / Restore 已从 v1.2.0 移除，SQLite schema 保持 4。

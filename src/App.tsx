@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CourseForm } from "./components/CourseForm.tsx";
+import { AcademicHub } from "./components/AcademicHub.tsx";
 import { PdfImportPreview } from "./components/PdfImportPreview.tsx";
 import { PeriodSettings } from "./components/PeriodSettings.tsx";
 import { Timetable } from "./components/Timetable.tsx";
@@ -11,6 +12,8 @@ import {
   prepareImportPlan,
 } from "./core/import-proposal.ts";
 import { getTimelineBounds } from "./core/period-time.ts";
+import { resolveCourseOccurrences } from "./core/course-occurrence.ts";
+import { buildUnifiedReminderPlans } from "./core/reminder-v2.ts";
 import { courseTiming, layoutCourses } from "./core/timetable-layout.ts";
 import { parseNtuPdfTimetable } from "./importers/ntu-pdf/parse.ts";
 import { TEST_COURSES } from "./fixtures/courses.ts";
@@ -60,6 +63,16 @@ import type { PdfExtraction } from "./types/pdf.ts";
 import type { PeriodTime } from "./types/time.ts";
 import type { ReminderConfiguration } from "./types/reminder.ts";
 import type { WidgetSettings } from "./types/widget-settings.ts";
+import type { AcademicTask } from "./types/academic-task.ts";
+import type { CourseOverride } from "./types/course-override.ts";
+import type { Exam } from "./types/exam.ts";
+import type { Semester } from "./types/semester.ts";
+import {
+  loadAcademicTasks,
+  loadCourseOverrides,
+  loadExams,
+  loadSemesters,
+} from "./services/academic-storage.ts";
 
 interface PdfImportResult {
   readonly inserted: number;
@@ -96,6 +109,11 @@ export function App() {
     reminderSettings: DEFAULT_REMINDER_SETTINGS,
   });
   const [widgetSettings, setWidgetSettings] = useState<WidgetSettings>(DEFAULT_WIDGET_SETTINGS);
+  const [activeSemester, setActiveSemester] = useState<Semester | null>(null);
+  const [hasAcademicSemesters, setHasAcademicSemesters] = useState(false);
+  const [academicOverrides, setAcademicOverrides] = useState<readonly CourseOverride[]>([]);
+  const [academicTasks, setAcademicTasks] = useState<readonly AcademicTask[]>([]);
+  const [academicExams, setAcademicExams] = useState<readonly Exam[]>([]);
   const [periodMessage, setPeriodMessage] = useState("");
   const [storageStatus, setStorageStatus] = useState<"loading" | "ready" | "error">("loading");
   const [storageMessage, setStorageMessage] = useState("");
@@ -109,6 +127,12 @@ export function App() {
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] = useState<PdfImportResult | null>(null);
   const [now, setNow] = useState(() => new Date());
+  // Production opens on the learning dashboard. Development keeps the
+  // timetable-first route so the browser preview and existing layout scenarios
+  // remain focused on schedule editing.
+  const [mainView, setMainView] = useState<"schedule" | "hub">(() =>
+    import.meta.env.DEV ? "schedule" : "hub",
+  );
   const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
   const [dayCount, setDayCount] = useState<5 | 7>(7);
   const [scrollRequest, setScrollRequest] = useState(0);
@@ -144,9 +168,34 @@ export function App() {
   const nowTime = getShanghaiTime(now.getTime());
   const visibleWeekdays =
     dayCount === 5 ? ([1, 2, 3, 4, 5] as const) : ([1, 2, 3, 4, 5, 6, 7] as const);
+  const canonicalOccurrences = useMemo(
+    () =>
+      activeSemester
+        ? resolveCourseOccurrences(courses, activeSemester, academicOverrides)
+        : hasAcademicSemesters
+          ? []
+          : null,
+    [academicOverrides, activeSemester, courses, hasAcademicSemesters],
+  );
   const weekendOccurrenceCount = useMemo(
-    () => layoutCourses(courses, selectedWeek, axis).slice(5).flat().length,
-    [axis, courses, selectedWeek],
+    () =>
+      canonicalOccurrences
+        ? canonicalOccurrences.filter(
+            (occurrence) =>
+              occurrence.teachingWeek === selectedWeek &&
+              occurrence.weekday >= 6 &&
+              occurrence.status !== "CANCELLED",
+          ).length
+        : layoutCourses(courses, selectedWeek, axis).slice(5).flat().length,
+    [
+      academicOverrides,
+      activeSemester,
+      axis,
+      canonicalOccurrences,
+      courses,
+      hasAcademicSemesters,
+      selectedWeek,
+    ],
   );
   const userCourseIds = useMemo(
     () => new Set(userCourses.map((course) => course.id)),
@@ -166,6 +215,45 @@ export function App() {
     [effectiveCandidates, isUsingTestSchedule, periods, userCourses],
   );
 
+  async function refreshAcademicData() {
+    const items = await loadSemesters();
+    setHasAcademicSemesters(items.length > 0);
+    const active =
+      items.find((item) => item.status === "ACTIVE") ??
+      (items.length === 0 && reminderConfiguration.termConfig
+        ? {
+            id: "legacy-active-semester",
+            name: "当前学期",
+            firstWeekMonday: reminderConfiguration.termConfig.firstWeekMonday,
+            totalWeeks: reminderConfiguration.termConfig.totalWeeks,
+            timezone: "Asia/Shanghai" as const,
+            status: "ACTIVE" as const,
+            createdAt: "",
+            updatedAt: "",
+          }
+        : null);
+    setActiveSemester(active);
+    if (!active) {
+      setAcademicOverrides([]);
+      setAcademicTasks([]);
+      setAcademicExams([]);
+      return;
+    }
+    const [nextOverrides, nextTasks, nextExams] = await Promise.all([
+      loadCourseOverrides(active.id),
+      loadAcademicTasks(active.id),
+      loadExams(active.id),
+    ]);
+    setAcademicOverrides(nextOverrides);
+    setAcademicTasks(nextTasks);
+    setAcademicExams(nextExams);
+  }
+
+  useEffect(() => {
+    if (storageStatus !== "ready") return;
+    void refreshAcademicData().catch(() => undefined);
+  }, [reminderConfiguration.termConfig, storageStatus]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void checkForUpdates(false);
@@ -180,7 +268,16 @@ export function App() {
     const refreshGeneration = ++reminderRefreshGeneration.current;
     const rebuildSchedule = async () => {
       const trace = beginRuntimeTrace("reminder.refresh", generation);
-      const plans = buildReminderPlans(userCourses, reminderConfiguration);
+      const plans = activeSemester
+        ? buildUnifiedReminderPlans(
+            resolveCourseOccurrences(userCourses, activeSemester, academicOverrides),
+            academicTasks,
+            academicExams,
+            reminderConfiguration,
+          )
+        : hasAcademicSemesters
+          ? []
+          : buildReminderPlans(userCourses, reminderConfiguration);
       trace(`plans-${plans.length}`);
       if (plans.length === 0) {
         if (!active || refreshGeneration !== reminderRefreshGeneration.current) return;
@@ -211,7 +308,16 @@ export function App() {
       active = false;
       unsubscribe();
     };
-  }, [reminderConfiguration, storageStatus, userCourses]);
+  }, [
+    academicExams,
+    academicOverrides,
+    academicTasks,
+    activeSemester,
+    hasAcademicSemesters,
+    reminderConfiguration,
+    storageStatus,
+    userCourses,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -498,6 +604,26 @@ export function App() {
           <p className="subtitle">本周课表已上线，早七点五十人的苦难开启🔛</p>
         </div>
         <div className="header-actions">
+          <div className="main-view-tabs" role="tablist" aria-label="主页面">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mainView === "hub"}
+              className={mainView === "hub" ? "is-active" : ""}
+              onClick={() => setMainView("hub")}
+            >
+              今日
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mainView === "schedule"}
+              className={mainView === "schedule" ? "is-active" : ""}
+              onClick={() => setMainView("schedule")}
+            >
+              课表
+            </button>
+          </div>
           <button
             type="button"
             className="pdf-import-button"
@@ -613,7 +739,7 @@ export function App() {
             <div className="course-form-heading">
               <div>
                 <h2>发现新版本</h2>
-                <p>当前版本 v1.2.0 · 新版本 v{availableUpdate.version}</p>
+                <p>当前版本 v1.3.0 · 新版本 v{availableUpdate.version}</p>
               </div>
             </div>
             {availableUpdate.date && (
@@ -755,28 +881,42 @@ export function App() {
           </button>
         </section>
       )}
-      <Timetable
-        courses={courses}
-        userCourseIds={userCourseIds}
-        currentWeek={selectedWeek}
-        axis={axis}
-        pxPerMinute={TEST_TIMETABLE.pxPerMinute}
-        periods={periods}
-        visibleWeekdays={visibleWeekdays}
-        currentWeekday={isViewingCurrentWeek ? todayWeekday : null}
-        nowMinutes={
-          isViewingCurrentWeek && visibleWeekdays.some((weekday) => weekday === todayWeekday)
-            ? timeToMinutes(nowTime)
-            : null
-        }
-        nowTimeLabel={nowTime}
-        scrollRef={timetableScrollRef}
-        onEditCourse={(course) => setEditingCourse(course)}
-      />
-      {dayCount === 5 && weekendOccurrenceCount > 0 && (
-        <button type="button" className="weekend-notice" onClick={() => setDayCount(7)}>
-          周末有 {weekendOccurrenceCount} 节课，查看 7 天课表
-        </button>
+      {mainView === "hub" ? (
+        <AcademicHub
+          courses={courses}
+          termConfig={reminderConfiguration.termConfig}
+          onDataChanged={() => {
+            notifyWidgetDataChanged();
+            void refreshAcademicData();
+          }}
+        />
+      ) : (
+        <>
+          <Timetable
+            courses={courses}
+            occurrences={canonicalOccurrences ?? undefined}
+            userCourseIds={userCourseIds}
+            currentWeek={selectedWeek}
+            axis={axis}
+            pxPerMinute={TEST_TIMETABLE.pxPerMinute}
+            periods={periods}
+            visibleWeekdays={visibleWeekdays}
+            currentWeekday={isViewingCurrentWeek ? todayWeekday : null}
+            nowMinutes={
+              isViewingCurrentWeek && visibleWeekdays.some((weekday) => weekday === todayWeekday)
+                ? timeToMinutes(nowTime)
+                : null
+            }
+            nowTimeLabel={nowTime}
+            scrollRef={timetableScrollRef}
+            onEditCourse={(course) => setEditingCourse(course)}
+          />
+          {dayCount === 5 && weekendOccurrenceCount > 0 && (
+            <button type="button" className="weekend-notice" onClick={() => setDayCount(7)}>
+              周末有 {weekendOccurrenceCount} 节课，查看 7 天课表
+            </button>
+          )}
+        </>
       )}
       {pdfImport.kind === "success" && (
         <PdfImportPreview

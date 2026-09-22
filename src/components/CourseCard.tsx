@@ -62,11 +62,21 @@ export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit, periods }:
   const tone = cardTone(course.id);
   const contentDensity = textDensity(course, item.durationMinutes, laneCount);
   const canEdit = isUserCourse && onEdit !== undefined;
-  const openEditor = () => onEdit?.(course);
+  const openEditor = () => onEdit?.(item.sourceCourse ?? course);
+  const statusLabel =
+    item.occurrenceStatus === "CANCELLED"
+      ? "本次停课"
+      : item.occurrenceStatus === "RESCHEDULED"
+        ? "调课"
+        : item.occurrenceStatus === "MAKEUP"
+          ? "补课"
+          : null;
 
   return (
     <article
-      className={`course-card course-card--${density}`}
+      className={`course-card course-card--${density}${
+        item.occurrenceStatus ? ` course-card--${item.occurrenceStatus.toLowerCase()}` : ""
+      }`}
       data-course-id={course.id}
       data-density={density}
       data-duration-minutes={item.durationMinutes}
@@ -97,6 +107,7 @@ export function CourseCard({ item, pxPerMinute, isUserCourse, onEdit, periods }:
       }
     >
       <strong className="course-name">{course.name}</strong>
+      {statusLabel && <span className="course-status">{statusLabel}</span>}
       <span className="course-time">{timeLabel}</span>
       <span className="course-classroom">{course.classroom ?? "教室待定"}</span>
       <span className="course-teacher">{course.teacher ?? "教师待定"}</span>

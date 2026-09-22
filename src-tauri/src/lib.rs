@@ -14,7 +14,8 @@ use std::{
 
 use db::CourseDatabase;
 use models::{
-    Course, PeriodTime, ReminderSettings, TermConfig, WidgetSettings, WidgetSettingsPatch,
+    AcademicTask, Course, CourseOverride, Exam, PeriodTime, ReminderSettings, Semester, TermConfig,
+    WidgetSettings, WidgetSettingsPatch,
 };
 use serde::Serialize;
 use tauri::{
@@ -288,6 +289,134 @@ async fn update_course(state: State<'_, CourseState>, course: Course) -> Result<
 async fn delete_course(state: State<'_, CourseState>, id: String) -> Result<(), String> {
     state
         .run_in_background("删除课程", move |database| database.delete_course(&id))
+        .await
+}
+
+#[tauri::command]
+async fn load_semesters(state: State<'_, CourseState>) -> Result<Vec<Semester>, String> {
+    state
+        .run_in_background("读取学期", CourseDatabase::load_semesters)
+        .await
+}
+
+#[tauri::command]
+async fn save_semester(
+    state: State<'_, CourseState>,
+    semester: Semester,
+) -> Result<Semester, String> {
+    state
+        .run_in_background("保存学期", move |database| {
+            database.save_semester(&semester)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn archive_semester(
+    state: State<'_, CourseState>,
+    id: String,
+    updated_at: String,
+) -> Result<(), String> {
+    state
+        .run_in_background("归档学期", move |database| {
+            database.archive_semester(&id, &updated_at)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn load_course_overrides(
+    state: State<'_, CourseState>,
+    semester_id: String,
+) -> Result<Vec<CourseOverride>, String> {
+    state
+        .run_in_background("读取课表变更", move |database| {
+            database.load_course_overrides(&semester_id)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn save_course_override(
+    state: State<'_, CourseState>,
+    value: CourseOverride,
+) -> Result<CourseOverride, String> {
+    state
+        .run_in_background("保存课表变更", move |database| {
+            database.save_course_override(&value)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn revoke_course_override(
+    state: State<'_, CourseState>,
+    id: String,
+    updated_at: String,
+) -> Result<(), String> {
+    state
+        .run_in_background("撤销课表变更", move |database| {
+            database.revoke_course_override(&id, &updated_at)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn load_academic_tasks(
+    state: State<'_, CourseState>,
+    semester_id: String,
+) -> Result<Vec<AcademicTask>, String> {
+    state
+        .run_in_background("读取学习事项", move |database| {
+            database.load_academic_tasks(&semester_id)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn save_academic_task(
+    state: State<'_, CourseState>,
+    task: AcademicTask,
+) -> Result<AcademicTask, String> {
+    state
+        .run_in_background("保存学习事项", move |database| {
+            database.save_academic_task(&task)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn delete_academic_task(state: State<'_, CourseState>, id: String) -> Result<(), String> {
+    state
+        .run_in_background("删除学习事项", move |database| {
+            database.delete_academic_task(&id)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn load_exams(
+    state: State<'_, CourseState>,
+    semester_id: String,
+) -> Result<Vec<Exam>, String> {
+    state
+        .run_in_background("读取考试", move |database| {
+            database.load_exams(&semester_id)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn save_exam(state: State<'_, CourseState>, exam: Exam) -> Result<Exam, String> {
+    state
+        .run_in_background("保存考试", move |database| database.save_exam(&exam))
+        .await
+}
+
+#[tauri::command]
+async fn delete_exam(state: State<'_, CourseState>, id: String) -> Result<(), String> {
+    state
+        .run_in_background("删除考试", move |database| database.delete_exam(&id))
         .await
 }
 
@@ -690,6 +819,18 @@ pub fn run() {
             clear_all_courses,
             update_course,
             delete_course,
+            load_semesters,
+            save_semester,
+            archive_semester,
+            load_course_overrides,
+            save_course_override,
+            revoke_course_override,
+            load_academic_tasks,
+            save_academic_task,
+            delete_academic_task,
+            load_exams,
+            save_exam,
+            delete_exam,
             load_period_times,
             load_day_count,
             save_day_count,

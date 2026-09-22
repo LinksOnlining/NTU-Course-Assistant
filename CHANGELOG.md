@@ -1,5 +1,24 @@
 # 变更记录
 
+## 1.3.0 — Academic Hub Release Candidate（开发中）
+
+### Added
+
+- 新增 `CourseOccurrence` / `CourseOverride` 统一领域模型，支持单次停课、调课、换教室和补课，不修改基础 Course。
+- 新增今日学习中心，展示下一节课、今日课程变化、Deadline 和最近考试。
+- 新增学习事项与考试管理，支持关联课程、完成/恢复和删除。
+- 新增学期 ACTIVE / ARCHIVED 生命周期与历史只读查看入口。
+- Widget 增加“下一节”和“Deadline”模式；课表、今日页面、Widget 与提醒共用 canonical occurrence。
+- SQLite schema 4→5 非破坏 migration，保留现有课程、作息、提醒和小组件设置。
+
+### Changed
+
+- Reminder 计划扩展到课程 occurrence、学习事项和考试，并为调课、停课、补课重建有效计划。
+
+### Status
+
+- 当前仅为 Release Candidate 开发版本，尚未创建 `v1.3.0` tag 或发布 GitHub Release；等待自动回归和 Windows 10 人工验收。
+
 ## 1.2.1 — 2026-09-21
 
 ### Fixed

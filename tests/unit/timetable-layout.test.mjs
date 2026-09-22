@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { courseTiming, coursesOverlap, layoutCourses } from "../../src/core/timetable-layout.ts";
+import {
+  courseTiming,
+  coursesOverlap,
+  layoutCourseOccurrences,
+  layoutCourses,
+} from "../../src/core/timetable-layout.ts";
 import { durationMinutes, idleMinutes, timeToMinutes } from "../../src/core/time.ts";
 import { TEST_TIMETABLE } from "../../src/config/timetable.ts";
 
@@ -111,4 +116,34 @@ test("chain overlaps share a stable two-lane group without affecting later cours
       ["d", 0, 1],
     ],
   );
+});
+
+test("canonical occurrences drive the weekly layout and preserve the source course for editing", () => {
+  const source = course({ id: "base", name: "基础课", weekday: 1, weeks: [3] });
+  const occurrence = {
+    courseId: "base",
+    semesterId: "semester",
+    date: "2026-09-14",
+    teachingWeek: 3,
+    weekday: 1,
+    startPeriod: 2,
+    endPeriod: 2,
+    startTime: "09:00",
+    endTime: "09:45",
+    room: "B203",
+    teacher: "教师乙",
+    status: "RESCHEDULED",
+    source: "OVERRIDE",
+    originalOccurrenceKey: "base:semester:2026-09-14:08:00",
+    occurrenceKey: "base:semester:2026-09-14:09:00:override",
+    appliedOverrideId: "override",
+    appliedOverrideKind: "RESCHEDULE",
+  };
+  const [monday] = layoutCourseOccurrences([source], [occurrence], 3, TEST_TIMETABLE.axis);
+  assert.equal(monday.length, 1);
+  assert.equal(monday[0].course.id, occurrence.occurrenceKey);
+  assert.equal(monday[0].sourceCourseId, source.id);
+  assert.equal(monday[0].sourceCourse, source);
+  assert.equal(monday[0].occurrenceStatus, "RESCHEDULED");
+  assert.equal(monday[0].course.classroom, "B203");
 });

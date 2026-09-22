@@ -1,4 +1,4 @@
-export type WidgetDisplayMode = "today" | "week";
+export type WidgetDisplayMode = "today" | "week" | "next" | "deadlines";
 
 export interface WidgetSettings {
   readonly enabled: boolean;

@@ -1,6 +1,6 @@
 # NTU Course Assistant
 
-Windows 10 本地课程表：管理课程、导入已支持的南通大学课表 PDF，并在上课前发送提醒。
+Windows 10 本地课程表与学习中心：管理课程、课表变化、任务、考试，导入已支持的南通大学课表 PDF，并在上课前发送提醒。
 
 ## 主要功能
 
@@ -10,12 +10,14 @@ Windows 10 本地课程表：管理课程、导入已支持的南通大学课表
 - 导入当前支持结构的南通大学课表 PDF，预览、修正后再确认写入。
 - 上课前 Windows 通知；主窗口关闭到系统托盘后提醒继续运行。
 - 可选桌面小组件，支持今日/本周、锁定、位置与尺寸恢复。
+- Academic Hub：查看今日学习安排、停课/调课/补课变化、Deadline、考试与学期归档。
+- Widget 2.0：支持下一节课和 Deadline 模式，并与课表变化保持一致。
 - 可选登录后自动启动，以及单实例保护。
 
 ## 系统要求与安装
 
 - Windows 10 是当前主要实际运行与验收环境，Windows 11 作为兼容目标。
-- 从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 下载 `NTU Course Assistant_1.2.1_x64-setup.exe`，按安装向导完成安装后，从开始菜单启动应用。当前版本未进行 Windows Authenticode 商业代码签名，Windows 可能显示未知发布者提示。
+- 从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 下载最新的 `NTU Course Assistant_1.3.0_x64-setup.exe`（当前 v1.3.0 仍为 Release Candidate，正式发布前以实际 Release 资产为准），按安装向导完成安装后，从开始菜单启动应用。当前版本未进行 Windows Authenticode 商业代码签名，Windows 可能显示未知发布者提示。
 - 首次使用请在“设置”中确认作息时间、学期首周和提醒选项。
 
 ## 使用说明
@@ -28,6 +30,10 @@ Windows 10 本地课程表：管理课程、导入已支持的南通大学课表
 
 课程提醒只在应用进程存活时工作。关闭主窗口会隐藏到系统托盘，提醒、小组件和已启用的应用功能会继续运行；在托盘菜单选择“退出程序”才会完全退出。小组件是一个始终位于普通窗口下方的桌面式窗口，并非嵌入 Windows 壁纸。
 
+### Academic Hub
+
+“今日”页面使用统一的课程 occurrence 读模型展示下一节、今日课程、变化、Deadline 与最近考试。课表变化不会改写基础课程，只对单次 occurrence 记录停课、调课、换教室或补课；学期管理可将学期归档或恢复为当前学期。
+
 ## 更新
 
 从 v1.2.0 开始，应用会在启动后后台检查 GitHub Releases；也可在“设置 → 关于”手动检查。更新失败不会影响现有课程表。
@@ -38,7 +44,7 @@ Windows 10 本地课程表：管理课程、导入已支持的南通大学课表
 
 ## 已知限制
 
-- 学校作息与学期日期需要由用户确认后保存。
+- 学校作息与学期日期需要由用户确认后保存；旧版本中没有学期归属字段的 legacy 课程会作为当前学期兼容数据显示。
 - 扫描 PDF 依赖本地 OCR，清晰度和版式会影响结果；未实现教务系统直接导入、云同步或日程管理。
 - 应用完全退出后不会继续发送提醒。
 - v1.1.2 及更早版本需手动安装 v1.2.0；从 v1.2.0 开始，后续版本支持应用内检查更新。

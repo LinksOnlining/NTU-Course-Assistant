@@ -22,6 +22,18 @@ export interface CourseOccurrence {
   readonly date: string;
   readonly startDateTime: string;
   readonly endDateTime: string;
+  /** v1.3 canonical occurrence fields; optional during the v1.2 compatibility migration. */
+  readonly semesterId?: string;
+  readonly teachingWeek?: number;
+  readonly startPeriod?: number | null;
+  readonly endPeriod?: number | null;
+  readonly startTime?: string;
+  readonly endTime?: string;
+  readonly room?: string | null;
+  readonly teacher?: string | null;
+  readonly status?: "NORMAL" | "RESCHEDULED" | "MAKEUP" | "CANCELLED";
+  readonly source?: "BASE" | "OVERRIDE";
+  readonly originalOccurrenceKey?: string | null;
 }
 
 export interface ReminderOccurrence {

@@ -191,3 +191,11 @@ Version 1.0 期间：
 ## Version 1.0 发布边界
 
 Release Candidate 使用稳定 identifier `com.ntu-course-assistant.desktop`、schema `4` 和单一 Tauri 进程。生产 bundle 不包含 fixture 课程或开发态标签；没有保存作息时，默认时间轴仅作为待确认的编辑起点，不能被表述为学校正式作息。应用完全退出后不运行 scheduler；关闭主窗口到 Tray 时则保持现有提醒、Tray 与可选 Widget 生命周期。正式发布不引入后台服务或云端能力。v1.2.0 使用官方 Tauri Updater 从 GitHub Releases HTTPS endpoint 获取已签名更新；私钥仅在仓库外和 GitHub Actions Secret 中存在。更新检查和展示集中在前端 updater service，失败不得阻止课程表；安装由官方 updater 处理。v1.2.0 不包含 Backup / Restore，SQLite schema 保持 4。
+
+## v1.3.0 Academic Hub
+
+v1.3.0 在不破坏 v1.2.1 数据的前提下把课程表扩展为学习中心。基础 `Course` 表示固定安排；`Semester` 表示学期生命周期；`CourseOverride` 表示一次停课、调课、换教室或补课；`resolveCourseOccurrences` 动态输出 `AcademicCourseOccurrence[]`。周课表、今日中心、Widget 和 Reminder 只能消费该 canonical read model，不在组件内重复推导调课规则。
+
+schema 5 使用非破坏 migration 新增 `semesters`、`course_overrides`、`academic_tasks`、`exams`、`reminder_rules` 和 `reminder_instances`，旧的 courses、period_times、app_settings 与 handled_reminders 保持不变。已有 v1.2.1 课程没有 semester 外键时按 legacy active semester 兼容读取；新建的学期相关记录始终带有 semesterId。ACTIVE 学期最多一个，ARCHIVED 学期默认只读，恢复操作通过统一保存事务切换当前学期。
+
+今日学习中心由 `getTodayDashboard` 组合下一节、今日课程、变化、待办、逾期任务与最近考试；Widget 通过 `getWidgetSnapshot` 和 canonical occurrence 读取 NEXT、TODAY、DEADLINES。Reminder 继续复用现有 Rust scheduler，只由统一计划构建器加入任务和考试目标；应用完全退出后仍不提供后台提醒。

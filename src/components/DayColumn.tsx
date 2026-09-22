@@ -41,7 +41,7 @@ export function DayColumn({
           key={item.course.id}
           item={item}
           pxPerMinute={pxPerMinute}
-          isUserCourse={userCourseIds.has(item.course.id)}
+          isUserCourse={userCourseIds.has(item.sourceCourseId ?? item.course.id)}
           periods={periods}
           onEdit={onEditCourse}
         />

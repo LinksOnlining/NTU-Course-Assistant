@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { buildWidgetViewModel } from "../core/widget-view.ts";
+import { resolveCourseOccurrences } from "../core/course-occurrence.ts";
+import { getTodayDashboard } from "../core/today-dashboard.ts";
+import { buildCanonicalWidgetViewModel, buildWidgetViewModel } from "../core/widget-view.ts";
+import { getWidgetSnapshot } from "../core/widget-snapshot.ts";
 import {
   DEFAULT_WIDGET_SETTINGS,
   loadWidgetData,
@@ -16,7 +19,17 @@ import {
   subscribeWidgetSettingsChanged,
 } from "../services/widget-window.ts";
 import { beginRuntimeTrace } from "../services/runtime-trace.ts";
+import {
+  loadAcademicTasks,
+  loadCourseOverrides,
+  loadExams,
+  loadSemesters,
+} from "../services/academic-storage.ts";
 import type { Course } from "../types/course.ts";
+import type { AcademicTask } from "../types/academic-task.ts";
+import type { CourseOverride } from "../types/course-override.ts";
+import type { Exam } from "../types/exam.ts";
+import type { Semester } from "../types/semester.ts";
 import type { TermConfig } from "../types/reminder.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
 
@@ -42,6 +55,10 @@ export function WidgetPrototype() {
   const [settings, setSettings] = useState<WidgetSettings>(DEFAULT_WIDGET_SETTINGS);
   const [courses, setCourses] = useState<readonly Course[]>([]);
   const [termConfig, setTermConfig] = useState<TermConfig | null>(null);
+  const [semester, setSemester] = useState<Semester | null>(null);
+  const [overrides, setOverrides] = useState<readonly CourseOverride[]>([]);
+  const [tasks, setTasks] = useState<readonly AcademicTask[]>([]);
+  const [exams, setExams] = useState<readonly Exam[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [settingsError, setSettingsError] = useState("");
   const [clock, setClock] = useState(shanghaiNow);
@@ -70,7 +87,49 @@ export function WidgetPrototype() {
         trace("snapshot-returned");
         if (!active) return;
         setCourses(data.courses);
-        setTermConfig(data.termConfig);
+        let semesterItems: readonly Semester[] = [];
+        try {
+          semesterItems = await loadSemesters();
+        } catch {
+          trace("academic-semesters-unavailable");
+        }
+        const activeSemester =
+          semesterItems.find((item) => item.status === "ACTIVE") ??
+          (semesterItems.length === 0 && data.termConfig
+            ? {
+                id: "legacy-active-semester",
+                name: "当前学期",
+                firstWeekMonday: data.termConfig.firstWeekMonday,
+                totalWeeks: data.termConfig.totalWeeks,
+                timezone: "Asia/Shanghai" as const,
+                status: "ACTIVE" as const,
+                createdAt: "",
+                updatedAt: "",
+              }
+            : null);
+        setSemester(activeSemester);
+        setTermConfig(activeSemester || semesterItems.length === 0 ? data.termConfig : null);
+        if (activeSemester) {
+          try {
+            const [nextOverrides, nextTasks, nextExams] = await Promise.all([
+              loadCourseOverrides(activeSemester.id),
+              loadAcademicTasks(activeSemester.id),
+              loadExams(activeSemester.id),
+            ]);
+            setOverrides(nextOverrides);
+            setTasks(nextTasks);
+            setExams(nextExams);
+          } catch {
+            trace("academic-records-unavailable");
+            setOverrides([]);
+            setTasks([]);
+            setExams([]);
+          }
+        } else {
+          setOverrides([]);
+          setTasks([]);
+          setExams([]);
+        }
         if (settingsRevision === settingsOperation.current) setSettings(data.settings);
         setStatus("ready");
         trace("render-published");
@@ -176,9 +235,29 @@ export function WidgetPrototype() {
   }
 
   const view = useMemo(
-    () => buildWidgetViewModel(courses, termConfig, clock),
-    [clock, courses, termConfig],
+    () =>
+      semester
+        ? buildCanonicalWidgetViewModel(
+            courses,
+            semester,
+            resolveCourseOccurrences(courses, semester, overrides),
+            clock,
+          )
+        : buildWidgetViewModel(courses, termConfig, clock),
+    [clock, courses, overrides, semester, termConfig],
   );
+  const snapshot = useMemo(() => {
+    if (!semester) return null;
+    const occurrences = resolveCourseOccurrences(courses, semester, overrides);
+    const dashboard = getTodayDashboard(clock.date, clock.time, occurrences, tasks, exams);
+    const mode =
+      settings.displayMode === "next"
+        ? "NEXT"
+        : settings.displayMode === "deadlines"
+          ? "DEADLINES"
+          : "TODAY";
+    return getWidgetSnapshot(mode, dashboard);
+  }, [clock, courses, exams, overrides, semester, settings.displayMode, tasks]);
 
   return (
     <main className="widget-prototype" aria-label="桌面课程小组件">
@@ -242,6 +321,22 @@ export function WidgetPrototype() {
         >
           本周
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={settings.displayMode === "next"}
+          onClick={() => void updateSettings({ displayMode: "next" })}
+        >
+          下一节
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={settings.displayMode === "deadlines"}
+          onClick={() => void updateSettings({ displayMode: "deadlines" })}
+        >
+          Deadline
+        </button>
       </div>
       {status === "loading" && <p className="widget-prototype__state">正在加载课程…</p>}
       {status === "error" && <p className="widget-prototype__state">课程加载失败</p>}
@@ -271,6 +366,43 @@ export function WidgetPrototype() {
                 {item.classroom && <small>{item.classroom}</small>}
               </article>
             ))
+          )}
+        </section>
+      )}
+      {status === "ready" && settings.displayMode === "next" && (
+        <section className="widget-prototype__list" aria-label="下一节课程">
+          {snapshot?.next ? (
+            <article className="widget-course widget-course--next">
+              <strong>
+                {courses.find((course) => course.id === snapshot.next?.courseId)?.name ??
+                  "下一节课程"}
+              </strong>
+              <span>
+                {snapshot.next.startTime}–{snapshot.next.endTime}
+              </span>
+              <small>{snapshot.next.room ?? "地点待定"}</small>
+            </article>
+          ) : (
+            <p className="widget-prototype__state">今天没有下一节课程</p>
+          )}
+        </section>
+      )}
+      {status === "ready" && settings.displayMode === "deadlines" && (
+        <section className="widget-prototype__list" aria-label="最近 Deadline">
+          {snapshot?.tasks.map((task) => (
+            <article className="widget-course widget-course--upcoming" key={task.id}>
+              <strong>{task.title}</strong>
+              <span>{new Date(task.dueAt).toLocaleString("zh-CN")}</span>
+            </article>
+          ))}
+          {snapshot?.exams.map((exam) => (
+            <article className="widget-course widget-course--next" key={exam.id}>
+              <strong>{exam.title}</strong>
+              <span>{new Date(exam.startsAt).toLocaleString("zh-CN")}</span>
+            </article>
+          ))}
+          {(!snapshot || (snapshot.tasks.length === 0 && snapshot.exams.length === 0)) && (
+            <p className="widget-prototype__state">近期没有 Deadline 或考试</p>
           )}
         </section>
       )}
