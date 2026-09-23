@@ -26,6 +26,8 @@ Phase 1.0 审计发现的候选 seam：`resolveCourseOccurrences`、`getTodayDas
 
 未来建立统一 typed navigation contract，概念路由为 `WorkspaceHome`、`WorkspaceSchedule`、`WorkspaceTasks`、`WorkspaceDiary`、`WorkspaceInbox`、`WorkspaceAI`、`AcademicSchedule`、`AcademicChanges`、`AcademicExams`、`AcademicSemesters`、`Settings`。导航对象可携带 route、selected object ID、optional date。Notification、AI、Search、Ctrl+K 共用该契约，不各造跳转机制。Phase 1.1 不决定是否使用 React Router；第一目标是导航契约。
 
+Phase 1.2 已在 `src/navigation/types.ts` 建立 `AppRoute`、`ObjectRef`、`NavigationTarget`，纯辅助函数位于 `src/navigation/navigation.ts`。当前 App 顶层和 AcademicHub 标签使用同一 `AppRoute` 状态；现有 AcademicTask 以临时 `academic/tasks-legacy` 路由保留。未来路由只有类型定义，没有对应页面；不引入 React Router，当前中文 UI 与窗口行为保持不变。
+
 ## 7.7 Timeline Contract
 
 Unified Timeline 是 Presentation/Application projection，不是数据库实体或新的万能 Domain model。未来 TimelineItem 的概念字段至少含 `id`、`sourceType`、`sourceId`、`start`、`end`、可选 `location`、`title`、`draggable`、`resizable`、`status`、`warnings`。来源包括 AcademicOccurrence、PlannerEvent、TimeBlock、AIProposal。Task 本身不因 Deadline 进入时间轴；Exam 是否出现由具体 presentation policy 决定，不强制视为 occupancy。

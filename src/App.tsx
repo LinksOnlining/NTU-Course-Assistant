@@ -73,6 +73,12 @@ import {
   loadExams,
   loadSemesters,
 } from "./services/academic-storage.ts";
+import {
+  createAcademicScheduleTarget,
+  createWorkspaceHomeTarget,
+  getAcademicHubTab,
+} from "./navigation/navigation.ts";
+import type { AppRoute } from "./navigation/types.ts";
 
 interface PdfImportResult {
   readonly inserted: number;
@@ -130,9 +136,12 @@ export function App() {
   // Production opens on the learning dashboard. Development keeps the
   // timetable-first route so the browser preview and existing layout scenarios
   // remain focused on schedule editing.
-  const [mainView, setMainView] = useState<"schedule" | "hub">(() =>
-    import.meta.env.DEV ? "schedule" : "hub",
+  const [currentRoute, setCurrentRoute] = useState<AppRoute>(() =>
+    import.meta.env.DEV ? createAcademicScheduleTarget().route : createWorkspaceHomeTarget().route,
   );
+  const isScheduleView = currentRoute.area === "academic" && currentRoute.page === "schedule";
+  const hubRoute =
+    getAcademicHubTab(currentRoute) === null ? createWorkspaceHomeTarget().route : currentRoute;
   const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
   const [dayCount, setDayCount] = useState<5 | 7>(7);
   const [scrollRequest, setScrollRequest] = useState(0);
@@ -649,18 +658,18 @@ export function App() {
             <button
               type="button"
               role="tab"
-              aria-selected={mainView === "hub"}
-              className={mainView === "hub" ? "is-active" : ""}
-              onClick={() => setMainView("hub")}
+              aria-selected={!isScheduleView}
+              className={!isScheduleView ? "is-active" : ""}
+              onClick={() => setCurrentRoute(createWorkspaceHomeTarget().route)}
             >
               今日
             </button>
             <button
               type="button"
               role="tab"
-              aria-selected={mainView === "schedule"}
-              className={mainView === "schedule" ? "is-active" : ""}
-              onClick={() => setMainView("schedule")}
+              aria-selected={isScheduleView}
+              className={isScheduleView ? "is-active" : ""}
+              onClick={() => setCurrentRoute(createAcademicScheduleTarget().route)}
             >
               课表
             </button>
@@ -924,8 +933,10 @@ export function App() {
           </button>
         </section>
       )}
-      {mainView === "hub" ? (
+      {!isScheduleView ? (
         <AcademicHub
+          route={hubRoute}
+          onNavigate={(route) => setCurrentRoute(route)}
           courses={courses}
           periods={periods}
           termConfig={reminderConfiguration.termConfig}

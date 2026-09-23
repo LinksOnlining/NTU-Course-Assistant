@@ -27,11 +27,14 @@ import type { Exam } from "../types/exam.ts";
 import type { Semester } from "../types/semester.ts";
 import type { TermConfig } from "../types/reminder.ts";
 import type { PeriodTime } from "../types/time.ts";
+import { getAcademicHubTab, routeForAcademicHubTab } from "../navigation/navigation.ts";
+import type { AcademicHubTab, AppRoute } from "../navigation/types.ts";
 
-type HubTab = "today" | "changes" | "tasks" | "exams" | "semesters";
 type ChangeFilter = "all" | "changed";
 
 interface AcademicHubProps {
+  readonly route: AppRoute;
+  readonly onNavigate: (route: AppRoute) => void;
   readonly courses: readonly Course[];
   readonly periods: readonly PeriodTime[];
   readonly termConfig: TermConfig | null;
@@ -172,7 +175,7 @@ type CourseChangeEditor = {
 };
 
 interface CourseChangePageStateOptions {
-  readonly tab: HubTab;
+  readonly tab: AcademicHubTab;
   readonly courses: readonly Course[];
   readonly occurrences: readonly ReturnType<typeof resolveCourseOccurrences>[number][];
   readonly overrides: readonly CourseOverride[];
@@ -395,8 +398,15 @@ function useCourseChangePageState({
   };
 }
 
-export function AcademicHub({ courses, periods, termConfig, onDataChanged }: AcademicHubProps) {
-  const [tab, setTab] = useState<HubTab>("today");
+export function AcademicHub({
+  route,
+  onNavigate,
+  courses,
+  periods,
+  termConfig,
+  onDataChanged,
+}: AcademicHubProps) {
+  const tab = getAcademicHubTab(route) ?? "today";
   const [semesters, setSemesters] = useState<readonly Semester[]>([]);
   const [semester, setSemester] = useState<Semester | null>(null);
   const [overrides, setOverrides] = useState<readonly CourseOverride[]>([]);
@@ -752,7 +762,7 @@ export function AcademicHub({ courses, periods, termConfig, onDataChanged }: Aca
             role="tab"
             aria-selected={tab === value}
             className={tab === value ? "is-active" : ""}
-            onClick={() => setTab(value)}
+            onClick={() => onNavigate(routeForAcademicHubTab(value))}
           >
             {label}
           </button>
@@ -1362,7 +1372,7 @@ export function AcademicHub({ courses, periods, termConfig, onDataChanged }: Aca
                       className="secondary-button"
                       onClick={() => {
                         setSemester(item);
-                        setTab("today");
+                        onNavigate(routeForAcademicHubTab("today"));
                       }}
                     >
                       查看历史
