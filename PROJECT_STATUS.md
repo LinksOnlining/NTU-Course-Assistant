@@ -1,8 +1,8 @@
 # 项目状态
 
 - 最后更新：2026-09-23
-- 当前阶段：**v1.3.1 RC — PERIOD_BASED 时间语义重开修复；自动化与生产构建 PASS，等待 Windows 10 安装态人工复验**。上一次 Windows 10 验收（旧构建）为 FAIL。已发布的 v1.3.0 tag / Release 保持不变；没有创建或移动 v1.3.1 tag，也没有发布 v1.3.1 Release。
-- 当前语义：`startPeriod/endPeriod` 成对存在时才是 `PERIOD_BASED` 的唯一时间事实，实际钟点必须取自当前确认的 `PeriodTime[]`；旧 `startTime/endTime` 仅为兼容快照，禁止运行时回退。两节次均为空时才是 `FIXED_TIME`。作息无法映射时保留原课程数据但不展示旧钟点/生成 occurrence。无 schema migration 或课程批量改写。`npm run verify`（132 unit、60 architecture、453 UI PASS/15 skip）及 Rust（40 tests/fmt/clippy）PASS；新建 1.3.1 EXE/MSI/NSIS 与 updater signatures。Windows 10 安装态仍未验收，不能标记最终 PASS。
+- 当前阶段：**v1.3.1 正式发布收口**。Ethan 已完成 Windows 10 最终安装态人工验收，结论 `ALL PASS`；文档提交后将创建 `v1.3.1` tag 并触发 GitHub Release。v1.3.0 tag / Release 保持不变。
+- v1.3.1 时间语义：`startPeriod/endPeriod` 成对存在时是 `PERIOD_BASED` 的唯一时间事实，实际钟点由当前确认的 `PeriodTime[]` 解析；旧 `startTime/endTime` 仅为兼容快照，禁止运行时回退。两节次均为空时才是 `FIXED_TIME`。作息无法映射时保留原课程数据但不展示旧钟点/生成 occurrence。无 schema migration 或课程批量改写。自动验证与生产构建记录见 `docs/v1.3.1-verification.md`；Ethan 的 Windows 10 最终人工验收为 `ALL PASS`。
 - v1.3.0 数据安全：SQLite 从 schema 4 通过非破坏 migration 升至 schema 5，新增 semesters、course_overrides、academic_tasks、exams、reminder_rules、reminder_instances；原有 courses、period_times、app_settings、handled_reminders 保留，未来 schema 仍安全拒绝。
 - v1.3.0 统一数据流：课程表、今日中心、Widget 和提醒均优先消费 `resolveCourseOccurrences` 产生的 canonical occurrence；基础 Course 不被单次变化直接改写。
 - v1.3.0 页面状态边界：Academic Hub 的课程变化页只持有自身的 selected course、expanded occurrence、搜索/筛选、编辑器和 typed operation；离开分区会清理瞬态状态，异步操作以 generation 防止旧结果回写。任务/考试/学期的忙碌状态不再控制课表变化按钮；当前产品已移除 Backup / Restore，因此不存在“备份管理”运行时路由可供跨页复现。
@@ -46,7 +46,7 @@
 - Phase 3.4 状态：纯 `prepareImportPlan` 在生成 ID 前稳定计算写入、现有/批内重复跳过及时间冲突；正式确认时仅为待写入项生成一次 UUID 并再次通过统一校验。Rust `import_courses` 在单个 SQLite transaction 中再次校验并批量插入，任一失败整体回滚；React 只在成功返回后合并课程。
 - Phase 3.4 Desktop 验收：创建临时 AppData 数据库副本后，在 Tauri 独立窗口补齐 3 条实践并将 18 条课程一次写入；`load_courses` 返回 18，当前周立即显示 12 张用户卡片。正常关闭重启后仍恢复 18；再次导入同一 PDF 得到重复 18、写入 0，数据库保持 18。全过程 `period_times=12`、`user_version=2`、integrity=ok，页面/控制台无错误；验收后已恢复原始数据库为 courses=0。
 - v1.1.0 RC2：新增作息后续节次联动、教学周切换、5/7 天视图、当前星期高亮、分钟级当前时间线、首次当前时间定位、离线 OCR 和统一单节时长。设置写入采用数据库回读，小组件采用字段级 patch；用户已确认设置保存问题修复。真实三页 PDF 经当前源码及生产前端构建均得到 3 页、260 个文本块、17 条固定安排和 3 条非固定实践，且不再把课程元数据中的“训练”误判为实践。schema 保持 4。
-- 下一步：**v1.3.0 已发布；当前版本开发阶段停止，等待用户提出下一阶段需求。**
+- 下一步：**Links Workplace v2.0 — Phase 1 Workspace Architecture Rebase 尚未开始；等待 Ethan 单独启动。**
 - 验证详情：docs/phase-1-verification.md、docs/phase-2-verification.md、docs/phase-2-5-verification.md、docs/phase-2-6-verification.md、docs/phase-2-7-verification.md、docs/phase-3-1-verification.md、docs/phase-3-2-verification.md、docs/phase-3-3-verification.md、docs/phase-3-4-verification.md、docs/phase-5-1-verification.md、docs/phase-5-2-verification.md、docs/phase-5-3-verification.md、docs/phase-5-4-verification.md、docs/phase-6-verification.md、docs/phase-7-1-verification.md、docs/phase-7-2-verification.md、docs/phase-7-3-verification.md、docs/phase-7-4-verification.md、docs/phase-8-verification.md、docs/phase-9-verification.md、docs/phase-10-verification.md。
 - Git：Phase 3.1–3.4 的改动按特别规则合并为一个稳定提交；未创建 tag，未 push。
 

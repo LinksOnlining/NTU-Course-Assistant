@@ -51,11 +51,14 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: NTU Course Assistant ${{ github.ref_name }}
           releaseBody: |
-            NTU Course Assistant ${{ github.ref_name }}
+            ### 修复
 
-            本版本的用户可见变更请查看仓库 CHANGELOG.md 中对应版本的记录。
-            首选下载 NSIS setup.exe；当前版本未进行 Windows Authenticode 商业代码签名。
-          releaseDraft: true
+            - PDF 导入的按节次课程现在以课程节次作为时间事实来源。
+            - 修改作息后，已有按节次课程会立即按新时间显示，无需重新导入或重启。
+            - 固定钟点课程不受影响；换教室、调课、补课与停课继续遵循各自的时间语义。
+
+            Windows 10 是主要验收环境。首选下载 NSIS setup.exe；当前版本未进行 Windows Authenticode 商业代码签名。
+          releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true

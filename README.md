@@ -2,14 +2,12 @@
 
 Windows 10 本地课程表与学习中心：管理课程、课表变化、任务、考试，导入已支持的南通大学课表 PDF，并在上课前发送提醒。
 
-当前稳定版本：**v1.3.0**
-
-v1.3.1 Release Candidate 正在修复作息变更后按节次课程仍显示旧时间的问题，尚未发布；正式安装包仍请从下方 Releases 下载。
+当前稳定版本：**v1.3.1**
 
 ## 主要功能
 
 - 5 天或 7 天课程表按真实开始、结束时间显示，保留课间、午休和空闲时段；可切换教学周并标记当前时间。
-- 调整一节作息的时间时，后续节次会保留原时长和课间自动联动。
+- 修改已确认作息后，按节次安排的已有课程会立即按新时间显示，无需重新导入 PDF 或重启；固定钟点课程不受影响。
 - 本地添加、编辑、删除课程；数据保存在本机 SQLite 数据库。
 - 导入当前支持结构的南通大学课表 PDF，预览、修正后再确认写入。
 - 上课前 Windows 通知；主窗口关闭到系统托盘后提醒继续运行。
@@ -21,7 +19,7 @@ v1.3.1 Release Candidate 正在修复作息变更后按节次课程仍显示旧�
 ## 系统要求与安装
 
 - Windows 10 是当前主要实际运行与验收环境，Windows 11 作为兼容目标。
-- 从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 下载最新的 `NTU Course Assistant_1.3.0_x64-setup.exe`，按安装向导完成安装后，从开始菜单启动应用。当前版本未进行 Windows Authenticode 商业代码签名，Windows 可能显示未知发布者提示。
+- 从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 下载 `NTU Course Assistant_1.3.1_x64-setup.exe`，按安装向导完成安装后，从开始菜单启动应用。当前版本未进行 Windows Authenticode 商业代码签名，Windows 可能显示未知发布者提示。
 - 首次使用请在“设置”中确认作息时间、学期首周和提醒选项。
 
 ## 使用说明
