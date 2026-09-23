@@ -2,6 +2,12 @@
 
 实施状态（2026-09-10）：Phase 1、Phase 2、Phase 2.5–2.7 和 Phase 3 已通过验收。课程、用户作息和正式 PDF 导入通过 Rust `rusqlite` 持久化；连续时间轴按真实分钟显示节次、实际时间和课程位置。真实 PDF 检查见 docs/pdf-sample-review.md；PDF 本身没有可靠实际钟点，导入前仍必须使用用户确认的作息配置。
 
+## Links Workplace v2.0 文档来源
+
+- 当前 v2 产品需求单一事实来源：[`PROJECT_BRIEF.md`](PROJECT_BRIEF.md)。
+- 当前 v2 架构及依赖方向契约：[`docs/v2-architecture-contract.md`](docs/v2-architecture-contract.md)。
+- 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。此引用不表示 v2 runtime 已实现。
+
 ## 技术方案
 
 采用 Tauri 2 + React + TypeScript + Rust，Vite 构建前端、npm 管理前端依赖。选择基于 Windows 10（兼容 Windows 11）、时间轴 UI 开发效率和本地系统集成需要。采用系统 WebView2，安装包与内存优势是选型预期，具体体积、CPU、内存必须由实际构建测量，不承诺数字。
