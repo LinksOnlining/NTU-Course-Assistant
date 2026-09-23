@@ -21,6 +21,14 @@ export interface WorkspaceTaskSummary {
   readonly hiddenCount: number;
 }
 
+export interface WorkspaceTimeSection {
+  readonly label: string;
+  readonly value: string;
+  readonly title: string | null;
+  readonly detail: string;
+  readonly location: string | null;
+}
+
 export type WorkspaceModuleAvailability = "available" | "unavailable";
 
 export interface WorkspaceDashboardViewModel {
@@ -30,13 +38,10 @@ export interface WorkspaceDashboardViewModel {
   readonly nextItem: TimelineItem | null;
   readonly todayStatusText: string;
   readonly todaySummaryText: string;
-  readonly nextCourseContext: {
-    readonly label: string;
-    readonly title: string;
-    readonly time: string;
-    readonly location: string | null;
+  readonly timeContext: {
+    readonly primary: WorkspaceTimeSection;
+    readonly secondary: WorkspaceTimeSection | null;
   };
-  readonly nextFreeSlot: string;
   readonly taskSummary: WorkspaceTaskSummary;
   readonly moduleAvailability: {
     readonly diary: WorkspaceModuleAvailability;

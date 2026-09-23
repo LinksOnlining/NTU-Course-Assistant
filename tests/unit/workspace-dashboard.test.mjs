@@ -114,7 +114,7 @@ test("next item prefers the active occurrence, ignores cancelled items, and trac
   );
 });
 
-test("time context separates active, upcoming, tomorrow, and free intervals from occupied occurrences", () => {
+test("time context shows one duration while free, a true next gap while active, and tomorrow without repetition", () => {
   const sources = {
     date,
     timelineItems: [
@@ -127,24 +127,54 @@ test("time context separates active, upcoming, tomorrow, and free intervals from
     warnings: [],
   };
   const active = buildWorkspaceDashboardViewModel(sources, "09:30");
-  assert.match(active.nextCourseContext.label, /正在上课.*30 分钟/u);
-  assert.equal(active.nextCourseContext.location, "A101");
-  assert.equal(active.nextFreeSlot, "下一段空闲 · 2 小时");
+  assert.equal(active.timeContext.primary.label, "正在上课");
+  assert.equal(active.timeContext.primary.value, "还有 30 分钟");
+  assert.equal(active.timeContext.primary.location, "A101");
+  assert.equal(active.timeContext.secondary?.label, "下一段空闲");
+  assert.equal(active.timeContext.secondary?.value, "2 小时");
+  assert.equal(active.timeContext.secondary?.detail, "10:00–12:00");
   const free = buildWorkspaceDashboardViewModel(sources, "10:30");
-  assert.equal(free.nextFreeSlot, "当前空闲 · 1 小时 30 分钟");
-  assert.match(free.nextCourseContext.label, /后上课/u);
+  assert.deepEqual(
+    [
+      free.timeContext.primary.label,
+      free.timeContext.primary.value,
+      free.timeContext.primary.detail,
+    ],
+    ["当前空闲", "1 小时 30 分钟", "至 12:00"],
+  );
+  assert.equal(free.timeContext.secondary?.label, "下一节课");
+  assert.equal(free.timeContext.secondary?.value, "second");
+  assert.ok(!JSON.stringify(free.timeContext.secondary).includes("1 小时 30 分钟"));
   const tomorrow = buildWorkspaceDashboardViewModel(sources, "14:00");
-  assert.equal(tomorrow.nextCourseContext.label, "下一节在明天");
-  assert.equal(tomorrow.nextCourseContext.title, "tomorrow");
+  assert.equal(tomorrow.timeContext.primary.detail, "至今天结束");
+  assert.equal(tomorrow.timeContext.secondary?.value, "tomorrow");
+  assert.equal(tomorrow.timeContext.secondary?.detail, "明天 08:00–09:00");
   assert.equal(
-    buildWorkspaceDashboardViewModel({ ...sources, tomorrowItems: [] }, "14:00").nextCourseContext
-      .label,
-    "今天已无课程",
+    buildWorkspaceDashboardViewModel({ ...sources, tomorrowItems: [] }, "14:00").timeContext
+      .secondary,
+    null,
   );
-  assert.equal(
-    buildWorkspaceDashboardViewModel({ ...sources, timelineItems: [] }, "10:00").nextFreeSlot,
-    "当前空闲 · 14 小时",
+  const empty = buildWorkspaceDashboardViewModel({ ...sources, timelineItems: [] }, "10:00");
+  assert.equal(empty.timeContext.primary.label, "今天无课程");
+  assert.equal(empty.timeContext.primary.value, "14 小时");
+  assert.equal(empty.timeContext.secondary?.value, "tomorrow");
+});
+
+test("back-to-back courses do not invent a free slot", () => {
+  const model = buildWorkspaceDashboardViewModel(
+    {
+      date,
+      timelineItems: [
+        timelineItem("first", "09:00", "10:00"),
+        timelineItem("second", "10:00", "11:00"),
+      ],
+      tasks: [],
+      warnings: [],
+    },
+    "09:30",
   );
+  assert.equal(model.timeContext.secondary?.label, "下一节课");
+  assert.equal(model.timeContext.secondary?.value, "second");
 });
 
 test("task previews use natural relative dates without changing dueAt", () => {

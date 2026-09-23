@@ -15,9 +15,10 @@
 - Phase 1.6 工作台首页与统一 24 小时时间轴基础：COMPLETE。`workspace/home` 现在渲染 `WorkspaceDashboard`，复用 Academic application reads 与 canonical occurrence resolver；新增仅供展示的 `TimelineItem` 投影和 1,440 分钟日布局，处理重叠分栏、无效时间警告、停课与只读语义。工作台提供今日时间轴、当前/下一课程摘要、最多 4 项学业任务摘要及明确未开放的 Diary / Inbox / AI 卡片；分钟时钟不触发数据库轮询，本地跨日会重新读取当天 Academic 数据。未新增业务事实、数据库结构或模块能力。Windows 11 Pro 人工验收尚待 Ethan 执行。
 - Phase 1.6 验证：新增 15 个 unit、4 个 architecture、6 个 Workspace UI 场景 PASS；完整 `npm run verify` PASS：174 unit、77 architecture、570 UI PASS / 15 条件跳过；typecheck、lint、Prettier、frontend build 均 PASS。本轮未修改 Rust / DB / Tauri config、未新增依赖，因此未运行 Rust checks 或 Tauri production build。Playwright 仍会输出既有 Widget bounds Tauri mock `currentWindow` warning，未导致测试失败。
 - Phase 1.6.1 工作台整体 UI 精修与设置分域：实现及自动验证完成，Windows 11 Pro 人工视觉验收 **PENDING**。工作台采用 Quiet Productivity 的连续 Top Canvas（品牌、已核验每日寄语、确定性 Today Overview、静态弱背景），以 Time / Link / Node 呈现时间与来源关联；主内容改为 Timeline / Time Context / Workspace Rail 三栏。Time Context 只消费已解析投影，显示当前/下一课程及真实空闲，不创建第二时间轴；任务显示自然截止日期和学业来源，Diary / Inbox / AI 保持明确未开放。新增 Surface 与 motion 语义 token、Reduced Motion 规则。统一设置容器按工作台/课表/通用分域，入口默认分别为首页/作息，主题位于通用外观；原作息、提醒、Widget 等保存逻辑未重构。`npm run verify` PASS：176 unit、78 architecture、579 UI PASS / 15 条件跳过，typecheck、lint、format、frontend build 均 PASS。仅改前端与测试/架构文档，schema 仍为 5；未运行 Rust 或 Tauri production build。
+- Phase 1.6.2 Windows 11 Visual Polish：实现与自动验证完成，Windows 11 Pro 真实截图复验 **PENDING**。压缩 Top Canvas 与低高度布局，删除可见的“今日概览”“时间概览”冗余标签；Time Context 使用纯 ViewModel 表达当前空闲/正在上课与下一课程/空闲，长课程名最多两行；设置首页改为真实功能说明，设置滚动条与 Timeline 统一细窄样式，深色半小时线和次级文字收敛。00:00/24:00 刻度向画布内对齐，课程块与当前时间线仍按 1 分钟=1px 定位。`npm run verify` PASS：177 unit、79 architecture、606 UI PASS / 15 条件跳过，typecheck、lint、format、frontend build 均 PASS。未修改 Academic Core、Rust、DB/schema（仍为 5）、identifier、依赖或系统级品牌；按本阶段要求未运行 Rust 或 Tauri production build。
 - v2 开发及主要人工验收环境：Windows 11 Pro。v1.3.1 的 Windows 10 安装态 ALL PASS 是历史验收事实，不代表在 Windows 11 已执行相同验收。
 - 当前 v2 目标品牌为 Links Workplace；顶层导航 `[工作台] [课表]`；技术 identifier `com.ntu-course-assistant.desktop`、`courses.sqlite3`、GitHub repo/updater source 保持不变。Quick Capture 与 Focus 在当前规划中为 REMOVED。
-- 下一步：等待 Ethan / ChatGPT 审核 Phase 1.6.1 真实界面后进入 Phase 1.7-A；当前不得自动进入。
+- 下一步：等待 Ethan / ChatGPT 复验 Phase 1.6.2 Windows 11 真实截图；通过后才进入 Phase 1.7-A，当前不得自动进入。
 
 ## 当前稳定版本：NTU Course Assistant v1.3.1
 

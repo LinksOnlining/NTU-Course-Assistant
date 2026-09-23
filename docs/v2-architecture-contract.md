@@ -171,3 +171,5 @@ OpenAI unavailable、Weather API unavailable 或网络断开时，Academic、Pla
 - 主工作区为 Timeline / Time Context / Workspace Rail。Time Context 是文字摘要，消费已解析 Timeline 投影，显示当前或下一课程、下一段真实空闲；不得变成第二条时间轴或自行解析 CourseOverride。任务截止日只在任务摘要展示，不占 Timeline。
 - Surface 层级为 Canvas、Primary Timeline、Utility Time Context、Flat Tile；交互动画使用语义化 120/180/240ms token，`prefers-reduced-motion` 下取消非必要过渡。浅色/深色共用语义 token。
 - 设置使用统一容器与分类侧栏：从工作台进入默认“工作台 / 首页”，从课表进入默认“课表 / 作息”；主题位于“通用 / 外观”，沿用原 `links-workplace.theme-preference`。未实现页仅显示真实说明，不提供虚假开关；现有作息、提醒、Widget、启动与课程数据操作仍使用原保存逻辑。
+
+Phase 1.6.2 将 Time Context 固定为由 Workspace application 层纯投影生成的“当前情境 / 下一事件”两段摘要；只使用已解析 TimelineItem 判断课程与真实空闲，不在 JSX 或存储层重复解析课程时间。Timeline 仍以 1 分钟对应 1px，首尾刻度仅在展示层向画布内对齐。

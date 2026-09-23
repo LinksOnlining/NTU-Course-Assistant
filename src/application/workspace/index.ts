@@ -12,4 +12,5 @@ export type {
   WorkspaceTaskDeadlineKind,
   WorkspaceTaskPreview,
   WorkspaceTaskSummary,
+  WorkspaceTimeSection,
 } from "./types.ts";

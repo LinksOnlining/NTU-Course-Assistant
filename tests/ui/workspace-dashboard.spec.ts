@@ -2,12 +2,12 @@ import { expect, test, type Page } from "@playwright/test";
 
 const FIXED_NOW = new Date("2026-09-23T12:00:00");
 
-async function seedDashboardRuntime(page: Page, currentTime = FIXED_NOW) {
+async function seedDashboardRuntime(page: Page, currentTime = FIXED_NOW, courseName = "数学基础") {
   await page.clock.install({ time: currentTime });
-  await page.addInitScript(() => {
+  await page.addInitScript((name) => {
     const course = {
       id: "dashboard-course",
-      name: "数学基础",
+      name,
       teacher: "教师甲",
       classroom: "A101",
       weekday: 3,
@@ -101,7 +101,7 @@ async function seedDashboardRuntime(page: Page, currentTime = FIXED_NOW) {
         getLoadCoursesCount: () => loadCoursesCount,
       },
     });
-  });
+  }, courseName);
   await page.goto("/");
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
   await expect(page.getByRole("heading", { name: "今日日程" })).toBeVisible();
@@ -119,11 +119,14 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
   await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
   await expect(page.getByText("已完成事项", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("workspace-today-overview")).toBeVisible();
+  await expect(page.getByTestId("workspace-today-overview")).toContainText("正在上课");
+  await expect(page.getByTestId("workspace-today-overview")).not.toContainText("今日概览");
   await expect(
     page.getByTestId("workspace-today-overview").locator(".workspace-ambient"),
   ).toHaveAttribute("aria-hidden", "true");
   await expect(page.getByTestId("workspace-time-context")).toBeVisible();
   await expect(page.getByTestId("workspace-time-context")).toContainText("正在上课");
+  await expect(page.getByTestId("workspace-time-context")).not.toContainText("时间概览");
 
   const timeline = page.getByRole("region", { name: "今日日程时间轴" });
   await expect(timeline).toBeVisible();
@@ -154,7 +157,10 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
       const dashboard = document.querySelector<HTMLElement>(".workspace-dashboard");
       const rail = document.querySelector<HTMLElement>(".workspace-dashboard-rail");
       const context = document.querySelector<HTMLElement>(".workspace-time-context");
-      if (!timelineElement || !nowLine || !dashboard || !rail || !context) return null;
+      const canvas = document.querySelector<HTMLElement>(".workspace-timeline-canvas");
+      const item = document.querySelector<HTMLElement>(".workspace-timeline-item");
+      if (!timelineElement || !nowLine || !dashboard || !rail || !context || !canvas || !item)
+        return null;
       const timelineBox = timelineElement.getBoundingClientRect();
       const nowBox = nowLine.getBoundingClientRect();
       return {
@@ -168,6 +174,10 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
           context.getBoundingClientRect().right < rail.getBoundingClientRect().left,
         timelineHasInternalScroll: timelineElement.scrollHeight > timelineElement.clientHeight,
         nowLineViewportRatio: (nowBox.top - timelineBox.top) / timelineBox.height,
+        dashboardHeight: dashboard.clientHeight,
+        canvasHeight: canvas.clientHeight,
+        itemTop: item.getBoundingClientRect().top - canvas.getBoundingClientRect().top,
+        nowTop: nowBox.top - canvas.getBoundingClientRect().top,
       };
     });
     expect(measurements, `工作台视口 ${viewport.width}×${viewport.height}`).not.toBeNull();
@@ -176,6 +186,10 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
     expect(measurements?.rightRailVerticalScroll).toBe(false);
     expect(measurements?.threeColumnOrder).toBe(true);
     expect(measurements?.timelineHasInternalScroll).toBe(true);
+    expect(measurements?.canvasHeight).toBe(1440);
+    expect(measurements?.itemTop).toBeCloseTo(690, 0);
+    expect(measurements?.nowTop).toBeCloseTo(720, 0);
+    if (viewport.width === 1366) expect(measurements?.dashboardHeight).toBeGreaterThan(500);
     expect(measurements?.nowLineViewportRatio).toBeGreaterThanOrEqual(0.35);
     expect(measurements?.nowLineViewportRatio).toBeLessThanOrEqual(0.45);
 
@@ -205,6 +219,61 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
       await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
     }
   }
+});
+
+test("00:00 and 24:00 labels stay inside the timeline without shifting minute geometry", async ({
+  page,
+}) => {
+  await seedDashboardRuntime(page);
+  const viewport = page.getByRole("region", { name: "今日日程时间轴" });
+  const first = viewport.locator(".workspace-timeline-tick--hour").first();
+  const last = viewport.locator(".workspace-timeline-tick--end");
+  await viewport.evaluate((node) => {
+    node.scrollTop = 0;
+  });
+  expect(
+    await first.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const view = document.querySelector(".workspace-timeline-viewport")!.getBoundingClientRect();
+      return box.top >= view.top && box.bottom <= view.bottom;
+    }),
+  ).toBe(true);
+  await viewport.evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  expect(
+    await last.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const view = document.querySelector(".workspace-timeline-viewport")!.getBoundingClientRect();
+      const canvas = document.querySelector(".workspace-timeline-canvas")!.getBoundingClientRect();
+      return box.top >= view.top && box.bottom <= view.bottom && box.bottom <= canvas.bottom + 1;
+    }),
+  ).toBe(true);
+});
+
+test("Time Context clamps a long course title to two lines without losing its full text", async ({
+  page,
+}) => {
+  const title = "毛泽东思想和中国特色社会主义理论体系概论与当代社会专题研究";
+  await seedDashboardRuntime(page, FIXED_NOW, title);
+  const course = page.locator(".workspace-time-course").first();
+  await expect(course).toHaveAttribute("title", title);
+  const style = await course.evaluate((node) => {
+    const css = getComputedStyle(node);
+    return { clamp: css.webkitLineClamp, overflow: css.overflow };
+  });
+  expect(style).toEqual({ clamp: "2", overflow: "hidden" });
+});
+
+test("idle Time Context presents the free duration once and identifies the next course", async ({
+  page,
+}) => {
+  await seedDashboardRuntime(page, new Date("2026-09-23T10:00:00"));
+  const context = page.getByTestId("workspace-time-context");
+  await expect(context).toContainText("当前空闲");
+  await expect(context).toContainText("至 11:30");
+  await expect(context).toContainText("下一节课");
+  await expect(context.getByText("1 小时 30 分钟", { exact: true })).toHaveCount(1);
 });
 
 test("reduced motion keeps Overview, Time Context and Settings available", async ({ page }) => {
@@ -311,7 +380,7 @@ test("empty Academic data still renders the complete axis and truthful empty/una
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
   const timeline = page.getByRole("region", { name: "今日日程时间轴" });
   await expect(timeline.getByText("今天暂无日程", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("workspace-time-context")).toContainText("今天已无课程");
+  await expect(page.getByTestId("workspace-time-context")).toContainText("今天无课程");
   await expect(timeline.getByText("00:00")).toBeVisible();
   await expect(timeline.getByText("24:00")).toBeVisible();
   await expect(page.getByText("暂无未完成学业事项")).toBeVisible();

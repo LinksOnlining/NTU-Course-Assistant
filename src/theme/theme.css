@@ -56,6 +56,9 @@
   --border-subtle: #d9e3df;
   --border-default: #c4d0cc;
   --border-strong: #8a9e96;
+  --scrollbar-width: 5px;
+  --scrollbar-thumb: color-mix(in srgb, var(--border-strong) 50%, transparent);
+  --scrollbar-thumb-hover: var(--border-strong);
 
   --accent-primary: #2f7b68;
   --accent-hover: #286b5b;
@@ -169,7 +172,7 @@
 
   --text-primary: #eef5f2;
   --text-secondary: #bcc9c4;
-  --text-muted: #8f9e99;
+  --text-muted: #9eada7;
   --text-disabled: #68746f;
   --text-heading: #eef5f2;
   --text-label: #9dd4c5;

@@ -80,3 +80,21 @@ test("Time Context is a summary projection, not a second timeline", () => {
     /timeline-tick|timeline-grid|draggable|resizable|hour ticks|<canvas/u,
   );
 });
+
+test("Settings and Timeline scrollbars share the small semantic thumb", () => {
+  const settings = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
+  const timeline = readFileSync(
+    new URL("../../src/workspace/dashboard/workspace-dashboard.css", import.meta.url),
+    "utf8",
+  );
+  const tokens = readFileSync(new URL("../../src/theme/theme.css", import.meta.url), "utf8");
+  assert.match(tokens, /--scrollbar-width:\s*5px/u);
+  assert.match(
+    settings,
+    /\.settings-domain-sidebar::-webkit-scrollbar[\s\S]*?width:\s*var\(--scrollbar-width\)/u,
+  );
+  assert.match(
+    timeline,
+    /\.workspace-timeline-viewport::-webkit-scrollbar[\s\S]*?width:\s*var\(--scrollbar-width\)/u,
+  );
+});

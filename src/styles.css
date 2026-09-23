@@ -28,6 +28,16 @@ body {
   padding: 16px 26px 18px;
 }
 
+.app-shell:has(.workspace-dashboard-page) {
+  padding-top: 12px;
+}
+
+@media (max-height: 650px) {
+  .app-shell:has(.workspace-dashboard-page) {
+    padding-top: 8px;
+  }
+}
+
 .app-header {
   display: flex;
   flex: 0 0 auto;
@@ -816,6 +826,20 @@ select:focus-visible {
   overflow: auto;
   padding: var(--space-2);
   border-right: 1px solid var(--border-subtle);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+.settings-domain-sidebar::-webkit-scrollbar,
+.settings-domain-content::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+}
+.settings-domain-sidebar::-webkit-scrollbar-thumb,
+.settings-domain-content::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+}
+.settings-domain-sidebar:hover::-webkit-scrollbar-thumb,
+.settings-domain-content:hover::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-hover);
 }
 .settings-domain-sidebar h3 {
   margin: var(--space-2) 0;
@@ -851,6 +875,8 @@ select:focus-visible {
   min-width: 0;
   overflow-y: auto;
   padding: 0 var(--space-2) var(--space-2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 .settings-domain-content > .form-actions:last-child {
   margin-top: auto;
@@ -864,6 +890,15 @@ select:focus-visible {
 .settings-domain-note {
   color: var(--text-secondary);
   font-size: var(--font-size-body);
+}
+.settings-home-summary {
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+}
+.settings-home-summary ul {
+  display: grid;
+  gap: var(--space-2);
+  padding-left: var(--space-6);
 }
 @media (max-width: 650px) {
   .settings-domain-layout {

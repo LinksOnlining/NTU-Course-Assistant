@@ -206,6 +206,28 @@
   margin: 0;
 }
 
+@media (max-height: 850px) {
+  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) {
+    min-height: 54px;
+    margin-bottom: 0;
+  }
+  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) .shell-brand h1 {
+    font-size: 26px;
+  }
+  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) .shell-daily-quote {
+    margin-top: 0;
+  }
+}
+
+@media (max-height: 650px) {
+  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) {
+    min-height: 44px;
+  }
+  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) .shell-daily-quote {
+    display: none;
+  }
+}
+
 @media (max-width: 960px) {
   .shell-header {
     gap: var(--space-3);
@@ -256,5 +278,11 @@
 @media (max-width: 760px) {
   .app-shell {
     padding: var(--space-2);
+  }
+}
+
+@media (max-height: 650px) {
+  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) {
+    min-height: 44px;
   }
 }

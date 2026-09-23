@@ -14,6 +14,7 @@ import type {
   WorkspaceDashboardSources,
   WorkspaceDashboardViewModel,
   WorkspaceTaskPreview,
+  WorkspaceTimeSection,
 } from "./types.ts";
 
 const LEGACY_SEMESTER_ID = "legacy-active-semester";
@@ -220,6 +221,10 @@ function durationLabel(value: number): string {
   return `${hours} 小时${value % 60 ? ` ${value % 60} 分钟` : ""}`;
 }
 
+function clockLabel(value: number): string {
+  return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+}
+
 function timeContext(sources: WorkspaceDashboardSources, nowTime: string) {
   const occupied = sources.timelineItems
     .filter((item) => item.occupiesTime)
@@ -228,23 +233,20 @@ function timeContext(sources: WorkspaceDashboardSources, nowTime: string) {
   const active = occupied.find(
     (item) => minutes(item.startTime) <= now && now < minutes(item.endTime),
   );
-  const next = active ?? occupied.find((item) => minutes(item.startTime) > now);
+  const next = occupied.find((item) => minutes(item.startTime) > now);
   const tomorrow = sources.tomorrowItems
     ?.filter((item) => item.occupiesTime)
     .sort((a, b) => a.startTime.localeCompare(b.startTime))[0];
-  const item = next ?? tomorrow;
-  const nextCourseContext = item
-    ? {
-        label: active
-          ? `正在上课 · 还剩 ${durationLabel(minutes(active.endTime) - now)}`
-          : next
-            ? `${durationLabel(minutes(next.startTime) - now)}后上课`
-            : "下一节在明天",
-        title: item.title,
-        time: `${next ? "今天" : "明天"} ${item.startTime}–${item.endTime}`,
-        location: item.location,
-      }
-    : { label: "今天已无课程", title: "可以安排自己的时间", time: "", location: null };
+  const courseSection = (
+    item: WorkspaceDashboardSources["timelineItems"][number],
+    day: "今天" | "明天",
+  ): WorkspaceTimeSection => ({
+    label: "下一节课",
+    value: item.title,
+    title: item.title,
+    detail: `${day} ${item.startTime}–${item.endTime}`,
+    location: item.location,
+  });
   let freeStart = now;
   if (active) {
     for (const entry of occupied) {
@@ -252,19 +254,50 @@ function timeContext(sources: WorkspaceDashboardSources, nowTime: string) {
       freeStart = Math.max(freeStart, minutes(entry.endTime));
     }
   }
-  const nextStart =
-    occupied.map((entry) => minutes(entry.startTime)).find((start) => start > freeStart) ?? 1440;
-  const nextFreeSlot =
-    freeStart >= 1440
-      ? "今天已无空闲时段"
-      : nextStart <= freeStart
-        ? "暂无可用空闲时段"
-        : `${active ? "下一段空闲" : "当前空闲"} · ${durationLabel(nextStart - freeStart)}`;
+  const nextAfterFree = occupied.find((entry) => minutes(entry.startTime) > freeStart);
+  const freeEnd = nextAfterFree ? minutes(nextAfterFree.startTime) : 1440;
+  const primary: WorkspaceTimeSection = active
+    ? {
+        label: "正在上课",
+        value: `还有 ${durationLabel(minutes(active.endTime) - now)}`,
+        title: active.title,
+        detail: `${active.startTime}–${active.endTime}`,
+        location: active.location,
+      }
+    : {
+        label: occupied.length ? "当前空闲" : "今天无课程",
+        value: durationLabel(freeEnd - now),
+        title: null,
+        detail: nextAfterFree ? `至 ${nextAfterFree.startTime}` : "至今天结束",
+        location: null,
+      };
+  const secondary: WorkspaceTimeSection | null = active
+    ? next && minutes(next.startTime) <= minutes(active.endTime)
+      ? courseSection(next, "今天")
+      : freeEnd > freeStart
+        ? {
+            label: "下一段空闲",
+            value: durationLabel(freeEnd - freeStart),
+            title: null,
+            detail: nextAfterFree
+              ? `${clockLabel(freeStart)}–${nextAfterFree.startTime}`
+              : `${clockLabel(freeStart)}–24:00`,
+            location: null,
+          }
+        : nextAfterFree
+          ? courseSection(nextAfterFree, "今天")
+          : tomorrow
+            ? courseSection(tomorrow, "明天")
+            : null
+    : nextAfterFree
+      ? courseSection(nextAfterFree, "今天")
+      : tomorrow
+        ? courseSection(tomorrow, "明天")
+        : null;
   const remaining = occupied.filter((entry) => minutes(entry.endTime) > now).length;
   const openTaskCount = sources.tasks.filter((task) => task.status !== "COMPLETED").length;
   return {
-    nextCourseContext,
-    nextFreeSlot,
+    timeContext: { primary, secondary },
     todayStatusText: active
       ? "正在上课"
       : remaining

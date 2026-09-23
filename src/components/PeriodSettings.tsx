@@ -394,9 +394,19 @@ export function PeriodSettings({
           <div className="settings-domain-content">
             <h3 className="settings-domain-title">{page}</h3>
             {page === "首页" && (
-              <p className="settings-domain-note">
-                工作台首页汇集今日课程、时间概览和任务。课程与任务来自已有本地数据。
-              </p>
+              <div className="settings-home-summary">
+                <p className="settings-domain-note">工作台首页采用当前默认布局。</p>
+                <p>当前包含：</p>
+                <ul>
+                  <li>今日日程：按 24 小时查看已有课程。</li>
+                  <li>时间情境：查看当前状态与下一节课。</li>
+                  <li>学业任务：显示已有本地学业事项。</li>
+                  <li>日记、收件箱与 AI：目前仅保留未开放入口。</li>
+                </ul>
+                <p className="settings-domain-note">
+                  课程和学业任务来自已有本地数据；更多首页布局选项将在后续阶段开放。
+                </p>
+              </div>
             )}
             {page === "时间轴" && (
               <p className="settings-domain-note">

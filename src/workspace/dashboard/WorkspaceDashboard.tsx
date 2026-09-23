@@ -209,22 +209,39 @@ function TimelineCard({
 }
 
 function TimeContext({ model }: { readonly model: WorkspaceDashboardViewModel }) {
-  const next = model.nextCourseContext;
+  const { primary, secondary } = model.timeContext;
   return (
     <aside
       className="workspace-time-context"
       aria-label="时间概览"
       data-testid="workspace-time-context"
     >
-      <h2>时间概览</h2>
-      <p className="workspace-time-kicker">{next.label}</p>
-      <strong>{next.title}</strong>
-      {next.time && <span>{next.time}</span>}
-      {next.location && <span>{next.location}</span>}
-      <div className="workspace-free-slot">
-        <span>空闲时间</span>
-        <strong>{model.nextFreeSlot}</strong>
+      <div className="workspace-time-section">
+        <p className="workspace-time-kicker">{primary.label}</p>
+        <strong className="workspace-time-value" title={primary.title ?? undefined}>
+          {primary.value}
+        </strong>
+        {primary.title && (
+          <strong className="workspace-time-course" title={primary.title}>
+            {primary.title}
+          </strong>
+        )}
+        <span>{primary.detail}</span>
+        {primary.location && <span>{primary.location}</span>}
       </div>
+      {secondary && (
+        <div className="workspace-time-section workspace-time-section--secondary">
+          <p className="workspace-time-kicker">{secondary.label}</p>
+          <strong
+            className={secondary.title ? "workspace-time-course" : "workspace-time-value"}
+            title={secondary.title ?? undefined}
+          >
+            {secondary.value}
+          </strong>
+          <span>{secondary.detail}</span>
+          {secondary.location && <span>{secondary.location}</span>}
+        </div>
+      )}
     </aside>
   );
 }
@@ -362,7 +379,6 @@ export function WorkspaceDashboard({
         data-testid="workspace-today-overview"
       >
         <div className="workspace-ambient" aria-hidden="true" />
-        <p className="workspace-overview-eyebrow">今日概览</p>
         <h2>{model.todayStatusText}</h2>
         <p>{model.todaySummaryText}</p>
       </section>
