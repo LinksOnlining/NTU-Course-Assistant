@@ -136,21 +136,32 @@ export function periodRangeToTimeRange(
   };
 }
 
-/** Period indexes are the source of truth when present; saved clock times remain a fallback for missing mappings. */
+export type CourseTimeMode = "PERIOD_BASED" | "FIXED_TIME";
+
+/** The paired period indexes are the persisted discriminator; clock fields are not a fallback. */
+export function getCourseTimeMode(course: {
+  readonly startPeriod: number | null;
+  readonly endPeriod: number | null;
+}): CourseTimeMode {
+  if (course.startPeriod === null && course.endPeriod === null) return "FIXED_TIME";
+  if (course.startPeriod !== null && course.endPeriod !== null) return "PERIOD_BASED";
+  throw new RangeError("课程节次必须同时存在或同时为空。");
+}
+
+/** Resolve actual clock times only from the course's authoritative time mode. */
 export function resolveCourseTime(
   course: TimeRange & {
     readonly startPeriod: number | null;
     readonly endPeriod: number | null;
   },
   periods: readonly PeriodTime[],
-): TimeRange {
-  if (course.startPeriod === null || course.endPeriod === null) return course;
-  if (periods.length === 0) return course;
-  return (
-    periodRangeToTimeRange(
-      { startPeriod: course.startPeriod, endPeriod: course.endPeriod },
-      periods,
-    ) ?? course
+): TimeRange | null {
+  if (getCourseTimeMode(course) === "FIXED_TIME") {
+    return { startTime: course.startTime, endTime: course.endTime };
+  }
+  return periodRangeToTimeRange(
+    { startPeriod: course.startPeriod!, endPeriod: course.endPeriod! },
+    periods,
   );
 }
 

@@ -239,7 +239,11 @@ export function WidgetPrototype() {
   }
 
   const effectiveCourses = useMemo(
-    () => courses.map((course) => ({ ...course, ...resolveCourseTime(course, periods) })),
+    () =>
+      courses.flatMap((course) => {
+        const time = resolveCourseTime(course, periods);
+        return time === null ? [] : [{ ...course, ...time }];
+      }),
     [courses, periods],
   );
   const view = useMemo(

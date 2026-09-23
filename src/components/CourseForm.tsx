@@ -9,7 +9,7 @@ import { formatWeeks } from "../core/weeks.ts";
 import type { Course } from "../types/course.ts";
 import type { CourseInput, CourseInputErrors } from "../types/course-input.ts";
 import type { PeriodTime } from "../types/time.ts";
-import { resolveCourseTime } from "../core/period-time.ts";
+import { getCourseTimeMode, resolveCourseTime } from "../core/period-time.ts";
 import type { TimeRange } from "../types/time.ts";
 import { CourseFormField } from "./CourseFormField.tsx";
 
@@ -40,8 +40,8 @@ function inputFromCourse(course: Course, periods: readonly PeriodTime[]): Course
     teacher: course.teacher ?? "",
     classroom: course.classroom ?? "",
     weekday: course.weekday,
-    startTime: time.startTime,
-    endTime: time.endTime,
+    startTime: time?.startTime ?? "",
+    endTime: time?.endTime ?? "",
     weeks: formatWeeks(course.weeks),
   };
 }
@@ -72,7 +72,7 @@ export function CourseForm({ axis, periods, course, onSave, onDelete, onCancel }
     setStorageError("");
     try {
       const currentPeriodTime =
-        course && course.startPeriod !== null && course.endPeriod !== null
+        course && getCourseTimeMode(course) === "PERIOD_BASED"
           ? resolveCourseTime(course, periods)
           : null;
       const unchangedPeriodBasedTime =

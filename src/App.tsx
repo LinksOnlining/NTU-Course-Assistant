@@ -156,17 +156,20 @@ export function App() {
   const fixtureCourses = useMemo(
     () =>
       showDevelopmentFixtures
-        ? TEST_COURSES.map((course) => ({ ...course, ...resolveCourseTime(course, periods) }))
+        ? TEST_COURSES.flatMap((course) => {
+            const time = resolveCourseTime(course, periods);
+            return time === null ? [] : [{ ...course, ...time }];
+          })
         : [],
     [periods, showDevelopmentFixtures],
   );
   const effectiveUserCourses = useMemo(
     () =>
-      userCourses.map((course) => ({
-        ...course,
-        ...resolveCourseTime(course, periods),
-      })),
-    [periods, userCourses],
+      userCourses.flatMap((course) => {
+        const time = resolveCourseTime(course, isUsingTestSchedule ? [] : periods);
+        return time === null ? [] : [{ ...course, ...time }];
+      }),
+    [isUsingTestSchedule, periods, userCourses],
   );
   const courses = useMemo(
     () => [...fixtureCourses, ...effectiveUserCourses],
@@ -294,7 +297,7 @@ export function App() {
       const plans = activeSemester
         ? buildUnifiedReminderPlans(
             resolveCourseOccurrences(
-              userCourses,
+              effectiveUserCourses,
               activeSemester,
               academicOverrides,
               undefined,
@@ -385,8 +388,15 @@ export function App() {
           setWidgetSettings(storedWidgetSettings);
           setDayCount(storedDayCount);
           const renderableCourses = result.courses.filter((course) => {
+            const time = resolveCourseTime(course, storedPeriods ?? []);
+            if (time === null) {
+              warnings.push(
+                `课程“${course.name}”的节次无法由当前作息解析，暂不显示，请检查作息设置。`,
+              );
+              return true;
+            }
             try {
-              courseTiming({ ...course, ...resolveCourseTime(course, activePeriods) }, displayAxis);
+              courseTiming({ ...course, ...time }, displayAxis);
               return true;
             } catch {
               warnings.push(`课程“${course.name}”超出当前显示范围，已跳过且未修改原数据。`);

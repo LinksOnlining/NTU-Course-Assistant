@@ -1,6 +1,5 @@
 import type { PositionedCourse } from "../core/timetable-layout.ts";
 import type { Course } from "../types/course.ts";
-import type { PeriodTime } from "../types/time.ts";
 import { CourseCard } from "./CourseCard.tsx";
 
 interface DayColumnProps {
@@ -11,7 +10,6 @@ interface DayColumnProps {
   readonly pxPerMinute: number;
   readonly userCourseIds: ReadonlySet<string>;
   readonly onEditCourse?: (course: Course) => void;
-  readonly periods: readonly PeriodTime[];
   readonly currentTimeOffset: number | null;
   readonly currentTimeLabel: string;
 }
@@ -24,7 +22,6 @@ export function DayColumn({
   pxPerMinute,
   userCourseIds,
   onEditCourse,
-  periods,
   currentTimeOffset,
   currentTimeLabel,
 }: DayColumnProps) {
@@ -42,7 +39,6 @@ export function DayColumn({
           item={item}
           pxPerMinute={pxPerMinute}
           isUserCourse={userCourseIds.has(item.sourceCourseId ?? item.course.id)}
-          periods={periods}
           onEdit={onEditCourse}
         />
       ))}

@@ -24,8 +24,8 @@ const course = {
   teacher: "王老师",
   classroom: "A101",
   weekday: 2,
-  startPeriod: 3,
-  endPeriod: 4,
+  startPeriod: null,
+  endPeriod: null,
   startTime: "10:10",
   endTime: "11:45",
   weeks: [1, 2, 3, 4, 5],
@@ -70,8 +70,8 @@ test("resolves base occurrences with deterministic date and time fields", () => 
     date: "2026-02-24",
     teachingWeek: 1,
     weekday: 2,
-    startPeriod: 3,
-    endPeriod: 4,
+    startPeriod: null,
+    endPeriod: null,
     startTime: "10:10",
     endTime: "11:45",
     room: "A101",
@@ -167,10 +167,23 @@ test("v1.3.0 PDF-imported period indexes resolve against current periods for sch
     undefined,
     changedPeriods,
   );
+  const changedAgain = resolveCourseOccurrences([importedCourse], semester, [], undefined, [
+    { period: 1, startTime: "08:10", endTime: "08:55" },
+    { period: 2, startTime: "09:00", endTime: "09:45" },
+  ]);
+  const changedThirdTime = resolveCourseOccurrences([importedCourse], semester, [], undefined, [
+    { period: 1, startTime: "07:40", endTime: "08:25" },
+    { period: 2, startTime: "08:35", endTime: "09:20" },
+  ]);
   const changesSummary = summarizeCourseChanges([importedCourse], updated, []);
 
   assert.deepEqual([original[0].startTime, original[0].endTime], ["08:00", "09:35"]);
   assert.deepEqual([updated[0].startTime, updated[0].endTime], ["07:50", "09:30"]);
+  assert.deepEqual([changedAgain[0].startTime, changedAgain[0].endTime], ["08:10", "09:45"]);
+  assert.deepEqual(
+    [changedThirdTime[0].startTime, changedThirdTime[0].endTime],
+    ["07:40", "09:20"],
+  );
   assert.deepEqual([updated[0].startPeriod, updated[0].endPeriod], [1, 2]);
   assert.deepEqual(
     [
@@ -182,6 +195,11 @@ test("v1.3.0 PDF-imported period indexes resolve against current periods for sch
     [1, 2, "07:50", "09:30"],
   );
   assert.deepEqual([importedCourse.startTime, importedCourse.endTime], ["08:00", "09:35"]);
+  assert.deepEqual(
+    resolveCourseOccurrences([importedCourse], semester),
+    [],
+    "period-based courses must not use their stored clock snapshot when periods are absent",
+  );
 
   const date = updated[0].date;
   const dashboard = getTodayDashboard(date, "07:30", updated, [], []);

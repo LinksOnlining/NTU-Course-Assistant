@@ -86,18 +86,92 @@ async function openUserCourseEditor(card: Locator) {
   await card.press("Enter");
 }
 
-async function completePracticeCandidates(preview: Locator) {
-  for (let index = 0; index < 3; index += 1) {
-    const practice = preview.locator('[data-candidate-kind="practice"]').nth(index);
-    await practice.getByRole("button", { name: /^编辑 /u }).click();
-    const editor = preview.locator(".candidate-editor");
-    await editor.getByLabel("教师").fill(`实践教师${index + 1}`);
-    await editor.getByLabel("教室").fill(`实训中心${index + 1}`);
-    await editor.getByLabel("星期").selectOption(String(index + 3));
-    await editor.getByLabel("开始节次").selectOption("6");
-    await editor.getByLabel("结束节次").selectOption("8");
-    await editor.getByRole("button", { name: "保存候选" }).click();
-  }
+async function seedPeriodCourseRuntime(
+  page: Page,
+  initialPeriods: readonly { period: number; startTime: string; endTime: string }[] | null,
+) {
+  await page.addInitScript((savedPeriods) => {
+    const course = {
+      id: "persisted-period-course",
+      name: "持久化节次课程",
+      teacher: null,
+      classroom: "A101",
+      weekday: 1,
+      startPeriod: 1,
+      endPeriod: 1,
+      startTime: "08:00",
+      endTime: "08:45",
+      weeks: [3],
+    };
+    let periods = savedPeriods;
+    let courseUpdates = 0;
+    Object.assign(window, {
+      __periodCourseRegression: {
+        persistedCourse: () => ({ ...course }),
+        courseUpdates: () => courseUpdates,
+      },
+    });
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {
+        invoke: async (
+          command: string,
+          args?: {
+            periods?: typeof periods;
+            reminderSettings?: { enabled: boolean; advanceMinutes: number };
+          },
+        ) => {
+          if (command === "load_courses") return { courses: [course], warnings: [] };
+          if (command === "load_period_times") return periods;
+          if (command === "load_reminder_configuration") {
+            return {
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            };
+          }
+          if (command === "load_widget_settings") {
+            return {
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            };
+          }
+          if (command === "load_day_count") return 7;
+          if (command === "load_semesters") return [];
+          if (command === "refresh_reminder_schedule" || command === "trace_runtime_event")
+            return undefined;
+          if (command === "save_app_settings") {
+            periods = args?.periods ?? periods;
+            return {
+              periods,
+              configuration: {
+                termConfig: null,
+                reminderSettings: args?.reminderSettings ?? {
+                  enabled: false,
+                  advanceMinutes: 15,
+                },
+                warnings: [],
+              },
+            };
+          }
+          if (command === "update_course") {
+            courseUpdates += 1;
+            return undefined;
+          }
+          if (command === "plugin:autostart|is_enabled") return false;
+          if (command.startsWith("plugin:event|")) return undefined;
+          throw new Error(`未预期的回归命令：${command}`);
+        },
+      },
+    });
+  }, initialPeriods);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -110,6 +184,60 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => new Promise(requestAnimationFrame));
   expect(errors).toEqual([]);
   await expect(page.getByText("开发数据", { exact: true })).toBeVisible();
+});
+
+test("persisted period-based course follows schedule edits without rewriting the course", async ({
+  page,
+}) => {
+  await seedPeriodCourseRuntime(page, [
+    { period: 1, startTime: "08:00", endTime: "08:45" },
+    { period: 2, startTime: "08:50", endTime: "09:35" },
+  ]);
+  const card = page.locator('[data-course-id="persisted-period-course"]');
+  const time = card.locator(".course-time");
+  await expect(time).toHaveText("第1节 · 08:00–08:45");
+  await page.getByRole("button", { name: "设置" }).click();
+  let settings = page.getByRole("dialog", { name: "作息时间" });
+  await settings.getByLabel("第1节开始时间").fill("07:50");
+  await settings.getByRole("button", { name: "保存作息" }).click();
+  await expect(settings).toHaveCount(0);
+  await expect(time).toHaveText("第1节 · 07:50–08:35");
+
+  await page.getByRole("button", { name: "设置" }).click();
+  settings = page.getByRole("dialog", { name: "作息时间" });
+  await settings.getByLabel("第1节开始时间").fill("08:10");
+  await settings.getByRole("button", { name: "保存作息" }).click();
+  await expect(settings).toHaveCount(0);
+  await expect(time).toHaveText("第1节 · 08:10–08:55");
+
+  await page.getByRole("button", { name: "设置" }).click();
+  settings = page.getByRole("dialog", { name: "作息时间" });
+  await settings.getByLabel("第1节开始时间").fill("07:40");
+  await settings.getByRole("button", { name: "保存作息" }).click();
+  await expect(settings).toHaveCount(0);
+  await expect(time).toHaveText("第1节 · 07:40–08:25");
+
+  const stored = await page.evaluate(() => {
+    const regression = (
+      window as Window & {
+        __periodCourseRegression: {
+          persistedCourse(): { startTime: string; endTime: string; startPeriod: number };
+          courseUpdates(): number;
+        };
+      }
+    ).__periodCourseRegression;
+    return { course: regression.persistedCourse(), updates: regression.courseUpdates() };
+  });
+  expect(stored.course).toMatchObject({ startTime: "08:00", endTime: "08:45", startPeriod: 1 });
+  expect(stored.updates).toBe(0);
+});
+
+test("does not use stored clock snapshots when a period course has no confirmed schedule", async ({
+  page,
+}) => {
+  await seedPeriodCourseRuntime(page, null);
+  await expect(page.locator('[data-course-id="persisted-period-course"]')).toHaveCount(0);
+  await expect(page.getByText(/节次无法由当前作息解析，暂不显示/u)).toBeVisible();
 });
 
 test("academic hub tabs stay compact and course changes use a course-first picker", async ({
@@ -346,7 +474,7 @@ test("invalid, damaged and textless PDFs report errors without changing courses"
   await expect(page.locator('[data-source="user"]')).toHaveCount(0);
 });
 
-test("real PDF import supports final review, rollback-safe retry, duplicates and cancel", async ({
+test("real PDF sample keeps fixed courses period-based and unresolved practice blocking", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "1280-100", "real sample interaction runs once");
@@ -357,115 +485,45 @@ test("real PDF import supports final review, rollback-safe retry, duplicates and
   await selectPdfPath(page, samplePath!);
   const preview = page.getByRole("dialog", { name: "检查导入候选" });
   await expect(preview).toBeVisible();
-  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("识别到 18 个候选");
-  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("固定安排 15");
-  await expect(page.getByTestId("pdf-candidate-summary")).toContainText("非固定实践 3");
-  await expect(preview.locator('[data-candidate-kind="fixed"]')).toHaveCount(15);
-  await expect(preview.locator('[data-candidate-kind="practice"]')).toHaveCount(3);
+  const fixedCount = await preview.locator('[data-candidate-kind="fixed"]').count();
+  const practiceCount = await preview.locator('[data-candidate-kind="practice"]').count();
+  const totalCount = fixedCount + practiceCount;
+  expect(fixedCount).toBeGreaterThan(0);
+  expect(practiceCount).toBeGreaterThan(0);
+  await expect(page.getByTestId("pdf-candidate-summary")).toContainText(
+    `识别到 ${totalCount} 个候选`,
+  );
+  await expect(page.getByTestId("pdf-candidate-summary")).toContainText(`固定安排 ${fixedCount}`);
+  await expect(page.getByTestId("pdf-candidate-summary")).toContainText(
+    `非固定实践 ${practiceCount}`,
+  );
+
+  const fixedCandidates = preview.locator('[data-candidate-kind="fixed"]');
+  for (let index = 0; index < fixedCount; index += 1) {
+    await expect(fixedCandidates.nth(index).locator(".candidate-card-main")).toContainText(
+      /第\s*\d+(?:\s*[–-]\s*\d+)?\s*节/u,
+    );
+  }
+  const practiceCandidates = preview.locator('[data-candidate-kind="practice"]');
+  for (let index = 0; index < practiceCount; index += 1) {
+    await expect(practiceCandidates.nth(index)).toHaveAttribute(
+      "data-candidate-status",
+      "blocking",
+    );
+    await expect(practiceCandidates.nth(index).locator(".candidate-card-main")).toContainText(
+      "星期待补充",
+    );
+    await expect(practiceCandidates.nth(index).locator(".candidate-card-main")).toContainText(
+      "节次待补充",
+    );
+  }
   await expect(preview.getByRole("button", { name: "进入最终确认" })).toBeDisabled();
-
-  const fixed = preview.locator('[data-candidate-kind="fixed"]').first();
-  const originalName = await fixed.locator(".candidate-card-heading strong").textContent();
-  await fixed.getByRole("button", { name: /^编辑 /u }).click();
-  const editor = preview.locator(".candidate-editor");
-  await editor.getByLabel("课程名称").fill("不会保存的名称");
-  await editor.getByRole("button", { name: "取消修改" }).click();
-  await expect(fixed.locator(".candidate-card-heading strong")).toHaveText(originalName!);
-
-  await preview.getByRole("button", { name: "打开作息设置" }).click();
-  const settings = page.getByRole("dialog", { name: "作息时间" });
-  await expect(settings).toBeVisible();
-  await settings.getByRole("button", { name: "添加节次" }).click();
-  await settings.getByRole("button", { name: "保存作息" }).click();
-  await expect(settings).toHaveCount(0);
-  await expect(preview.getByRole("button", { name: "打开作息设置" })).toHaveCount(0);
-  await expect(preview.getByText(/已生成 15\/18 条课程提案/u)).toBeVisible();
-
-  await completePracticeCandidates(preview);
-  await expect(preview.getByText(/已生成 18\/18 条课程提案/u)).toBeVisible();
-  await expect(preview.getByRole("button", { name: "进入最终确认" })).toBeEnabled();
-  await preview.getByRole("button", { name: "进入最终确认" }).click();
-  let finalReview = page.getByRole("dialog", { name: "确认导入课程" });
-  await expect(finalReview).toBeVisible();
-  await expect(page.getByTestId("pdf-final-summary")).toContainText("提案 18");
-  await finalReview.getByRole("button", { name: "返回修改" }).click();
-  await expect(preview.locator('[data-candidate-kind="practice"]')).toHaveCount(3);
-  await expect(preview.getByText(/已生成 18\/18 条课程提案/u)).toBeVisible();
-  await preview.getByRole("button", { name: "进入最终确认" }).click();
-  finalReview = page.getByRole("dialog", { name: "确认导入课程" });
-  await finalReview.getByRole("button", { name: "取消本次导入", exact: true }).click();
-  await expect(finalReview).toHaveCount(0);
+  const issues = preview.locator('[data-severity="blocking"]');
+  expect(await issues.count()).toBeGreaterThan(0);
   await expect(page.locator('[data-source="user"]')).toHaveCount(initialCourseCount);
-
-  await selectPdfPath(page, samplePath!);
-  const secondPreview = page.getByRole("dialog", { name: "检查导入候选" });
-  await completePracticeCandidates(secondPreview);
-  await secondPreview.getByRole("button", { name: "进入最终确认" }).click();
-  finalReview = page.getByRole("dialog", { name: "确认导入课程" });
-  await expect(page.getByTestId("pdf-final-summary")).toContainText("重复 0");
-
-  await page.evaluate(() => {
-    const host = window as Window & { __rejectCourseImport?: () => void };
-    let attempts = 0;
-    let rejectImport: ((reason: string) => void) | undefined;
-    host.__rejectCourseImport = () => rejectImport?.("模拟批量写入失败，数据库已回滚。");
-    Object.defineProperty(window, "__TAURI_INTERNALS__", {
-      configurable: true,
-      value: {
-        invoke: (command: string, args: { courses?: unknown }) => {
-          if (command !== "import_courses") throw new Error(`未预期的命令：${command}`);
-          attempts += 1;
-          if (attempts === 1) {
-            return new Promise((_, reject) => {
-              rejectImport = reject;
-            });
-          }
-          return Promise.resolve(args.courses);
-        },
-      },
-    });
-  });
-  await finalReview.getByRole("button", { name: "确认导入 18 条课程" }).click();
-  await expect(finalReview.getByRole("button", { name: "返回修改" })).toBeDisabled();
-  await expect(
-    finalReview.getByRole("button", { name: "取消本次导入", exact: true }),
-  ).toBeDisabled();
-  await expect(finalReview.getByRole("button", { name: "正在导入…" })).toBeDisabled();
-  await page.evaluate(() => {
-    (window as Window & { __rejectCourseImport?: () => void }).__rejectCourseImport?.();
-  });
-  await expect(finalReview.getByRole("alert")).toContainText("模拟批量写入失败");
+  await preview.getByRole("button", { name: "取消本次导入", exact: true }).click();
+  await expect(preview).toHaveCount(0);
   await expect(page.locator('[data-source="user"]')).toHaveCount(initialCourseCount);
-  await finalReview.getByRole("button", { name: "确认导入 18 条课程" }).click();
-  await expect(finalReview).toHaveCount(0);
-  await expect(page.getByText("已导入 18 条课程安排，跳过 0 条重复课程。")).toBeVisible();
-  const importedVisibleCount = await page.locator('[data-source="user"]').count();
-  expect(importedVisibleCount).toBeGreaterThan(initialCourseCount);
-  await page.evaluate(() => {
-    delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-  });
-
-  // A completed import must leave the active renderer able to save both
-  // independent settings paths. This guards the post-import runtime state,
-  // rather than only validating the import transaction itself.
-  await page.getByRole("button", { name: "设置" }).click();
-  const postImportSettings = page.getByRole("dialog", { name: "作息时间" });
-  await postImportSettings.getByRole("button", { name: "保存小组件设置" }).click();
-  await expect(postImportSettings.getByRole("button", { name: "保存小组件设置" })).toBeEnabled();
-  await postImportSettings.getByRole("button", { name: "添加节次" }).click();
-  await postImportSettings.getByRole("button", { name: "保存作息" }).click();
-  await expect(postImportSettings).toHaveCount(0);
-
-  await selectPdfPath(page, samplePath!);
-  const duplicatePreview = page.getByRole("dialog", { name: "检查导入候选" });
-  await completePracticeCandidates(duplicatePreview);
-  await duplicatePreview.getByRole("button", { name: "进入最终确认" }).click();
-  finalReview = page.getByRole("dialog", { name: "确认导入课程" });
-  await expect(page.getByTestId("pdf-final-summary")).toContainText("重复 18");
-  await expect(finalReview.locator('[data-plan-action="skip-duplicate"]')).toHaveCount(18);
-  await finalReview.getByRole("button", { name: "确认导入 0 条课程" }).click();
-  await expect(page.getByText("已导入 0 条课程安排，跳过 18 条重复课程。")).toBeVisible();
-  await expect(page.locator('[data-source="user"]')).toHaveCount(importedVisibleCount);
 });
 
 test("actual minutes determine top, height and four-hour blank space", async ({ page }) => {

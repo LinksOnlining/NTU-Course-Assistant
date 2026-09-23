@@ -4,6 +4,7 @@ import { TEST_PERIOD_TIMES } from "../../src/config/timetable.ts";
 import {
   adjustPeriodSchedule,
   applyUniformPeriodDuration,
+  getCourseTimeMode,
   getTimelineBounds,
   periodRangeToTimeRange,
   periodToTime,
@@ -38,12 +39,14 @@ test("period-based courses resolve current clock times while fixed-time courses 
     updatedPeriods,
   );
   assert.deepEqual([fixedTime.startTime, fixedTime.endTime], ["08:00", "09:35"]);
-  assert.deepEqual(resolveCourseTime(periodBased, []), {
-    startPeriod: 1,
-    endPeriod: 2,
-    startTime: "08:00",
-    endTime: "09:35",
-  });
+  assert.equal(getCourseTimeMode(periodBased), "PERIOD_BASED");
+  assert.equal(getCourseTimeMode({ startPeriod: null, endPeriod: null }), "FIXED_TIME");
+  assert.throws(() => getCourseTimeMode({ startPeriod: 1, endPeriod: null }), RangeError);
+  assert.equal(resolveCourseTime(periodBased, []), null);
+  assert.equal(
+    resolveCourseTime(periodBased, [{ period: 1, startTime: "07:50", endTime: "08:35" }]),
+    null,
+  );
 });
 
 test("period start edits preserve duration and shift later periods with their breaks", () => {

@@ -1361,6 +1361,81 @@ mod tests {
     }
 
     #[test]
+    fn period_based_course_indexes_survive_import_reopen_and_period_changes() {
+        let path = temporary_database_path();
+        remove_database_files(&path);
+        let mut imported = course();
+        imported.start_period = Some(1);
+        imported.end_period = Some(2);
+        imported.start_time = "08:00".into();
+        imported.end_time = "09:35".into();
+        let original = imported.clone();
+        let first_schedule = vec![
+            PeriodTime {
+                period: 1,
+                start_time: "08:00".into(),
+                end_time: "08:45".into(),
+            },
+            PeriodTime {
+                period: 2,
+                start_time: "08:50".into(),
+                end_time: "09:35".into(),
+            },
+        ];
+        let changed_schedule = vec![
+            PeriodTime {
+                period: 1,
+                start_time: "07:50".into(),
+                end_time: "08:35".into(),
+            },
+            PeriodTime {
+                period: 2,
+                start_time: "08:45".into(),
+                end_time: "09:30".into(),
+            },
+        ];
+
+        {
+            let database = CourseDatabase::open(&path).expect("open isolated import database");
+            database
+                .save_period_times(&first_schedule)
+                .expect("save first period schedule");
+            database
+                .import_courses(&[imported])
+                .expect("import period-based course");
+            database
+                .save_period_times(&changed_schedule)
+                .expect("change period schedule");
+            assert_eq!(
+                database
+                    .load_courses()
+                    .expect("read course after schedule change")
+                    .courses,
+                vec![original.clone()],
+                "changing periods must not rewrite the stored course clock snapshot or indexes"
+            );
+        }
+
+        let reopened = CourseDatabase::open(&path).expect("reopen isolated import database");
+        assert_eq!(
+            reopened
+                .load_courses()
+                .expect("load imported course")
+                .courses,
+            vec![original],
+            "SQLite must retain period indexes across import and reopen"
+        );
+        assert_eq!(
+            reopened
+                .load_period_times()
+                .expect("load changed period schedule"),
+            Some(changed_schedule)
+        );
+        drop(reopened);
+        remove_database_files(&path);
+    }
+
+    #[test]
     fn update_preserves_id_and_delete_removes_course() {
         let database = database();
         let mut expected = course();

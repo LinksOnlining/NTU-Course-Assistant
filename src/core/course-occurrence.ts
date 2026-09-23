@@ -38,10 +38,11 @@ function baseOccurrence(
   semester: Semester,
   week: number,
   periods: readonly PeriodTime[],
-): AcademicCourseOccurrence {
+): AcademicCourseOccurrence | null {
   const config = termConfig(semester);
   const date = getCourseDate(config, week, course.weekday);
   const time = resolveCourseTime(course, periods);
+  if (time === null) return null;
   return {
     courseId: course.id,
     semesterId: semester.id,
@@ -117,8 +118,9 @@ function resolveBase(
   overrides: readonly CourseOverride[],
   week: number,
   periods: readonly PeriodTime[],
-): AcademicCourseOccurrence {
+): AcademicCourseOccurrence | null {
   const base = baseOccurrence(course, semester, week, periods);
+  if (base === null) return null;
   const override = overrides
     .filter((item) => item.kind !== "MAKEUP" && matchesBase(base, item))
     .sort(
@@ -151,9 +153,11 @@ function resolveMakeup(
   if (!isWeekday(weekdayValue)) return null;
   const week = getTeachingWeek(override.targetDate, termConfig(semester));
   if (week === null) return null;
-  const baseTime = resolveCourseTime(course, periods);
-  const startTime = override.startTime ?? baseTime.startTime;
   const hasExplicitTime = override.startTime !== null || override.endTime !== null;
+  const baseTime = hasExplicitTime ? null : resolveCourseTime(course, periods);
+  const startTime = override.startTime ?? baseTime?.startTime;
+  const endTime = override.endTime ?? baseTime?.endTime;
+  if (startTime === undefined || endTime === undefined) return null;
   return {
     courseId: course.id,
     semesterId: semester.id,
@@ -163,7 +167,7 @@ function resolveMakeup(
     startPeriod: hasExplicitTime ? null : (override.startPeriod ?? course.startPeriod),
     endPeriod: hasExplicitTime ? null : (override.endPeriod ?? course.endPeriod),
     startTime,
-    endTime: override.endTime ?? baseTime.endTime,
+    endTime,
     room: override.classroom ?? course.classroom,
     teacher: override.teacher ?? course.teacher,
     status: "MAKEUP",
@@ -188,7 +192,10 @@ export function resolveCourseOccurrences(
   const resolved = courses.flatMap((course) => {
     const base = course.weeks
       .filter((week) => week <= semester.totalWeeks)
-      .map((week) => resolveBase(course, semester, overrides, week, periods));
+      .flatMap((week) => {
+        const occurrence = resolveBase(course, semester, overrides, week, periods);
+        return occurrence === null ? [] : [occurrence];
+      });
     const makeup = overrides.flatMap((override) => {
       const item = resolveMakeup(course, semester, override, periods);
       return item === null ? [] : [item];
