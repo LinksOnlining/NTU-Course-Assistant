@@ -26,7 +26,7 @@ export default defineConfig({
     })),
   ],
   webServer: {
-    command: "npm run dev",
+    command: "npm run dev -- --mode playwright",
     url: "http://127.0.0.1:1420",
     reuseExistingServer: false,
     timeout: 30_000,

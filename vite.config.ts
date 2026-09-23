@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import packageManifest from "./package.json" with { type: "json" };
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   define: {
     __APP_VERSION__: JSON.stringify(packageManifest.version),
@@ -10,6 +10,7 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    hmr: mode === "playwright" ? false : undefined,
     watch: {
       // Rust owns these outputs; watching loaded DLLs can fail with EBUSY on Windows.
       ignored: [
@@ -24,4 +25,4 @@ export default defineConfig({
     },
   },
   clearScreen: false,
-});
+}));
