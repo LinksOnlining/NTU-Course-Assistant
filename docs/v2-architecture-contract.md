@@ -173,3 +173,12 @@ OpenAI unavailable、Weather API unavailable 或网络断开时，Academic、Pla
 - 设置使用统一容器与分类侧栏：从工作台进入默认“工作台 / 首页”，从课表进入默认“课表 / 作息”；主题位于“通用 / 外观”，沿用原 `links-workplace.theme-preference`。未实现页仅显示真实说明，不提供虚假开关；现有作息、提醒、Widget、启动与课程数据操作仍使用原保存逻辑。
 
 Phase 1.6.2 将 Time Context 固定为由 Workspace application 层纯投影生成的“当前情境 / 下一事件”两段摘要；只使用已解析 TimelineItem 判断课程与真实空闲，不在 JSX 或存储层重复解析课程时间。Timeline 仍以 1 分钟对应 1px，首尾刻度仅在展示层向画布内对齐。
+
+## 7.38 Phase 2 Planner / Personal Task Implementation Contract
+
+- Phase 2 先完成 `docs/v2-planner-domain-contract.md` 中的 domain/schema contract，再实现一个且仅一个 schema migration：5 → 6。必须先隔离 debug DB，再允许任何运行时迁移；生产 identifier、`courses.sqlite3` 文件名与 LocalAppData 路径保持不变。
+- `PersonalTask`、`PlannerEvent`、`TimeBlock` 是不同事实。Task deadline 不占 Timeline；一个 PersonalTask 可关联多个 TimeBlock；TimeBlock 不复制 task title；PlannerEvent 不要求 task 关系。
+- Planner 的 AcademicCourseOccurrence 始终只读；课程时间继续只由 canonical Academic resolver 提供。Planner projection 消费解析结果，不直接读 Academic tables、不重新解释 CourseOverride。
+- PlannerEvent / TimeBlock 的实际 local wall-clock 起止不含 buffer。buffer 仅用于 conflict 与 Free Time；conflict 是 warning、用户可选择仍保存，不是 DB constraint。Cancelled Academic occurrence 不占用时间。
+- Completion 保留 TimeBlock；显式删除 PersonalTask 才通过外键 cascade 删除关联 TimeBlock。单日范围和无 recurrence / cross-midnight 是首版硬限制。
+- Presentation → Planner Application use cases → service/Tauri adapter → Rust repository/SQLite。Workspace UI 不直接 `invoke` planner CRUD 或访问 SQL。

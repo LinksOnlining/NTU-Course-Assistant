@@ -33,6 +33,8 @@
 
 节次课程以 `startPeriod/endPeriod` 为权威事实，钟点由当前 `PeriodTime[]` 解析；不能回退到旧时间快照。固定钟点课程以明确保存的 `startTime/endTime` 为准。`Task Deadline` 不等于时间轴占用；Diary 不是时间轴占用；AI Proposal 不是业务事实。
 
+Planner 领域边界：`PersonalTask` deadline 不占时间轴；Academic CourseOccurrence 在 Planner 只读；PersonalTask 可关联多个 TimeBlock；PlannerEvent 独立；buffer 只影响冲突/空闲计算，不改变事实时间；冲突是允许用户确认继续保存的 warning，不是持久化拒绝条件。
+
 ## 技术身份与数据
 
 - Tauri identifier `com.ntu-course-assistant.desktop`、`courses.sqlite3` 文件名、GitHub 仓库及 updater 来源在专门迁移任务前保持不变。不得仅为品牌整洁而更改；identifier 变更须先有数据迁移设计、Windows installer/updater E2E 和 Ethan 明确批准。

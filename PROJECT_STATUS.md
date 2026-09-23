@@ -4,6 +4,9 @@
 
 ## Links Workplace v2.0
 
+- **当前阶段：Phase 2.1 — Debug DB 隔离与 schema 5→6 安全迁移。** Phase 2.0 Domain Contract / Schema Design 已完成并提交 `docs: define phase 2 planner domain contract`；起始基线为 `d013199`，Phase 2.0 工作区 clean，schema 仍为 5。开发分支授权连续执行 Phase 2.0–2.7；不得 push、tag、release、升级产品版本、安装或运行 production EXE，不开始 Phase 3。
+- Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
+
 - 当前开发分支：`v2/workspace-rebase`，从稳定 `main` commit `3f2d580d2423bdb19d2753023db6414b5408c546` 创建；`main` 继续代表稳定 1.x 基线。
 - Phase 1.0 Read-Only Architecture Rebase Audit：COMPLETE。结论：当前无 router；Application boundary 部分存在；Academic occurrence resolver 是稳定核心；identifier 决定 AppData 路径；尚无完整 Design Tokens；schema 为 5；当前实现没有 migration 前备份。
 - Phase 1.1 Architecture Contract & Project Baseline：COMPLETE。已建立项目规则、v2 产品需求 SSOT 和架构契约。
@@ -20,7 +23,7 @@
 - **Phase 1 Overall：COMPLETE**（仅表示已冻结的架构、Shell、Theme、Workspace Dashboard、Timeline、Settings 与自动/Rust/production build 门禁完成；不表示 v2 Release Ready）。Windows 11 Pro Visual Acceptance：PASS。Installer compatibility：NOT VERIFIED；v1.3.1 → v2 updater E2E：NOT EXECUTED；系统级品牌迁移：PENDING；Phase 2：NOT STARTED。
 - v2 开发及主要人工验收环境：Windows 11 Pro。v1.3.1 的 Windows 10 安装态 ALL PASS 是历史验收事实，不代表在 Windows 11 已执行相同验收。
 - 当前 v2 目标品牌为 Links Workplace；顶层导航 `[工作台] [课表]`；技术 identifier `com.ntu-course-assistant.desktop`、`courses.sqlite3`、GitHub repo/updater source 保持不变。Quick Capture 与 Focus 在当前规划中为 REMOVED。
-- 下一步：等待 Ethan / ChatGPT 确认后进入 Phase 2 规划；不得自行开始 Phase 2。
+- Phase 1 后曾记录“等待 Phase 2 确认”的条目为历史状态；Phase 2 现已由 Ethan 明确授权连续执行。
 
 ## 当前稳定版本：NTU Course Assistant v1.3.1
 
