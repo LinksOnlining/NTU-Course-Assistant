@@ -10,12 +10,13 @@
 .workspace-dashboard-page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 0;
   overflow: hidden;
 }
 
 .workspace-today-overview {
   position: relative;
+  margin-top: var(--space-2);
   min-height: 54px;
   flex: 0 0 auto;
   padding: var(--space-1);
@@ -569,10 +570,11 @@
 
 @media (max-height: 850px) {
   .workspace-dashboard-page {
-    gap: var(--space-1);
+    gap: 0;
   }
   .workspace-today-overview {
     min-height: 42px;
+    margin-top: 6px;
     padding: 0 var(--space-1);
   }
   .workspace-time-context {
@@ -591,8 +593,12 @@
 }
 
 @media (max-height: 650px) {
+  .workspace-dashboard-page {
+    gap: var(--space-1);
+  }
   .workspace-today-overview {
     min-height: 30px;
+    margin-top: 0;
   }
   .workspace-today-overview > p:last-child,
   .workspace-time-section--secondary span,
