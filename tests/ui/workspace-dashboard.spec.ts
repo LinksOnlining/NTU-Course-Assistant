@@ -2,108 +2,126 @@ import { expect, test, type Page } from "@playwright/test";
 
 const FIXED_NOW = new Date("2026-09-23T12:00:00");
 
-async function seedDashboardRuntime(page: Page, currentTime = FIXED_NOW, courseName = "数学基础") {
+async function seedDashboardRuntime(
+  page: Page,
+  currentTime = FIXED_NOW,
+  courseName = "数学基础",
+  plannerFixture: {
+    readonly events?: readonly unknown[];
+    readonly timeBlocks?: readonly unknown[];
+    readonly personalTasks?: readonly unknown[];
+  } = {},
+) {
   await page.clock.install({ time: currentTime });
-  await page.addInitScript((name) => {
-    const course = {
-      id: "dashboard-course",
-      name,
-      teacher: "教师甲",
-      classroom: "A101",
-      weekday: 3,
-      startPeriod: null,
-      endPeriod: null,
-      startTime: "11:30",
-      endTime: "12:30",
-      weeks: [1],
-    };
-    const activeSemester = {
-      id: "dashboard-semester",
-      name: "测试学期",
-      firstWeekMonday: "2026-09-21",
-      totalWeeks: 16,
-      timezone: "Asia/Shanghai",
-      status: "ACTIVE",
-      createdAt: "",
-      updatedAt: "",
-    };
-    const dueAt = (hour: number) => new Date(2026, 8, 23, hour, 0, 0).toISOString();
-    const tasks = [
-      { id: "task-overdue", title: "逾期事项", dueAt: dueAt(10), priority: 0, status: "TODO" },
-      { id: "task-today", title: "今天事项", dueAt: dueAt(13), priority: 0, status: "TODO" },
-      { id: "task-future", title: "未来事项", dueAt: dueAt(15), priority: 0, status: "TODO" },
-      { id: "task-none", title: "无截止事项", dueAt: "", priority: 0, status: "TODO" },
-      {
-        id: "task-completed",
-        title: "已完成事项",
-        dueAt: dueAt(9),
-        priority: 2,
-        status: "COMPLETED",
-      },
-    ].map((task) => ({
-      semesterId: activeSemester.id,
-      courseId: null,
-      type: "ASSIGNMENT",
-      note: null,
-      completedAt: task.status === "COMPLETED" ? dueAt(9) : null,
-      createdAt: "",
-      updatedAt: "",
-      ...task,
-    }));
-    let loadCoursesCount = 0;
-    Object.defineProperty(window, "__TAURI_INTERNALS__", {
-      configurable: true,
-      value: {
-        invoke: async (command: string) => {
-          if (command === "load_courses") {
-            loadCoursesCount += 1;
-            return { courses: [course], warnings: [] };
-          }
-          if (command === "load_period_times") return [];
-          if (command === "load_reminder_configuration") {
-            return {
-              termConfig: null,
-              reminderSettings: { enabled: false, advanceMinutes: 15 },
-              warnings: [],
-            };
-          }
-          if (command === "load_widget_settings") {
-            return {
-              enabled: false,
-              displayMode: "today",
-              locked: false,
-              x: null,
-              y: null,
-              width: null,
-              height: null,
-            };
-          }
-          if (command === "load_day_count") return 7;
-          if (command === "load_semesters") return [activeSemester];
-          if (command === "load_course_overrides" || command === "load_exams") return [];
-          if (command === "load_academic_tasks") return tasks;
-          if (command === "load_personal_tasks") return [];
-          if (command === "load_planner_events" || command === "load_time_blocks") return [];
-          if (command === "load_handled_reminder_keys") return [];
-          if (
-            command === "refresh_reminder_schedule" ||
-            command === "trace_runtime_event" ||
-            command === "plugin:event|listen" ||
-            command === "plugin:event|unlisten"
-          ) {
-            return command === "plugin:event|listen" ? 1 : undefined;
-          }
-          if (command === "plugin:updater|check") return null;
-          throw new Error(`未预期的工作台测试命令：${command}`);
+  await page.addInitScript(
+    ({ name, plannerFixture }) => {
+      const course = {
+        id: "dashboard-course",
+        name,
+        teacher: "教师甲",
+        classroom: "A101",
+        weekday: 3,
+        startPeriod: null,
+        endPeriod: null,
+        startTime: "11:30",
+        endTime: "12:30",
+        weeks: [1],
+      };
+      const activeSemester = {
+        id: "dashboard-semester",
+        name: "测试学期",
+        firstWeekMonday: "2026-09-21",
+        totalWeeks: 16,
+        timezone: "Asia/Shanghai",
+        status: "ACTIVE",
+        createdAt: "",
+        updatedAt: "",
+      };
+      const dueAt = (hour: number) => new Date(2026, 8, 23, hour, 0, 0).toISOString();
+      const tasks = [
+        { id: "task-overdue", title: "逾期事项", dueAt: dueAt(10), priority: 0, status: "TODO" },
+        { id: "task-today", title: "今天事项", dueAt: dueAt(13), priority: 0, status: "TODO" },
+        { id: "task-future", title: "未来事项", dueAt: dueAt(15), priority: 0, status: "TODO" },
+        { id: "task-none", title: "无截止事项", dueAt: "", priority: 0, status: "TODO" },
+        {
+          id: "task-completed",
+          title: "已完成事项",
+          dueAt: dueAt(9),
+          priority: 2,
+          status: "COMPLETED",
         },
-      },
-    });
-    Object.assign(window, {
-      __workspaceDashboardTest: {
-        getLoadCoursesCount: () => loadCoursesCount,
-      },
-    });
-  }, courseName);
+      ].map((task) => ({
+        semesterId: activeSemester.id,
+        courseId: null,
+        type: "ASSIGNMENT",
+        note: null,
+        completedAt: task.status === "COMPLETED" ? dueAt(9) : null,
+        createdAt: "",
+        updatedAt: "",
+        ...task,
+      }));
+      let personalTasks = [...(plannerFixture.personalTasks ?? [])];
+      let loadCoursesCount = 0;
+      Object.defineProperty(window, "__TAURI_INTERNALS__", {
+        configurable: true,
+        value: {
+          invoke: async (command: string, args?: { task?: Record<string, unknown> }) => {
+            if (command === "load_courses") {
+              loadCoursesCount += 1;
+              return { courses: [course], warnings: [] };
+            }
+            if (command === "load_period_times") return [];
+            if (command === "load_reminder_configuration") {
+              return {
+                termConfig: null,
+                reminderSettings: { enabled: false, advanceMinutes: 15 },
+                warnings: [],
+              };
+            }
+            if (command === "load_widget_settings") {
+              return {
+                enabled: false,
+                displayMode: "today",
+                locked: false,
+                x: null,
+                y: null,
+                width: null,
+                height: null,
+              };
+            }
+            if (command === "load_day_count") return 7;
+            if (command === "load_semesters") return [activeSemester];
+            if (command === "load_course_overrides" || command === "load_exams") return [];
+            if (command === "load_academic_tasks") return tasks;
+            if (command === "load_personal_tasks") return [...personalTasks];
+            if (command === "create_personal_task" && args?.task) {
+              personalTasks = [...personalTasks, args.task];
+              return args.task;
+            }
+            if (command === "load_planner_events") return plannerFixture.events ?? [];
+            if (command === "load_time_blocks") return plannerFixture.timeBlocks ?? [];
+            if (command === "load_handled_reminder_keys") return [];
+            if (
+              command === "refresh_reminder_schedule" ||
+              command === "trace_runtime_event" ||
+              command === "plugin:event|listen" ||
+              command === "plugin:event|unlisten"
+            ) {
+              return command === "plugin:event|listen" ? 1 : undefined;
+            }
+            if (command === "plugin:updater|check") return null;
+            throw new Error(`未预期的工作台测试命令：${command}`);
+          },
+        },
+      });
+      Object.assign(window, {
+        __workspaceDashboardTest: {
+          getLoadCoursesCount: () => loadCoursesCount,
+        },
+      });
+    },
+    { name: courseName, plannerFixture },
+  );
   await page.goto("/");
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
   await expect(page.getByRole("heading", { name: "今日日程" })).toBeVisible();
@@ -274,7 +292,7 @@ test("idle Time Context presents the free duration once and identifies the next 
   const context = page.getByTestId("workspace-time-context");
   await expect(context).toContainText("当前空闲");
   await expect(context).toContainText("至 11:30");
-  await expect(context).toContainText("下一节课");
+  await expect(context).toContainText("下一项安排");
   await expect(context.getByText("1 小时 30 分钟", { exact: true })).toHaveCount(1);
 });
 
@@ -392,10 +410,102 @@ test("empty Academic data still renders the complete axis and truthful empty/una
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
   const timeline = page.getByRole("region", { name: "今日日程时间轴" });
   await expect(timeline.getByText("今天暂无日程", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("workspace-time-context")).toContainText("今天无课程");
+  await expect(page.getByTestId("workspace-time-context")).toContainText("今天暂无安排");
   await expect(timeline.getByText("00:00")).toBeVisible();
   await expect(timeline.getByText("24:00")).toBeVisible();
-  await expect(page.getByText("暂无未完成学业事项")).toBeVisible();
+  await expect(page.getByText("暂无未完成任务")).toBeVisible();
   await expect(page.getByText("尚未开放").first()).toBeVisible();
   await expect(page.getByText(/^0$/u)).toHaveCount(0);
+});
+
+test("Dashboard combines course, planner event and task block while keeping personal deadlines off the timeline", async ({
+  page,
+}) => {
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {
+    events: [
+      {
+        id: "dashboard-event",
+        title: "项目讨论",
+        description: null,
+        date: "2026-09-23",
+        startTime: "14:00",
+        endTime: "14:45",
+        location: "会议室",
+        bufferBeforeMinutes: 0,
+        bufferAfterMinutes: 0,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    timeBlocks: [
+      {
+        id: "dashboard-block",
+        personalTaskId: "dashboard-personal-task",
+        date: "2026-09-23",
+        startTime: "15:00",
+        endTime: "16:00",
+        bufferBeforeMinutes: 0,
+        bufferAfterMinutes: 0,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    personalTasks: [
+      {
+        id: "dashboard-personal-task",
+        title: "完成实验报告",
+        description: null,
+        status: "open",
+        priority: "high",
+        deadlineDate: "2026-09-23",
+        deadlineTime: "18:00",
+        createdAt: "",
+        updatedAt: "",
+        completedAt: null,
+      },
+      {
+        id: "deadline-only-task",
+        title: "只设置截止日期",
+        description: null,
+        status: "open",
+        priority: "medium",
+        deadlineDate: "2026-09-23",
+        deadlineTime: "16:30",
+        createdAt: "",
+        updatedAt: "",
+        completedAt: null,
+      },
+    ],
+  });
+
+  const timeline = page.getByRole("region", { name: "今日日程时间轴" });
+  await expect(timeline.getByTestId("timeline-item")).toHaveCount(3);
+  await expect(timeline.getByTestId("timeline-item").nth(1)).toHaveAttribute(
+    "data-source-type",
+    "plannerEvent",
+  );
+  await expect(timeline).toContainText("项目讨论");
+  await expect(timeline).toContainText("完成实验报告");
+  await expect(page.getByTestId("workspace-today-overview")).toContainText("3 项安排");
+  await expect(page.getByTestId("workspace-today-overview")).toContainText("6 个待办");
+  await expect(page.locator(".workspace-task-list")).toContainText("个人");
+  await expect(timeline).not.toContainText("只设置截止日期");
+  await expect(timeline.getByTestId("timeline-item").nth(2)).toContainText("15:00–16:00");
+
+  await page.getByRole("button", { name: "查看全部", exact: true }).click();
+  await expect(page.getByTestId("workspace-tasks")).toBeVisible();
+  await expect(page.getByText("完成实验报告", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "新建任务" }).click();
+  const editor = page.getByRole("dialog", { name: "新建个人任务" });
+  await editor.getByLabel("标题").fill("整理项目资料");
+  await editor.getByLabel("截止日期").fill("2026-09-23");
+  await editor.getByLabel("截止时间").fill("14:00");
+  await editor.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.getByText("整理项目资料", { exact: true })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "工作台" })
+    .click();
+  await expect(page.getByTestId("workspace-today-overview")).toContainText("7 个待办");
+  await expect(page.locator(".workspace-task-list")).toContainText("整理项目资料");
 });

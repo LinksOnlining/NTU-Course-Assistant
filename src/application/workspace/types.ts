@@ -13,11 +13,11 @@ export interface WorkspaceTaskPreview {
   readonly deadlineLabel: string;
   /** Existing AcademicTask priority is numeric; keep its value and ordering semantics. */
   readonly priority: number;
-  readonly sourceLabel: "学业";
+  readonly sourceLabel: "个人" | "学业";
 }
 
 export interface WorkspaceTaskSummary {
-  readonly source: "academic";
+  readonly source: "workspace";
   readonly items: readonly WorkspaceTaskPreview[];
   readonly totalOpenCount: number;
   readonly hiddenCount: number;
@@ -29,6 +29,7 @@ export interface WorkspaceTimeSection {
   readonly title: string | null;
   readonly detail: string;
   readonly location: string | null;
+  readonly sourceLabel: "课程" | "日程" | "任务" | null;
 }
 
 export type WorkspaceModuleAvailability = "available" | "unavailable";
@@ -56,8 +57,9 @@ export interface WorkspaceDashboardViewModel {
 export interface WorkspaceDashboardSources {
   readonly date: string;
   readonly timelineItems: readonly TimelineItem[];
-  readonly tomorrowItems?: readonly TimelineItem[];
+  readonly futureItems?: readonly TimelineItem[];
   readonly tasks: readonly AcademicTask[];
+  readonly personalTasks?: readonly PersonalTask[];
   readonly warnings: readonly string[];
 }
 

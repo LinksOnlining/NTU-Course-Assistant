@@ -143,6 +143,15 @@ The application validator performs exact Gregorian date and `HH:mm` checks in ad
 - Conflict is a pre-save warning with “仍然保存” / “返回调整”, not a persistence invariant. Editing excludes the same source reference; save failures leave the existing time unchanged.
 - Verification: `docs/v2-phase-2.5-verification.md`.
 
+### Phase 2.6 unified workspace dashboard
+
+- 工作台当天 Timeline 组合 canonical `AcademicCourseOccurrence`、`PlannerEvent` 与 `TimeBlock`；只统计未取消且 `occupiesTime` 的安排。Academic resolver 仍是课程的唯一来源，PlannerEvent 与 TimeBlock 仍是独立事实。
+- PersonalTask 与 AcademicTask 通过 Workspace summary projection 合并显示，来源标记为“个人”或“学业”。截止日期不创建 TimelineItem；PersonalTask 只有显式 TimeBlock 才占用时间。
+- Workspace Tasks 与 Schedule 路由返回工作台时重新读取应用层数据；当天/七日范围数据由 Application composition 加载，分钟时钟只刷新当前状态和时间轴指示，不触发数据库轮询。
+- Time Context 使用全部已加载的未来占时安排确定下一项及其来源。Planner buffers 仅扩展有效占用，用于当前空闲时长；真实起止时间与展示位置不变。今日安排计数排除取消或非占时项目。
+- 学业与个人任务按逾期、今天、未来、无截止日排序；同日有时间的截止项先于仅日期项，之后按各自现有优先级等级排序。任务实体仍保持分域，不写入彼此的数据模型。
+- Phase 2.6 verification: `docs/v2-phase-2.6-verification.md`.
+
 ### Migration safety sequence
 
 1. Reject unsupported future schema. A fresh version-0 DB follows the existing bootstrap and initializes directly to schema 6 without a legacy backup.

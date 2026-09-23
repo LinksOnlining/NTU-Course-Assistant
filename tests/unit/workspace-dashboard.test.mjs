@@ -44,7 +44,33 @@ function timelineItem(id, startTime, endTime, overrides = {}) {
   };
 }
 
-test("dashboard task summary preserves AcademicTask source, sorts deadlines and priority, and excludes completed", () => {
+function personalTask(id, deadlineDate, deadlineTime = null, priority = "none", status = "open") {
+  return {
+    id,
+    title: id,
+    description: null,
+    status,
+    priority,
+    deadlineDate,
+    deadlineTime,
+    createdAt: "",
+    updatedAt: "",
+    completedAt: null,
+  };
+}
+
+function plannerItem(id, sourceType, startTime, endTime, overrides = {}) {
+  return timelineItem(id, startTime, endTime, {
+    sourceType,
+    sourceRef: { type: sourceType, id },
+    editable: true,
+    draggable: true,
+    resizable: true,
+    ...overrides,
+  });
+}
+
+test("dashboard task summary merges workspace sources, sorts deadlines and priority, and excludes completed", () => {
   const sources = {
     date,
     timelineItems: [],
@@ -71,6 +97,7 @@ test("dashboard task summary preserves AcademicTask source, sorts deadlines and 
   assert.equal(model.taskSummary.totalOpenCount, 6);
   assert.equal(model.taskSummary.hiddenCount, 2);
   assert.ok(model.taskSummary.items.every((item) => item.sourceLabel === "学业"));
+  assert.equal(model.taskSummary.source, "workspace");
 });
 
 test("task preview places no-deadline tasks last and invalid dates remain explicit", () => {
@@ -105,7 +132,7 @@ test("next item prefers the active occurrence, ignores cancelled items, and trac
   };
   const active = buildWorkspaceDashboardViewModel(sources, "12:00");
   assert.equal(active.nextItem?.id, "active");
-  assert.equal(active.todayItemCount, 4);
+  assert.equal(active.todayItemCount, 3);
   assert.equal(buildWorkspaceDashboardViewModel(sources, "12:45").nextItem?.id, "later");
   assert.equal(buildWorkspaceDashboardViewModel(sources, "14:00").nextItem, null);
   assert.equal(
@@ -115,14 +142,19 @@ test("next item prefers the active occurrence, ignores cancelled items, and trac
 });
 
 test("time context shows one duration while free, a true next gap while active, and tomorrow without repetition", () => {
+  const timelineItems = [
+    timelineItem("first", "09:00", "10:00", { location: "A101" }),
+    timelineItem("cancelled", "10:00", "11:00", { occupiesTime: false, status: "cancelled" }),
+    timelineItem("second", "12:00", "13:00"),
+  ];
+  const tomorrowItem = {
+    ...timelineItem("tomorrow", "08:00", "09:00"),
+    date: "2026-09-24",
+  };
   const sources = {
     date,
-    timelineItems: [
-      timelineItem("first", "09:00", "10:00", { location: "A101" }),
-      timelineItem("cancelled", "10:00", "11:00", { occupiesTime: false, status: "cancelled" }),
-      timelineItem("second", "12:00", "13:00"),
-    ],
-    tomorrowItems: [timelineItem("tomorrow", "08:00", "09:00")],
+    timelineItems,
+    futureItems: [...timelineItems, tomorrowItem],
     tasks: [task("todo", "")],
     warnings: [],
   };
@@ -130,9 +162,8 @@ test("time context shows one duration while free, a true next gap while active, 
   assert.equal(active.timeContext.primary.label, "正在上课");
   assert.equal(active.timeContext.primary.value, "还有 30 分钟");
   assert.equal(active.timeContext.primary.location, "A101");
-  assert.equal(active.timeContext.secondary?.label, "下一段空闲");
-  assert.equal(active.timeContext.secondary?.value, "2 小时");
-  assert.equal(active.timeContext.secondary?.detail, "10:00–12:00");
+  assert.equal(active.timeContext.secondary?.label, "下一项安排");
+  assert.equal(active.timeContext.secondary?.value, "second");
   const free = buildWorkspaceDashboardViewModel(sources, "10:30");
   assert.deepEqual(
     [
@@ -142,20 +173,23 @@ test("time context shows one duration while free, a true next gap while active, 
     ],
     ["当前空闲", "1 小时 30 分钟", "至 12:00"],
   );
-  assert.equal(free.timeContext.secondary?.label, "下一节课");
+  assert.equal(free.timeContext.secondary?.label, "下一项安排");
   assert.equal(free.timeContext.secondary?.value, "second");
   assert.ok(!JSON.stringify(free.timeContext.secondary).includes("1 小时 30 分钟"));
   const tomorrow = buildWorkspaceDashboardViewModel(sources, "14:00");
   assert.equal(tomorrow.timeContext.primary.detail, "至今天结束");
   assert.equal(tomorrow.timeContext.secondary?.value, "tomorrow");
-  assert.equal(tomorrow.timeContext.secondary?.detail, "明天 08:00–09:00");
+  assert.equal(tomorrow.timeContext.secondary?.detail, "明天 · 课程 · 08:00–09:00");
   assert.equal(
-    buildWorkspaceDashboardViewModel({ ...sources, tomorrowItems: [] }, "14:00").timeContext
-      .secondary,
+    buildWorkspaceDashboardViewModel({ ...sources, futureItems: timelineItems }, "14:00")
+      .timeContext.secondary,
     null,
   );
-  const empty = buildWorkspaceDashboardViewModel({ ...sources, timelineItems: [] }, "10:00");
-  assert.equal(empty.timeContext.primary.label, "今天无课程");
+  const empty = buildWorkspaceDashboardViewModel(
+    { ...sources, timelineItems: [], futureItems: [tomorrowItem] },
+    "10:00",
+  );
+  assert.equal(empty.timeContext.primary.label, "今天暂无安排");
   assert.equal(empty.timeContext.primary.value, "14 小时");
   assert.equal(empty.timeContext.secondary?.value, "tomorrow");
 });
@@ -173,8 +207,116 @@ test("back-to-back courses do not invent a free slot", () => {
     },
     "09:30",
   );
-  assert.equal(model.timeContext.secondary?.label, "下一节课");
+  assert.equal(model.timeContext.secondary?.label, "下一项安排");
   assert.equal(model.timeContext.secondary?.value, "second");
+});
+
+test("dashboard timeline merges courses, independent events and task time blocks, excluding cancelled count", () => {
+  const course = timelineItem("course", "09:00", "10:00");
+  const event = plannerItem("event", "plannerEvent", "11:00", "12:00", {
+    bufferBeforeMinutes: 15,
+    bufferAfterMinutes: 10,
+  });
+  const timeBlock = plannerItem("block", "timeBlock", "13:00", "14:00", {
+    title: "个人任务安排",
+  });
+  const cancelled = timelineItem("cancelled", "15:00", "16:00", {
+    status: "cancelled",
+    occupiesTime: false,
+  });
+  const model = buildWorkspaceDashboardViewModel(
+    {
+      date,
+      timelineItems: [course, event, timeBlock, cancelled],
+      futureItems: [course, event, timeBlock, cancelled],
+      tasks: [],
+      personalTasks: [personalTask("task-with-deadline", date, "17:00")],
+      warnings: [],
+    },
+    "10:30",
+  );
+
+  assert.deepEqual(
+    model.timelineItems.map((item) => item.sourceType),
+    ["academicOccurrence", "plannerEvent", "timeBlock", "academicOccurrence"],
+  );
+  assert.equal(model.todayItemCount, 3);
+  assert.equal(model.taskSummary.totalOpenCount, 1);
+  assert.equal(model.taskSummary.items[0].sourceLabel, "个人");
+  assert.equal(model.timeContext.primary.value, "15 分钟");
+  assert.equal(model.timeContext.primary.detail, "至 10:45");
+  assert.equal(model.timeContext.secondary?.value, "event");
+  assert.equal(model.timeContext.secondary?.sourceLabel, "日程");
+});
+
+test("time context names the source of active planner events and accounts for their buffer", () => {
+  const event = plannerItem("event", "plannerEvent", "11:00", "12:00", {
+    title: "团队会议",
+    bufferBeforeMinutes: 15,
+    bufferAfterMinutes: 20,
+  });
+  const sources = {
+    date,
+    timelineItems: [event],
+    futureItems: [event],
+    tasks: [],
+    personalTasks: [],
+    warnings: [],
+  };
+
+  const before = buildWorkspaceDashboardViewModel(sources, "10:50");
+  assert.equal(before.timeContext.primary.label, "即将开始");
+  assert.equal(before.timeContext.primary.value, "还有 10 分钟");
+  assert.equal(before.timeContext.primary.sourceLabel, "日程");
+  assert.equal(before.timeContext.primary.detail, "日程 · 11:00–12:00");
+
+  const active = buildWorkspaceDashboardViewModel(sources, "11:30");
+  assert.equal(active.timeContext.primary.label, "正在进行");
+  assert.equal(active.timeContext.primary.value, "还有 30 分钟");
+  assert.equal(active.timeContext.primary.title, "团队会议");
+  assert.equal(active.timeContext.primary.sourceLabel, "日程");
+  assert.equal(active.timeContext.secondary?.label, "下一段空闲");
+  assert.equal(active.timeContext.secondary?.detail, "12:20–24:00");
+
+  const after = buildWorkspaceDashboardViewModel(sources, "12:10");
+  assert.equal(after.timeContext.primary.label, "安排缓冲");
+  assert.equal(after.timeContext.primary.value, "剩余 10 分钟");
+});
+
+test("mixed personal and academic tasks sort by urgency, timed deadline, then priority", () => {
+  const model = buildWorkspaceDashboardViewModel(
+    {
+      date,
+      timelineItems: [],
+      tasks: [
+        task("学业-今天", "2026-09-23T18:00:00", 1),
+        task("学业-未来", "2026-09-24T08:00:00", 1),
+      ],
+      personalTasks: [
+        personalTask("个人-逾期", "2026-09-22", null, "low"),
+        personalTask("个人-今天-日期", date, null, "high"),
+        personalTask("个人-今天-时间", date, "18:00", "medium"),
+        personalTask("个人-完成", date, "10:00", "high", "completed"),
+      ],
+      warnings: [],
+    },
+    "12:00",
+  );
+
+  assert.deepEqual(
+    model.taskSummary.items.map((item) => item.id),
+    ["个人-逾期", "个人-今天-时间", "学业-今天", "个人-今天-日期"],
+  );
+  assert.deepEqual(
+    model.taskSummary.items.map((item) => item.sourceLabel),
+    ["个人", "个人", "学业", "个人"],
+  );
+  assert.equal(model.taskSummary.totalOpenCount, 5);
+  assert.equal(
+    model.timelineItems.length,
+    0,
+    "PersonalTask deadlines alone are not timeline items",
+  );
 });
 
 test("task previews use natural relative dates without changing dueAt", () => {
@@ -241,13 +383,33 @@ test("workspace loader reuses Academic application reads and canonical occurrenc
         exams: [],
       };
     },
+    async loadPlannerEvents(startDate, endDate) {
+      calls.push(`events:${startDate}:${endDate}`);
+      return [];
+    },
+    async loadTimeBlocks(startDate, endDate) {
+      calls.push(`blocks:${startDate}:${endDate}`);
+      return [];
+    },
+    async loadPersonalTasks() {
+      calls.push("personal-tasks");
+      return [];
+    },
   });
 
-  assert.deepEqual(calls, ["schedule", "hub:none"]);
+  assert.deepEqual(calls, [
+    "schedule",
+    "hub:none",
+    "events:2026-09-23:2026-09-30",
+    "blocks:2026-09-23:2026-09-30",
+    "personal-tasks",
+  ]);
   assert.equal(sources.timelineItems.length, 1);
   assert.equal(sources.timelineItems[0].title, "星期三课程");
   assert.equal(sources.timelineItems[0].sourceRef.date, date);
   assert.equal(sources.tasks[0].id, "real-task");
+  assert.deepEqual(sources.futureItems, sources.timelineItems);
+  assert.deepEqual(sources.personalTasks, []);
   assert.deepEqual(sources.warnings, ["课程结构警告"]);
 });
 

@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前阶段：Phase 2.6 — Unified Workspace Dashboard。** Phase 2.0–2.5 已实现并通过自动门禁。Phase 2.4 Workspace Schedule 与 Phase 2.5 交互式 Planner 均已完成；Phase 2.5 验证记录见 `docs/v2-phase-2.5-verification.md`。最终 `npm run verify` PASS：197 unit、88 architecture、696 UI PASS / 15 skipped；typecheck、lint、Prettier、frontend build 均通过。Rust 54 tests、fmt、clippy PASS。schema 保持 6；Phase 2.5 提交为 `feat: add interactive planner scheduling`。开发分支授权连续执行 Phase 2.0–2.7；不得 push、tag、release、升级产品版本、安装或运行 production EXE，不开始 Phase 3。
+- **当前阶段：Phase 2.7 — 最终回归与范围审查。** Phase 2.0–2.6 实现已完成；Phase 2.6 将 Academic canonical occurrence、PlannerEvent、TimeBlock、AcademicTask 与 PersonalTask 汇入 Workspace Dashboard，定向验证 PASS。记录见 `docs/v2-phase-2.6-verification.md`。最近完整前端门禁（Phase 2.5）为 197 unit、88 architecture、696 UI PASS / 15 skipped；Rust 54 tests、fmt、clippy PASS。Phase 2.6 最新定向验证：typecheck、11 Dashboard unit、7 Dashboard architecture、11 Playwright Dashboard tests（1280×800）PASS。schema 保持 6；Phase 2.5 提交 `35253bb`，Phase 2.6 收口后继续 Phase 2.7。开发分支授权连续执行 Phase 2.0–2.7；不得 push、tag、release、升级产品版本、安装或运行 production EXE，不开始 Phase 3。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 
 - 当前开发分支：`v2/workspace-rebase`，从稳定 `main` commit `3f2d580d2423bdb19d2753023db6414b5408c546` 创建；`main` 继续代表稳定 1.x 基线。

@@ -276,7 +276,7 @@ function TaskCard({
         </button>
       </header>
       {summary.items.length === 0 ? (
-        <p className="workspace-card-empty">暂无未完成学业事项</p>
+        <p className="workspace-card-empty">暂无未完成任务</p>
       ) : (
         <ul className="workspace-task-list">
           {summary.items.map((task) => (

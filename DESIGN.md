@@ -212,3 +212,7 @@ schema 5 使用非破坏 migration 新增 `semesters`、`course_overrides`、`ac
 课程变化详情的每条 occurrence 使用 `hub-occurrence-item-wrap` 包含条目和其唯一的 `hub-occurrence-actions` 内联操作区；操作 busy 与成功/错误消息按 occurrence 隔离，操作完成无论成功或失败都在 `finally` 释放。Hub 内容位于独立 `hub-content-viewport`，不得通过负 margin、绝对定位或固定偏移修正标签与内容间距。
 
 课表变化页的选择、展开 occurrence、搜索/筛选、编辑器和操作状态由 `useCourseChangePageState` 页面级 hook 管理，不放入跨页面全局状态。`CourseChangeOperation` 只锁定当前 occurrence；切换到其他学习中心分区或卸载时递增 generation 并清理瞬态状态，旧的异步成功/失败结果不得回写当前页面。任务、考试和学期页面可以保留各自的保存 busy，但不得将该状态作为课表变化控件的 disabled 条件。canonical occurrence 写入完成后触发既有数据变化通知，派生 Today/Widget/Reminder 刷新不作为当前 occurrence 操作完成的等待条件。
+
+## Links Workplace v2.0 — Workspace Dashboard Planner 集成
+
+Phase 2.6 的 Dashboard 由 Workspace Application composition 读取 Academic canonical occurrences、PlannerEvent、TimeBlock、AcademicTask 与 PersonalTask。当天时间轴只展示真实占时安排；任务截止日期不进入时间轴，个人任务只有关联的 TimeBlock 才显示为一段安排。任务摘要合并显示“个人 / 学业”来源并保留两种任务事实边界。Time Context 依据已解析安排及 Planner buffer 计算当前状态、空闲区间和下一项来源；buffer 不改变实际或展示起止时间。相关验证见 `docs/v2-phase-2.6-verification.md`。

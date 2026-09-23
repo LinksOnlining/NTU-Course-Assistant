@@ -7,8 +7,16 @@ import {
   type AcademicScheduleData,
 } from "../academic/index.ts";
 import { projectAcademicOccurrencesToTimelineItems } from "../timeline/index.ts";
+import {
+  projectPlannerEventsToTimelineItems,
+  projectTimeBlocksToTimelineItems,
+} from "../timeline/planner-timeline.ts";
+import { computeFreeTimeIntervals, effectiveOccupancy } from "../timeline/planner-interactions.ts";
+import { loadPersonalTasks } from "../planner/personal-tasks.ts";
+import { loadPlannerEvents, loadTimeBlocks } from "../planner/planner-schedule.ts";
 import type { AcademicTask } from "../../types/academic-task.ts";
 import type { Semester } from "../../types/semester.ts";
+import type { PersonalTask } from "../../types/personal-task.ts";
 import type { TermConfig } from "../../types/reminder.ts";
 import type {
   WorkspaceDashboardSources,
@@ -23,11 +31,17 @@ const TASK_PREVIEW_LIMIT = 4;
 export interface WorkspaceDashboardReader {
   loadScheduleData(): Promise<AcademicScheduleData>;
   loadHubData(options: AcademicHubLoadOptions): Promise<AcademicHubData>;
+  loadPlannerEvents?(startDate: string, endDate: string): ReturnType<typeof loadPlannerEvents>;
+  loadTimeBlocks?(startDate: string, endDate: string): ReturnType<typeof loadTimeBlocks>;
+  loadPersonalTasks?(): ReturnType<typeof loadPersonalTasks>;
 }
 
 const defaultReader: WorkspaceDashboardReader = {
   loadScheduleData: loadAcademicScheduleData,
   loadHubData: loadAcademicHubData,
+  loadPlannerEvents,
+  loadTimeBlocks,
+  loadPersonalTasks,
 };
 
 export function localDateKey(date: Date): string {
@@ -42,6 +56,12 @@ function nextLocalDate(date: string): string {
   const next = new Date(`${date}T12:00:00`);
   next.setDate(next.getDate() + 1);
   return localDateKey(next);
+}
+
+function dateAfter(date: string, days: number): string {
+  const value = new Date(`${date}T12:00:00`);
+  value.setDate(value.getDate() + days);
+  return localDateKey(value);
 }
 
 function legacySemester(termConfig: TermConfig | null): Semester | null {
@@ -66,35 +86,49 @@ export async function loadWorkspaceDashboardSources(
   const options: AcademicHubLoadOptions = {
     fallbackSemesterId: termConfig ? LEGACY_SEMESTER_ID : undefined,
   };
-  const [schedule, hub] = await Promise.all([
+  const rangeEnd = dateAfter(date, 7);
+  const [schedule, hub, events, blocks, personalTasks] = await Promise.all([
     reader.loadScheduleData(),
     reader.loadHubData(options),
+    reader.loadPlannerEvents?.(date, rangeEnd) ?? Promise.resolve([]),
+    reader.loadTimeBlocks?.(date, rangeEnd) ?? Promise.resolve([]),
+    reader.loadPersonalTasks?.() ?? Promise.resolve([]),
   ]);
   const activeSemester =
     hub.semesters.find((semester) => semester.status === "ACTIVE") ??
     (hub.semesters.length === 0 ? legacySemester(termConfig) : null);
-  const tomorrow = nextLocalDate(date);
   const occurrences = activeSemester
     ? resolveAcademicOccurrences(
         schedule.courses,
         activeSemester,
         hub.overrides,
-        { from: date, to: tomorrow },
+        { from: date, to: rangeEnd },
         schedule.periodTimes ?? [],
       )
     : [];
 
+  const academicItems = activeSemester
+    ? projectAcademicOccurrencesToTimelineItems(
+        occurrences.filter((item) => item.date >= date && item.date <= rangeEnd),
+        schedule.courses,
+      )
+    : [];
+  const eventItems = projectPlannerEventsToTimelineItems(events);
+  const timeBlockItems = projectTimeBlocksToTimelineItems(blocks, personalTasks);
+  const futureItems = [...academicItems, ...eventItems, ...timeBlockItems].sort(
+    (left, right) =>
+      left.date.localeCompare(right.date) ||
+      left.startTime.localeCompare(right.startTime) ||
+      left.endTime.localeCompare(right.endTime) ||
+      left.id.localeCompare(right.id),
+  );
+
   return {
     date,
-    timelineItems: projectAcademicOccurrencesToTimelineItems(
-      occurrences.filter((item) => item.date === date),
-      schedule.courses,
-    ),
-    tomorrowItems: projectAcademicOccurrencesToTimelineItems(
-      occurrences.filter((item) => item.date === tomorrow),
-      schedule.courses,
-    ),
+    timelineItems: futureItems.filter((item) => item.date === date),
+    futureItems,
     tasks: hub.tasks,
+    personalTasks,
     warnings: schedule.warnings,
   };
 }
@@ -108,50 +142,117 @@ function naturalDueDate(taskDate: string, today: string): string {
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-function taskDeadline(task: AcademicTask, today: string, nowTime: string): WorkspaceTaskPreview {
-  if (task.dueAt.trim() === "") {
+interface TaskDeadline {
+  readonly preview: WorkspaceTaskPreview;
+  readonly sortDate: string | null;
+  readonly sortTime: string | null;
+}
+
+function taskDeadline(
+  id: string,
+  title: string,
+  dueAt: string | null,
+  priority: number,
+  sourceLabel: WorkspaceTaskPreview["sourceLabel"],
+  today: string,
+  nowTime: string,
+): TaskDeadline {
+  if (!dueAt) {
     return {
-      id: task.id,
-      title: task.title,
-      dueAt: null,
-      deadlineKind: "none",
-      deadlineLabel: "无截止日期",
-      priority: task.priority,
-      sourceLabel: "学业",
+      preview: {
+        id,
+        title,
+        dueAt: null,
+        deadlineKind: "none",
+        deadlineLabel: "无截止日期",
+        priority,
+        sourceLabel,
+      },
+      sortDate: null,
+      sortTime: null,
     };
   }
 
-  const date = new Date(task.dueAt);
-  if (!Number.isFinite(date.getTime())) {
+  const parsed = new Date(dueAt);
+  if (!Number.isFinite(parsed.getTime())) {
     return {
-      id: task.id,
-      title: task.title,
-      dueAt: task.dueAt,
-      deadlineKind: "invalid",
-      deadlineLabel: "截止日期待确认",
-      priority: task.priority,
-      sourceLabel: "学业",
+      preview: {
+        id,
+        title,
+        dueAt,
+        deadlineKind: "invalid",
+        deadlineLabel: "截止日期待确认",
+        priority,
+        sourceLabel,
+      },
+      sortDate: null,
+      sortTime: null,
     };
   }
 
-  const taskDate = localDateKey(date);
-  const taskTime = localTimeKey(date);
+  const taskDate = localDateKey(parsed);
+  const taskTime = localTimeKey(parsed);
   const deadlineKind =
     taskDate < today || (taskDate === today && taskTime < nowTime)
       ? "overdue"
       : taskDate === today
         ? "today"
         : "upcoming";
-  const deadlineLabel = `${deadlineKind === "overdue" ? "已逾期 · " : ""}${naturalDueDate(taskDate, today)} ${taskTime}`;
   return {
-    id: task.id,
-    title: task.title,
-    dueAt: task.dueAt,
-    deadlineKind,
-    deadlineLabel,
-    priority: task.priority,
-    sourceLabel: "学业",
+    preview: {
+      id,
+      title,
+      dueAt,
+      deadlineKind,
+      deadlineLabel: `${deadlineKind === "overdue" ? "已逾期 · " : ""}${naturalDueDate(taskDate, today)} ${taskTime}`,
+      priority,
+      sourceLabel,
+    },
+    sortDate: taskDate,
+    sortTime: taskTime,
   };
+}
+
+function personalTaskDeadline(task: PersonalTask, today: string, nowTime: string): TaskDeadline {
+  if (!task.deadlineDate) {
+    return taskDeadline(
+      task.id,
+      task.title,
+      null,
+      personalPriority(task.priority),
+      "个人",
+      today,
+      nowTime,
+    );
+  }
+  const dueAt = task.deadlineTime
+    ? `${task.deadlineDate}T${task.deadlineTime}:00`
+    : `${task.deadlineDate}T23:59:00`;
+  const result = taskDeadline(
+    task.id,
+    task.title,
+    dueAt,
+    personalPriority(task.priority),
+    "个人",
+    today,
+    nowTime,
+  );
+  if (task.deadlineTime) return result;
+  const dueLabel = naturalDueDate(task.deadlineDate, today);
+  return {
+    ...result,
+    preview: {
+      ...result.preview,
+      dueAt: task.deadlineDate,
+      deadlineLabel: `${result.preview.deadlineKind === "overdue" ? "已逾期 · " : ""}${dueLabel}`,
+    },
+    sortDate: task.deadlineDate,
+    sortTime: null,
+  };
+}
+
+function personalPriority(priority: PersonalTask["priority"]): number {
+  return { high: 2, medium: 1, low: 0, none: -1 }[priority];
 }
 
 function deadlineOrder(kind: WorkspaceTaskPreview["deadlineKind"]): number {
@@ -171,22 +272,44 @@ function deadlineOrder(kind: WorkspaceTaskPreview["deadlineKind"]): number {
 
 function buildTaskSummary(
   tasks: readonly AcademicTask[],
+  personalTasks: readonly PersonalTask[],
   today: string,
   nowTime: string,
 ): WorkspaceDashboardViewModel["taskSummary"] {
   const items = tasks
     .filter((task) => task.status !== "COMPLETED")
-    .map((task) => taskDeadline(task, today, nowTime))
-    .sort(
-      (left, right) =>
-        deadlineOrder(left.deadlineKind) - deadlineOrder(right.deadlineKind) ||
-        (left.dueAt ?? "\uffff").localeCompare(right.dueAt ?? "\uffff") ||
-        right.priority - left.priority ||
-        left.id.localeCompare(right.id),
-    );
-  const preview = items.slice(0, TASK_PREVIEW_LIMIT);
+    .map((task) =>
+      taskDeadline(
+        task.id,
+        task.title,
+        task.dueAt.trim() || null,
+        task.priority,
+        "学业",
+        today,
+        nowTime,
+      ),
+    )
+    .concat(
+      personalTasks
+        .filter((task) => task.status !== "completed")
+        .map((task) => personalTaskDeadline(task, today, nowTime)),
+    )
+    .sort((left, right) => {
+      const leftTask = left.preview;
+      const rightTask = right.preview;
+      return (
+        deadlineOrder(leftTask.deadlineKind) - deadlineOrder(rightTask.deadlineKind) ||
+        (left.sortDate ?? "\uffff").localeCompare(right.sortDate ?? "\uffff") ||
+        // Timed deadlines precede date-only deadlines on the same day.
+        (left.sortTime === null ? 1 : 0) - (right.sortTime === null ? 1 : 0) ||
+        (left.sortTime ?? "\uffff").localeCompare(right.sortTime ?? "\uffff") ||
+        rightTask.priority - leftTask.priority ||
+        leftTask.id.localeCompare(rightTask.id)
+      );
+    });
+  const preview = items.slice(0, TASK_PREVIEW_LIMIT).map((item) => item.preview);
   return {
-    source: "academic",
+    source: "workspace",
     items: preview,
     totalOpenCount: items.length,
     hiddenCount: Math.max(0, items.length - preview.length),
@@ -194,18 +317,30 @@ function buildTaskSummary(
 }
 
 function findNextItem(
-  items: readonly WorkspaceDashboardSources["timelineItems"][number][],
+  items: WorkspaceDashboardSources["timelineItems"],
+  today: string,
   nowTime: string,
 ): WorkspaceDashboardViewModel["nextItem"] {
   const occupied = items
-    .filter((item) => item.occupiesTime)
+    .filter((item) => effectiveOccupancy(item) !== null)
     .sort(
       (left, right) =>
-        left.startTime.localeCompare(right.startTime) || left.endTime.localeCompare(right.endTime),
+        left.date.localeCompare(right.date) || left.startTime.localeCompare(right.startTime),
     );
   return (
-    occupied.find((item) => item.startTime <= nowTime && nowTime < item.endTime) ??
-    occupied.find((item) => item.endTime > nowTime) ??
+    occupied.find((item) => {
+      const interval = effectiveOccupancy(item);
+      return (
+        item.date === today &&
+        interval !== null &&
+        interval.startMinute <= minutes(nowTime) &&
+        minutes(nowTime) < interval.endMinute
+      );
+    }) ??
+    occupied.find((item) => {
+      const interval = effectiveOccupancy(item);
+      return item.date > today || (interval !== null && interval.startMinute > minutes(nowTime));
+    }) ??
     null
   );
 }
@@ -225,91 +360,144 @@ function clockLabel(value: number): string {
   return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
 }
 
-function timeContext(sources: WorkspaceDashboardSources, nowTime: string) {
-  const occupied = sources.timelineItems
-    .filter((item) => item.occupiesTime)
-    .sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime));
-  const now = minutes(nowTime);
-  const active = occupied.find(
-    (item) => minutes(item.startTime) <= now && now < minutes(item.endTime),
-  );
-  const next = occupied.find((item) => minutes(item.startTime) > now);
-  const tomorrow = sources.tomorrowItems
-    ?.filter((item) => item.occupiesTime)
-    .sort((a, b) => a.startTime.localeCompare(b.startTime))[0];
-  const courseSection = (
-    item: WorkspaceDashboardSources["timelineItems"][number],
-    day: "今天" | "明天",
-  ): WorkspaceTimeSection => ({
-    label: "下一节课",
+function timelineSourceLabel(item: WorkspaceDashboardSources["timelineItems"][number]) {
+  switch (item.sourceType) {
+    case "academicOccurrence":
+      return "课程" as const;
+    case "plannerEvent":
+      return "日程" as const;
+    case "timeBlock":
+      return "任务" as const;
+    case "aiProposal":
+      return null;
+  }
+}
+
+function dateContextLabel(date: string, today: string): string {
+  if (date === today) return "今天";
+  if (date === nextLocalDate(today)) return "明天";
+  const parsed = new Date(`${date}T12:00:00`);
+  return `${parsed.getMonth() + 1}月${parsed.getDate()}日`;
+}
+
+function itemSection(
+  item: WorkspaceDashboardSources["timelineItems"][number],
+  today: string,
+  label = "下一项安排",
+): WorkspaceTimeSection {
+  return {
+    label,
     value: item.title,
     title: item.title,
-    detail: `${day} ${item.startTime}–${item.endTime}`,
+    detail: `${dateContextLabel(item.date, today)} · ${timelineSourceLabel(item) ?? "安排"} · ${item.startTime}–${item.endTime}`,
     location: item.location,
+    sourceLabel: timelineSourceLabel(item),
+  };
+}
+
+function timeContext(sources: WorkspaceDashboardSources, nowTime: string) {
+  const now = minutes(nowTime);
+  const todayItems = sources.timelineItems.filter((item) => effectiveOccupancy(item) !== null);
+  const futureItems = sources.futureItems ?? sources.timelineItems;
+  const occupied = futureItems
+    .filter((item) => effectiveOccupancy(item) !== null)
+    .sort(
+      (left, right) =>
+        left.date.localeCompare(right.date) ||
+        (effectiveOccupancy(left)?.startMinute ?? 0) -
+          (effectiveOccupancy(right)?.startMinute ?? 0),
+    );
+  const active = todayItems.find((item) => {
+    const interval = effectiveOccupancy(item);
+    return interval !== null && interval.startMinute <= now && now < interval.endMinute;
   });
-  let freeStart = now;
-  if (active) {
-    for (const entry of occupied) {
-      if (minutes(entry.startTime) > freeStart) break;
-      freeStart = Math.max(freeStart, minutes(entry.endTime));
-    }
-  }
-  const nextAfterFree = occupied.find((entry) => minutes(entry.startTime) > freeStart);
-  const freeEnd = nextAfterFree ? minutes(nextAfterFree.startTime) : 1440;
+  const activeInterval = active ? effectiveOccupancy(active) : null;
+  const activeStart = active ? minutes(active.startTime) : 0;
+  const activeEnd = active ? minutes(active.endTime) : 0;
+  const activeIsStarted = active !== undefined && activeStart <= now;
+  const activeIsInActualInterval = active !== undefined && activeStart <= now && now < activeEnd;
+  const next = occupied.find((item) => {
+    if (item === active) return false;
+    if (item.date > sources.date) return true;
+    const interval = effectiveOccupancy(item);
+    return interval !== null && interval.endMinute > now;
+  });
+  const freeIntervals = computeFreeTimeIntervals(todayItems);
+  const nextFree = freeIntervals.find((interval) => interval.endMinute > now);
+  const freeStart = Math.max(now, nextFree?.startMinute ?? now);
+  const freeEnd = nextFree?.endMinute ?? now;
   const primary: WorkspaceTimeSection = active
     ? {
-        label: "正在上课",
-        value: `还有 ${durationLabel(minutes(active.endTime) - now)}`,
+        label: activeIsInActualInterval
+          ? timelineSourceLabel(active) === "课程"
+            ? "正在上课"
+            : "正在进行"
+          : activeIsStarted
+            ? "安排缓冲"
+            : "即将开始",
+        value: activeIsInActualInterval
+          ? `还有 ${durationLabel(activeEnd - now)}`
+          : activeIsStarted
+            ? `剩余 ${durationLabel((activeInterval?.endMinute ?? now) - now)}`
+            : `还有 ${durationLabel(activeStart - now)}`,
         title: active.title,
-        detail: `${active.startTime}–${active.endTime}`,
+        detail: `${timelineSourceLabel(active) ?? "安排"} · ${active.startTime}–${active.endTime}`,
         location: active.location,
+        sourceLabel: timelineSourceLabel(active),
       }
     : {
-        label: occupied.length ? "当前空闲" : "今天无课程",
-        value: durationLabel(freeEnd - now),
+        label: todayItems.length ? "当前空闲" : "今天暂无安排",
+        value: durationLabel(Math.max(0, freeEnd - now)),
         title: null,
-        detail: nextAfterFree ? `至 ${nextAfterFree.startTime}` : "至今天结束",
+        detail:
+          next && next.date === sources.date
+            ? `至 ${clockLabel(effectiveOccupancy(next)?.startMinute ?? minutes(next.startTime))}`
+            : "至今天结束",
         location: null,
+        sourceLabel: null,
       };
-  const secondary: WorkspaceTimeSection | null = active
-    ? next && minutes(next.startTime) <= minutes(active.endTime)
-      ? courseSection(next, "今天")
-      : freeEnd > freeStart
-        ? {
-            label: "下一段空闲",
-            value: durationLabel(freeEnd - freeStart),
-            title: null,
-            detail: nextAfterFree
-              ? `${clockLabel(freeStart)}–${nextAfterFree.startTime}`
-              : `${clockLabel(freeStart)}–24:00`,
-            location: null,
-          }
-        : nextAfterFree
-          ? courseSection(nextAfterFree, "今天")
-          : tomorrow
-            ? courseSection(tomorrow, "明天")
-            : null
-    : nextAfterFree
-      ? courseSection(nextAfterFree, "今天")
-      : tomorrow
-        ? courseSection(tomorrow, "明天")
-        : null;
-  const remaining = occupied.filter((entry) => minutes(entry.endTime) > now).length;
-  const openTaskCount = sources.tasks.filter((task) => task.status !== "COMPLETED").length;
+  let secondary: WorkspaceTimeSection | null = null;
+  if (active) {
+    if (next) {
+      secondary = itemSection(next, sources.date);
+    } else if (freeEnd > freeStart) {
+      secondary = {
+        label: "下一段空闲",
+        value: durationLabel(freeEnd - freeStart),
+        title: null,
+        detail: `${clockLabel(freeStart)}–${clockLabel(freeEnd)}`,
+        location: null,
+        sourceLabel: null,
+      };
+    } else if (next) {
+      secondary = itemSection(next, sources.date);
+    }
+  } else if (next) {
+    secondary = itemSection(next, sources.date);
+  }
+
+  const remaining = todayItems.filter((item) => minutes(item.endTime) > now).length;
+  const openTaskCount =
+    sources.tasks.filter((task) => task.status !== "COMPLETED").length +
+    (sources.personalTasks ?? []).filter((task) => task.status !== "completed").length;
   return {
     timeContext: { primary, secondary },
-    todayStatusText: active
-      ? "正在上课"
+    todayStatusText: activeIsInActualInterval
+      ? timelineSourceLabel(active!) === "课程"
+        ? "正在上课"
+        : "正在进行"
       : remaining
-        ? `今天还有 ${remaining} 节课`
-        : occupied.length
-          ? "今天的课程已结束"
-          : "今天暂无课程",
-    todaySummaryText: occupied.length
-      ? `${occupied.length} 节课程 · ${openTaskCount} 项待办`
-      : openTaskCount
-        ? `${openTaskCount} 项待办`
-        : "可自由安排今天的时间",
+        ? `今天还有 ${remaining} 项安排`
+        : todayItems.length
+          ? "今天的安排已结束"
+          : "今天暂无安排",
+    todaySummaryText:
+      [
+        todayItems.length ? `${todayItems.length} 项安排` : null,
+        openTaskCount ? `${openTaskCount} 个待办` : null,
+      ]
+        .filter((part): part is string => part !== null)
+        .join(" · ") || "可自由安排今天的时间",
   };
 }
 
@@ -320,10 +508,16 @@ export function buildWorkspaceDashboardViewModel(
   return {
     date: sources.date,
     timelineItems: sources.timelineItems,
-    todayItemCount: sources.timelineItems.length,
-    nextItem: findNextItem(sources.timelineItems, nowTime),
+    todayItemCount: sources.timelineItems.filter((item) => effectiveOccupancy(item) !== null)
+      .length,
+    nextItem: findNextItem(sources.futureItems ?? sources.timelineItems, sources.date, nowTime),
     ...timeContext(sources, nowTime),
-    taskSummary: buildTaskSummary(sources.tasks, sources.date, nowTime),
+    taskSummary: buildTaskSummary(
+      sources.tasks,
+      sources.personalTasks ?? [],
+      sources.date,
+      nowTime,
+    ),
     moduleAvailability: {
       diary: "unavailable",
       inbox: "unavailable",

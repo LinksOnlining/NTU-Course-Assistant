@@ -62,6 +62,18 @@ test("Only canonical AcademicCourseOccurrence is adapted to TimelineItem; deadli
   assert.doesNotMatch(workspaceSource, /sourceType:\s*["'](?:academicTask|exam)["']/u);
 });
 
+test("Workspace Dashboard combines Planner projections without turning task deadlines into schedule items", () => {
+  const workspaceSource = readFileSync(
+    path.join(root, "application/workspace/workspace-dashboard.ts"),
+    "utf8",
+  );
+  assert.match(workspaceSource, /projectPlannerEventsToTimelineItems/u);
+  assert.match(workspaceSource, /projectTimeBlocksToTimelineItems/u);
+  assert.match(workspaceSource, /personalTasks/u);
+  assert.match(workspaceSource, /taskDeadline/u);
+  assert.doesNotMatch(workspaceSource, /personalTaskDeadline\([^)]*TimelineItem/u);
+});
+
 test("workspace/home renders the new Dashboard rather than the legacy AcademicHub Today branch", () => {
   const appSource = readFileSync(path.join(root, "App.tsx"), "utf8");
   assert.match(appSource, /isWorkspaceHome\s*\?\s*\(\s*<WorkspaceDashboard/u);
