@@ -142,7 +142,9 @@ Clean Minimal Desktop Workspace：clean、quiet、high information density、not
 
 ## 7.33 Theme Contract
 
-目标主题 Light / Dark / System。Phase 1.1 不实现 Dark Mode；主题实现需先有语义 tokens，避免先堆大量 light-only component 后再补主题。
+目标主题 Light / Dark / System。Phase 1.4 已在 `src/theme/` 建立 `ThemePreference`（`light | dark | system`）与 `ResolvedTheme`。默认保持 `light`；偏好作为 presentation setting 存在 `localStorage`，key 为 `links-workplace.theme-preference`，不改 SQLite/schema。主窗口在 React 首次渲染前应用主题，并在 `system` 模式监听系统色彩方案变化。当前 Widget 不接入主窗口主题系统，保持既有外观。
+
+未来如需将主题偏好迁移到统一 Settings persistence，必须单独设计迁移；不得借主题功能擅自增加数据库 schema。
 
 ## 7.34 UI Component Contract
 

@@ -9,10 +9,11 @@
 - Phase 1.1 Architecture Contract & Project Baseline：COMPLETE。已建立项目规则、v2 产品需求 SSOT 和架构契约。
 - Phase 1.2 类型化导航契约与对象定位基础：COMPLETE。新增 `src/navigation/types.ts` 与 `src/navigation/navigation.ts`；App 和 AcademicHub 已由 `AppRoute` 驱动，Academic Tasks 暂用 `academic/tasks-legacy` 兼容路由；未引入 Router，未改变可见文案或布局。`npm run verify` PASS：139 单元、62 架构、453 UI PASS / 15 条件跳过，以及 typecheck、lint、format、build PASS。
 - Phase 1.3 Academic 应用层读取边界：COMPLETE。新增 `src/application/academic/` 的 `AcademicScheduleData`、`AcademicHubData` 与 `loadAcademicScheduleData`、`loadAcademicHubData`、`resolveAcademicOccurrences`；App / AcademicHub 的 Academic 读取已迁移到应用层 facade，resolver 仍委托稳定 core。Academic 写入继续使用 legacy storage service；Widget / Reminder 本轮未迁移。`npm run verify` PASS：146 unit、66 architecture、453 UI PASS / 15 条件跳过，以及 typecheck、lint、format、frontend build PASS。
+- Phase 1.4 Design Tokens & Theme Foundation：COMPLETE。新增 `src/theme/` 语义令牌与主题逻辑；主窗口支持浅色、深色、跟随系统，默认浅色，偏好存于 `localStorage`。浅色 Accent 保持既有绿色；深色覆盖主课表、Today/AcademicHub、表单与设置、课程卡和 PDF 预览。主题在主窗口 React 渲染前应用，系统主题监听可清理。Widget 外观未迁移；未改 Academic 业务逻辑、导航、Rust、数据库/schema、identifier、依赖、产品名、README 或 CHANGELOG。`npm run verify` PASS：154 unit、70 architecture、480 UI PASS / 15 skipped，typecheck、lint、format、frontend build 均 PASS。
 - 已知未决：未实现的 future route 目前会静默回退到 Today；在 Links Workplace Shell 开始暴露这些 route 前必须处理。
 - v2 开发及主要人工验收环境：Windows 11 Pro。v1.3.1 的 Windows 10 安装态 ALL PASS 是历史验收事实，不代表在 Windows 11 已执行相同验收。
 - 当前 v2 目标品牌为 Links Workplace；顶层导航 `[工作台] [课表]`；技术 identifier `com.ntu-course-assistant.desktop`、`courses.sqlite3`、GitHub repo/updater source 保持不变。Quick Capture 与 Focus 在当前规划中为 REMOVED。
-- 下一阶段：等待 Ethan / ChatGPT 审核后进入 Phase 1.4，不自动开始。
+- 下一阶段：等待 Ethan / ChatGPT 审核后进入 Phase 1.5，不自动开始。
 
 ## 当前稳定版本：NTU Course Assistant v1.3.1
 

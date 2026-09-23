@@ -16,12 +16,15 @@ import type { ReminderConfiguration, ReminderSettings, TermConfig } from "../typ
 import type { SaveOperationState } from "../types/save-operation.ts";
 import type { PeriodTime } from "../types/time.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
+import type { ThemePreference } from "../theme/types.ts";
 
 interface PeriodSettingsProps {
   readonly periods: readonly PeriodTime[];
   readonly isUsingTestSchedule: boolean;
   readonly reminderConfiguration: ReminderConfiguration;
   readonly widgetSettings: WidgetSettings;
+  readonly themePreference: ThemePreference;
+  readonly onThemePreferenceChange: (preference: ThemePreference) => void;
   readonly courseCount: number;
   readonly onSave: (
     periods: readonly PeriodTime[],
@@ -43,6 +46,8 @@ export function PeriodSettings({
   isUsingTestSchedule,
   reminderConfiguration,
   widgetSettings,
+  themePreference,
+  onThemePreferenceChange,
   courseCount,
   onSave,
   onSaveWidgetSettings,
@@ -621,6 +626,26 @@ export function PeriodSettings({
               </div>
             </div>
           )}
+        </section>
+        <section className="settings-section" aria-labelledby="appearance-settings-title">
+          <div>
+            <h3 id="appearance-settings-title">外观</h3>
+            <p>选择浅色、深色，或跟随 Windows 系统主题。</p>
+          </div>
+          <div className="settings-fields">
+            <label>
+              <span>主题</span>
+              <select
+                aria-label="主题"
+                value={themePreference}
+                onChange={(event) => onThemePreferenceChange(event.target.value as ThemePreference)}
+              >
+                <option value="light">浅色</option>
+                <option value="dark">深色</option>
+                <option value="system">跟随系统</option>
+              </select>
+            </label>
+          </div>
         </section>
         <section className="settings-section" aria-labelledby="about-settings-title">
           <div>

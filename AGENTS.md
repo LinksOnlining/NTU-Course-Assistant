@@ -45,3 +45,5 @@
 - 当前规划已取代旧文档中的旧 v2 方向：Quick Capture 与 Focus 均为 REMOVED。不得按旧历史材料恢复它们或 FocusSession / Planned-vs-Actual。
 - 每个任务只做明确授权的范围。没有明确 Phase 指令时不自行开始下一阶段，不发布、不推送、不改稳定 tag。
 - 版本 1.3.1 的 Windows 10 验收是历史事实；v2 当前开发及主要人工验收环境是 Windows 11 Pro。
+
+新 Workspace UI 不得新增主品牌颜色 literal，应使用 Design Tokens。

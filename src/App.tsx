@@ -71,6 +71,14 @@ import type { CourseOverride } from "./types/course-override.ts";
 import type { Exam } from "./types/exam.ts";
 import type { Semester } from "./types/semester.ts";
 import {
+  applyTheme,
+  getThemePreference,
+  resolveTheme,
+  saveThemePreference,
+  subscribeToSystemTheme,
+} from "./theme/index.ts";
+import type { ThemePreference } from "./theme/index.ts";
+import {
   createAcademicScheduleTarget,
   createWorkspaceHomeTarget,
   getAcademicHubTab,
@@ -130,6 +138,9 @@ export function App() {
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] = useState<PdfImportResult | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
+    getThemePreference(),
+  );
   // Production opens on the learning dashboard. Development keeps the
   // timetable-first route so the browser preview and existing layout scenarios
   // remain focused on schedule editing.
@@ -159,6 +170,22 @@ export function App() {
   const pdfDialogGeneration = useRef(0);
   const pdfDialogActive = useRef(false);
   const reminderRefreshGeneration = useRef(0);
+
+  useEffect(() => {
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const updateTheme = (theme: "light" | "dark") => applyTheme(theme, document.documentElement);
+    updateTheme(resolveTheme(themePreference, systemTheme.matches ? "dark" : "light"));
+    return subscribeToSystemTheme(themePreference, systemTheme, updateTheme);
+  }, [themePreference]);
+
+  function handleThemePreferenceChange(preference: ThemePreference) {
+    saveThemePreference(preference);
+    setThemePreference(preference);
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+    applyTheme(resolveTheme(preference, systemTheme), document.documentElement);
+  }
   const fixtureCourses = useMemo(
     () =>
       showDevelopmentFixtures
@@ -1018,6 +1045,8 @@ export function App() {
           isUsingTestSchedule={isUsingTestSchedule}
           reminderConfiguration={reminderConfiguration}
           widgetSettings={widgetSettings}
+          themePreference={themePreference}
+          onThemePreferenceChange={handleThemePreferenceChange}
           onSave={async (nextPeriods, termConfig, reminderSettings) => {
             const trace = beginRuntimeTrace("period-save", courseMutationGeneration.current);
             const saved = await saveStoredAppSettings(nextPeriods, termConfig, reminderSettings);
