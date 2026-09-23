@@ -289,6 +289,37 @@ pub struct AcademicTask {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PersonalTaskStatus {
+    Open,
+    Completed,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PersonalTaskPriority {
+    None,
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersonalTask {
+    pub id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub status: PersonalTaskStatus,
+    pub priority: PersonalTaskPriority,
+    pub deadline_date: Option<String>,
+    pub deadline_time: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Exam {
     pub id: String,
@@ -352,7 +383,7 @@ impl Course {
     }
 }
 
-fn parse_time(value: &str) -> Result<u16, String> {
+pub(crate) fn parse_time(value: &str) -> Result<u16, String> {
     let bytes = value.as_bytes();
     if bytes.len() != 5
         || bytes[2] != b':'
@@ -371,7 +402,7 @@ fn parse_time(value: &str) -> Result<u16, String> {
     Ok(hour * 60 + minute)
 }
 
-fn parse_date(value: &str) -> Result<(u32, u32, u32), String> {
+pub(crate) fn parse_date(value: &str) -> Result<(u32, u32, u32), String> {
     let bytes = value.as_bytes();
     if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
         return Err("日期必须使用 YYYY-MM-DD".into());

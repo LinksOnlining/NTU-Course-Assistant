@@ -183,3 +183,4 @@ Phase 1.6.2 将 Time Context 固定为由 Workspace application 层纯投影生�
 - Completion 保留 TimeBlock；显式删除 PersonalTask 才通过外键 cascade 删除关联 TimeBlock。单日范围和无 recurrence / cross-midnight 是首版硬限制。
 - Presentation → Planner Application use cases → service/Tauri adapter → Rust repository/SQLite。Workspace UI 不直接 `invoke` planner CRUD 或访问 SQL。
 - Phase 2.1 已实现 schema 5→6 单次事务迁移；迁移旧 schema 前通过 `VACUUM INTO` 创建并校验数据库备份。Debug 数据库隔离在 app local data 下的 `dev-v2/courses.sqlite3`，Release 生产路径保持不变。
+- Phase 2.2 已实现 PersonalTask Rust CRUD、Tauri 命令、Planner Application 校验/排序/截止日期投影与 Workspace Tasks 页面；AcademicTask 在该页面只读，PersonalTask deadline 不进入 Timeline。Phase 2.2 验证记录见 `docs/v2-phase-2.2-verification.md`。

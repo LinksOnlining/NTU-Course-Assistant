@@ -14,8 +14,8 @@ use std::{
 
 use db::CourseDatabase;
 use models::{
-    AcademicTask, Course, CourseOverride, Exam, PeriodTime, ReminderSettings, Semester, TermConfig,
-    WidgetSettings, WidgetSettingsPatch,
+    AcademicTask, Course, CourseOverride, Exam, PeriodTime, PersonalTask, ReminderSettings,
+    Semester, TermConfig, WidgetSettings, WidgetSettingsPatch,
 };
 use serde::Serialize;
 use tauri::{
@@ -403,6 +403,60 @@ async fn delete_academic_task(state: State<'_, CourseState>, id: String) -> Resu
     state
         .run_in_background("删除学习事项", move |database| {
             database.delete_academic_task(&id)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn load_personal_tasks(state: State<'_, CourseState>) -> Result<Vec<PersonalTask>, String> {
+    state
+        .run_in_background("读取个人任务", CourseDatabase::load_personal_tasks)
+        .await
+}
+
+#[tauri::command]
+async fn create_personal_task(
+    state: State<'_, CourseState>,
+    task: PersonalTask,
+) -> Result<PersonalTask, String> {
+    state
+        .run_in_background("创建个人任务", move |database| {
+            database.create_personal_task(&task)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn update_personal_task(
+    state: State<'_, CourseState>,
+    task: PersonalTask,
+) -> Result<PersonalTask, String> {
+    state
+        .run_in_background("更新个人任务", move |database| {
+            database.update_personal_task(&task)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn set_personal_task_completed(
+    state: State<'_, CourseState>,
+    id: String,
+    completed: bool,
+    updated_at: String,
+) -> Result<PersonalTask, String> {
+    state
+        .run_in_background("更新个人任务状态", move |database| {
+            database.set_personal_task_completed(&id, completed, &updated_at)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn delete_personal_task(state: State<'_, CourseState>, id: String) -> Result<(), String> {
+    state
+        .run_in_background("删除个人任务", move |database| {
+            database.delete_personal_task(&id)
         })
         .await
 }
@@ -842,6 +896,11 @@ pub fn run() {
             load_academic_tasks,
             save_academic_task,
             delete_academic_task,
+            load_personal_tasks,
+            create_personal_task,
+            update_personal_task,
+            set_personal_task_completed,
+            delete_personal_task,
             load_exams,
             save_exam,
             delete_exam,

@@ -3,10 +3,14 @@ import type { AcademicHubTab, AppRoute, LocalDate, NavigationTarget } from "./ty
 export type AcademicRoute = Extract<AppRoute, { area: "academic" }>;
 export type ProductMode = "workspace" | "academic";
 export type ShellRouteView =
-  "workspace-home" | "academic-schedule" | "academic-hub" | "unsupported";
+  "workspace-home" | "workspace-tasks" | "academic-schedule" | "academic-hub" | "unsupported";
 
 export function createWorkspaceHomeTarget(): NavigationTarget {
   return { route: { area: "workspace", page: "home" } };
+}
+
+export function createWorkspaceTasksTarget(): NavigationTarget {
+  return { route: { area: "workspace", page: "tasks" } };
 }
 
 export function createAcademicScheduleTarget(): NavigationTarget {
@@ -23,7 +27,9 @@ export function routeForProductMode(
 
 export function getShellRouteView(route: AppRoute): ShellRouteView {
   if (route.area === "workspace") {
-    return route.page === "home" ? "workspace-home" : "unsupported";
+    if (route.page === "home") return "workspace-home";
+    if (route.page === "tasks") return "workspace-tasks";
+    return "unsupported";
   }
   if (route.area === "settings") return "unsupported";
   return route.page === "schedule" ? "academic-schedule" : "academic-hub";

@@ -7,10 +7,11 @@ use std::{
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::models::{
-    default_widget_settings, merge_widget_settings, validate_period_times,
+    default_widget_settings, merge_widget_settings, parse_date, parse_time, validate_period_times,
     validate_reminder_settings, validate_term_config, validate_widget_settings, AcademicTask,
     AcademicTaskStatus, Course, CourseOverride, CourseOverrideKind, Exam, ExamStatus, PeriodTime,
-    ReminderSettings, Semester, SemesterStatus, TermConfig, WidgetSettings, WidgetSettingsPatch,
+    PersonalTask, PersonalTaskPriority, PersonalTaskStatus, ReminderSettings, Semester,
+    SemesterStatus, TermConfig, WidgetSettings, WidgetSettingsPatch,
 };
 
 const CURRENT_SCHEMA_VERSION: i64 = 6;
@@ -1038,6 +1039,114 @@ impl CourseDatabase {
         Ok(())
     }
 
+    pub fn load_personal_tasks(&self) -> Result<Vec<PersonalTask>, StorageError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, title, description, status, priority, deadline_date, deadline_time,
+                    created_at, updated_at, completed_at
+             FROM personal_tasks
+             ORDER BY status, deadline_date IS NULL, deadline_date, deadline_time IS NULL,
+                      deadline_time, id",
+        )?;
+        let mut rows = statement.query([])?;
+        let mut tasks = Vec::new();
+        while let Some(row) = rows.next()? {
+            tasks.push(row_to_personal_task(row)?);
+        }
+        Ok(tasks)
+    }
+
+    pub fn create_personal_task(&self, task: &PersonalTask) -> Result<PersonalTask, StorageError> {
+        validate_personal_task(task)?;
+        self.connection.execute(
+            "INSERT INTO personal_tasks
+             (id, title, description, status, priority, deadline_date, deadline_time,
+              created_at, updated_at, completed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                &task.id,
+                &task.title,
+                &task.description,
+                personal_task_status_value(&task.status),
+                personal_task_priority_value(&task.priority),
+                &task.deadline_date,
+                &task.deadline_time,
+                &task.created_at,
+                &task.updated_at,
+                &task.completed_at,
+            ],
+        )?;
+        self.load_personal_task(&task.id)
+    }
+
+    pub fn update_personal_task(&self, task: &PersonalTask) -> Result<PersonalTask, StorageError> {
+        validate_personal_task(task)?;
+        if self.connection.execute(
+            "UPDATE personal_tasks
+             SET title=?2, description=?3, status=?4, priority=?5, deadline_date=?6,
+                 deadline_time=?7, updated_at=?8, completed_at=?9
+             WHERE id=?1",
+            params![
+                &task.id,
+                &task.title,
+                &task.description,
+                personal_task_status_value(&task.status),
+                personal_task_priority_value(&task.priority),
+                &task.deadline_date,
+                &task.deadline_time,
+                &task.updated_at,
+                &task.completed_at,
+            ],
+        )? == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        self.load_personal_task(&task.id)
+    }
+
+    pub fn set_personal_task_completed(
+        &self,
+        id: &str,
+        completed: bool,
+        updated_at: &str,
+    ) -> Result<PersonalTask, StorageError> {
+        if id.trim().is_empty() || updated_at.trim().is_empty() {
+            return Err(StorageError::InvalidData("个人任务状态信息无效".into()));
+        }
+        let status = if completed { "COMPLETED" } else { "OPEN" };
+        let completed_at = completed.then_some(updated_at);
+        if self.connection.execute(
+            "UPDATE personal_tasks SET status=?2, completed_at=?3, updated_at=?4 WHERE id=?1",
+            params![id, status, completed_at, updated_at],
+        )? == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        self.load_personal_task(id)
+    }
+
+    pub fn delete_personal_task(&self, id: &str) -> Result<(), StorageError> {
+        if id.trim().is_empty()
+            || self
+                .connection
+                .execute("DELETE FROM personal_tasks WHERE id=?1", [id])?
+                == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        Ok(())
+    }
+
+    fn load_personal_task(&self, id: &str) -> Result<PersonalTask, StorageError> {
+        self.connection
+            .query_row(
+                "SELECT id, title, description, status, priority, deadline_date, deadline_time,
+                        created_at, updated_at, completed_at FROM personal_tasks WHERE id=?1",
+                [id],
+                row_to_personal_task,
+            )
+            .map_err(StorageError::from)
+    }
+
     pub fn load_exams(&self, semester_id: &str) -> Result<Vec<Exam>, StorageError> {
         let mut statement = self.connection.prepare(
             "SELECT id, semester_id, course_id, title, starts_at, ends_at, location, seat_info,
@@ -1152,6 +1261,46 @@ fn validate_academic_task(value: &AcademicTask) -> Result<(), StorageError> {
     Ok(())
 }
 
+fn validate_personal_task(value: &PersonalTask) -> Result<(), StorageError> {
+    if value.id.trim().is_empty()
+        || value.id.trim() != value.id
+        || value.title.trim().is_empty()
+        || value.title.chars().count() > 200
+        || value
+            .description
+            .as_ref()
+            .is_some_and(|text| text.chars().count() > 5000)
+        || value.created_at.trim().is_empty()
+        || value.updated_at.trim().is_empty()
+    {
+        return Err(StorageError::InvalidData("个人任务信息无效".into()));
+    }
+    if value
+        .description
+        .as_ref()
+        .is_some_and(|text| text.trim().is_empty())
+    {
+        return Err(StorageError::InvalidData("任务描述不能为空白字符".into()));
+    }
+    if let Some(date) = &value.deadline_date {
+        parse_date(date).map_err(StorageError::InvalidData)?;
+    }
+    if let Some(time) = &value.deadline_time {
+        parse_time(time).map_err(StorageError::InvalidData)?;
+        if value.deadline_date.is_none() {
+            return Err(StorageError::InvalidData(
+                "截止时间必须同时填写截止日期".into(),
+            ));
+        }
+    }
+    match (&value.status, &value.completed_at) {
+        (PersonalTaskStatus::Open, None) => {}
+        (PersonalTaskStatus::Completed, Some(timestamp)) if !timestamp.trim().is_empty() => {}
+        _ => return Err(StorageError::InvalidData("个人任务完成状态无效".into())),
+    }
+    Ok(())
+}
+
 fn validate_exam(value: &Exam) -> Result<(), StorageError> {
     if value.id.trim().is_empty()
         || value.semester_id.trim().is_empty()
@@ -1192,6 +1341,22 @@ fn academic_task_status_value(value: &AcademicTaskStatus) -> &'static str {
     match value {
         AcademicTaskStatus::Todo => "TODO",
         AcademicTaskStatus::Completed => "COMPLETED",
+    }
+}
+
+fn personal_task_status_value(value: &PersonalTaskStatus) -> &'static str {
+    match value {
+        PersonalTaskStatus::Open => "OPEN",
+        PersonalTaskStatus::Completed => "COMPLETED",
+    }
+}
+
+fn personal_task_priority_value(value: &PersonalTaskPriority) -> &'static str {
+    match value {
+        PersonalTaskPriority::None => "NONE",
+        PersonalTaskPriority::Low => "LOW",
+        PersonalTaskPriority::Medium => "MEDIUM",
+        PersonalTaskPriority::High => "HIGH",
     }
 }
 
@@ -1299,6 +1464,33 @@ fn row_to_academic_task(row: &Row<'_>) -> rusqlite::Result<AcademicTask> {
     })
 }
 
+fn row_to_personal_task(row: &Row<'_>) -> rusqlite::Result<PersonalTask> {
+    let status = match row.get::<_, String>(3)?.as_str() {
+        "OPEN" => PersonalTaskStatus::Open,
+        "COMPLETED" => PersonalTaskStatus::Completed,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+    };
+    let priority = match row.get::<_, String>(4)?.as_str() {
+        "NONE" => PersonalTaskPriority::None,
+        "LOW" => PersonalTaskPriority::Low,
+        "MEDIUM" => PersonalTaskPriority::Medium,
+        "HIGH" => PersonalTaskPriority::High,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+    };
+    Ok(PersonalTask {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        description: row.get(2)?,
+        status,
+        priority,
+        deadline_date: row.get(5)?,
+        deadline_time: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+        completed_at: row.get(9)?,
+    })
+}
+
 fn row_to_exam(row: &Row<'_>) -> rusqlite::Result<Exam> {
     let status: String = row.get(9)?;
     let status = match status.as_str() {
@@ -1349,6 +1541,21 @@ mod tests {
         }
     }
 
+    fn personal_task(id: &str) -> PersonalTask {
+        PersonalTask {
+            id: id.into(),
+            title: "准备材料".into(),
+            description: Some("整理需要提交的材料".into()),
+            status: PersonalTaskStatus::Open,
+            priority: PersonalTaskPriority::Medium,
+            deadline_date: Some("2026-09-24".into()),
+            deadline_time: None,
+            created_at: "2026-09-23T08:00:00.000Z".into(),
+            updated_at: "2026-09-23T08:00:00.000Z".into(),
+            completed_at: None,
+        }
+    }
+
     fn temporary_database_path() -> std::path::PathBuf {
         let root = std::env::temp_dir().join(format!(
             "ntu-course-assistant-{}-{}",
@@ -1367,6 +1574,98 @@ mod tests {
         ));
         fs::create_dir_all(&root).expect("create isolated test directory");
         root
+    }
+
+    #[test]
+    fn personal_task_crud_completion_and_reopen_survive_database_reopen() {
+        let path = temporary_database_path();
+        let original = personal_task("personal-task-1");
+        {
+            let database = CourseDatabase::open(&path).expect("create planner database");
+            assert_eq!(database.create_personal_task(&original).unwrap(), original);
+
+            let updated = PersonalTask {
+                title: "准备最终材料".into(),
+                priority: PersonalTaskPriority::High,
+                deadline_time: Some("17:30".into()),
+                updated_at: "2026-09-23T09:00:00.000Z".into(),
+                ..original.clone()
+            };
+            assert_eq!(database.update_personal_task(&updated).unwrap(), updated);
+            assert_eq!(
+                database.load_personal_tasks().unwrap(),
+                vec![updated.clone()]
+            );
+
+            let completed = database
+                .set_personal_task_completed(&updated.id, true, "2026-09-23T10:00:00.000Z")
+                .unwrap();
+            assert_eq!(completed.status, PersonalTaskStatus::Completed);
+            assert_eq!(
+                completed.completed_at.as_deref(),
+                Some("2026-09-23T10:00:00.000Z")
+            );
+
+            let reopened = database
+                .set_personal_task_completed(&updated.id, false, "2026-09-23T11:00:00.000Z")
+                .unwrap();
+            assert_eq!(reopened.status, PersonalTaskStatus::Open);
+            assert_eq!(reopened.completed_at, None);
+            assert_eq!(reopened.created_at, original.created_at);
+        }
+
+        let database = CourseDatabase::open(&path).expect("reopen planner database");
+        let saved = database.load_personal_tasks().unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].status, PersonalTaskStatus::Open);
+        assert_eq!(saved[0].title, "准备最终材料");
+        database.delete_personal_task(&saved[0].id).unwrap();
+        assert!(database.load_personal_tasks().unwrap().is_empty());
+        assert!(database.delete_personal_task(&saved[0].id).is_err());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn deleting_personal_task_cascades_to_time_blocks() {
+        let database = database();
+        let task = personal_task("personal-task-cascade");
+        database.create_personal_task(&task).unwrap();
+        database
+            .connection
+            .execute(
+                "INSERT INTO time_blocks
+                 (id, personal_task_id, date, start_time, end_time, created_at, updated_at)
+                 VALUES ('block-1', ?1, '2026-09-24', '10:00', '11:00', 'now', 'now')",
+                [&task.id],
+            )
+            .unwrap();
+        database.delete_personal_task(&task.id).unwrap();
+        let block_count: i64 = database
+            .connection
+            .query_row("SELECT COUNT(*) FROM time_blocks", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(block_count, 0);
+    }
+
+    #[test]
+    fn personal_task_storage_rejects_invalid_deadlines_and_completion_state() {
+        let database = database();
+        let mut invalid = personal_task("invalid-time-only");
+        invalid.deadline_date = None;
+        invalid.deadline_time = Some("09:30".into());
+        assert!(database.create_personal_task(&invalid).is_err());
+
+        invalid.id = "invalid-date".into();
+        invalid.deadline_time = None;
+        invalid.deadline_date = Some("2026-02-30".into());
+        assert!(database.create_personal_task(&invalid).is_err());
+
+        invalid.id = "invalid-completion".into();
+        invalid.deadline_date = None;
+        invalid.status = PersonalTaskStatus::Completed;
+        invalid.completed_at = None;
+        assert!(database.create_personal_task(&invalid).is_err());
+        assert!(database.load_personal_tasks().unwrap().is_empty());
     }
 
     fn create_populated_schema_five_database(path: &Path) {

@@ -6,6 +6,7 @@ import {
   createAcademicTaskTarget,
   createExamTarget,
   createWorkspaceHomeTarget,
+  createWorkspaceTasksTarget,
   getAcademicHubTab,
   getShellRouteView,
   isAcademicRoute,
@@ -20,6 +21,9 @@ test("workspace home and academic schedule targets use typed routes", () => {
   });
   assert.deepEqual(createAcademicScheduleTarget(), {
     route: { area: "academic", page: "schedule" },
+  });
+  assert.deepEqual(createWorkspaceTasksTarget(), {
+    route: { area: "workspace", page: "tasks" },
   });
 });
 
@@ -95,10 +99,10 @@ test("product mode remembers the last Academic page and defaults to the schedule
 
 test("only implemented routes are classified as page content; future routes stay unsupported", () => {
   assert.equal(getShellRouteView({ area: "workspace", page: "home" }), "workspace-home");
+  assert.equal(getShellRouteView({ area: "workspace", page: "tasks" }), "workspace-tasks");
   assert.equal(getShellRouteView({ area: "academic", page: "schedule" }), "academic-schedule");
   assert.equal(getShellRouteView({ area: "academic", page: "exams" }), "academic-hub");
   assert.equal(getShellRouteView({ area: "academic", page: "tasks-legacy" }), "academic-hub");
   assert.equal(getShellRouteView({ area: "workspace", page: "diary" }), "unsupported");
-  assert.equal(getShellRouteView({ area: "workspace", page: "tasks" }), "unsupported");
   assert.equal(getShellRouteView({ area: "settings", page: "main" }), "unsupported");
 });

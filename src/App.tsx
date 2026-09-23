@@ -83,6 +83,7 @@ import type { AcademicRoute } from "./navigation/navigation.ts";
 import type { AppRoute } from "./navigation/types.ts";
 import { AppShell } from "./shell/index.ts";
 import { WorkspaceDashboard } from "./workspace/dashboard/WorkspaceDashboard.tsx";
+import { WorkspaceTasksPage } from "./workspace/tasks/WorkspaceTasksPage.tsx";
 
 interface PdfImportResult {
   readonly inserted: number;
@@ -148,6 +149,7 @@ export function App() {
   const isScheduleView = routeView === "academic-schedule";
   const isAcademicHubPage = routeView === "academic-hub";
   const isWorkspaceHome = routeView === "workspace-home";
+  const isWorkspaceTasks = routeView === "workspace-tasks";
   const isUnsupportedRoute = routeView === "unsupported";
   const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
   const [dayCount, setDayCount] = useState<5 | 7>(7);
@@ -934,6 +936,11 @@ export function App() {
         <WorkspaceDashboard
           ready={storageStatus === "ready"}
           storageError={storageStatus === "error" ? storageMessage : ""}
+          termConfig={reminderConfiguration.termConfig}
+          onNavigate={navigateToRoute}
+        />
+      ) : isWorkspaceTasks && storageStatus === "ready" ? (
+        <WorkspaceTasksPage
           termConfig={reminderConfiguration.termConfig}
           onNavigate={navigateToRoute}
         />

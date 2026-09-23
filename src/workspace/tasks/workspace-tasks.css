@@ -1,0 +1,305 @@
+.workspace-tasks-page {
+  display: flex;
+  width: min(100%, 1120px);
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-self: center;
+  gap: var(--space-4);
+  overflow: auto;
+  padding: var(--space-4) var(--space-2) var(--space-6);
+}
+
+.workspace-tasks-heading,
+.workspace-task-row,
+.workspace-task-row-title,
+.workspace-task-row-actions,
+.workspace-task-tabs,
+.workspace-task-dialog footer {
+  display: flex;
+  align-items: center;
+}
+
+.workspace-tasks-heading {
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.workspace-tasks-heading h2,
+.workspace-task-dialog h3 {
+  margin: 0;
+  color: var(--text-heading);
+}
+
+.workspace-tasks-heading > div > p:last-child {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+}
+
+.workspace-tasks-eyebrow {
+  margin: 0 0 var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-task-button,
+.workspace-task-row-actions button,
+.workspace-task-academic-link,
+.workspace-task-retry {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  color: var(--text-button);
+  font: inherit;
+}
+
+.workspace-task-button--primary {
+  border-color: var(--accent-border);
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+.workspace-task-button--danger {
+  border-color: var(--border-default);
+  background: var(--danger-subtle);
+  color: var(--danger);
+}
+
+.workspace-task-tabs {
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.workspace-task-tabs button {
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+}
+
+.workspace-task-tabs button[aria-pressed="true"] {
+  border-bottom-color: var(--accent-border);
+  color: var(--text-heading);
+  font-weight: 650;
+}
+
+.workspace-task-tabs span {
+  margin-left: var(--space-1);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.workspace-personal-task-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.workspace-task-row {
+  min-width: 0;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+}
+
+.workspace-task-complete {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border-default);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+}
+
+.workspace-task-complete--readonly {
+  border-color: transparent;
+}
+
+.workspace-task-row-main {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: var(--space-1);
+}
+
+.workspace-task-row-title {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.workspace-task-row-title strong {
+  overflow-wrap: anywhere;
+  color: var(--text-heading);
+}
+
+.workspace-task-source,
+.workspace-task-priority {
+  color: var(--text-muted);
+  font-size: var(--font-size-caption);
+}
+
+.workspace-personal-task-deadline,
+.workspace-task-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-personal-task-deadline--overdue {
+  color: var(--danger);
+}
+
+.workspace-task-row-actions {
+  flex: 0 0 auto;
+  gap: var(--space-1);
+}
+
+.workspace-task-row-actions button,
+.workspace-task-academic-link,
+.workspace-task-retry {
+  min-height: 32px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-task-empty,
+.workspace-tasks-message {
+  margin: 0;
+  padding: var(--space-5);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-card);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.workspace-task-retry {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+.workspace-task-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: var(--space-4);
+  background: rgb(12 20 17 / 44%);
+}
+
+.workspace-task-dialog {
+  width: min(100%, 560px);
+  max-height: min(90vh, 760px);
+  overflow: auto;
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-dialog);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-medium);
+}
+
+.workspace-task-dialog > header,
+.workspace-task-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.workspace-task-close {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 24px;
+}
+
+.workspace-task-dialog form {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.workspace-task-dialog label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-task-dialog input,
+.workspace-task-dialog textarea,
+.workspace-task-dialog select {
+  width: 100%;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.workspace-task-dialog textarea {
+  resize: vertical;
+}
+
+.workspace-task-deadline-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.workspace-task-hint,
+.workspace-task-dialog > p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-task-error {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  color: var(--danger);
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-task-dialog footer {
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+.workspace-task-button:focus-visible,
+.workspace-task-row button:focus-visible,
+.workspace-task-tabs button:focus-visible,
+.workspace-task-close:focus-visible,
+.workspace-task-dialog input:focus-visible,
+.workspace-task-dialog textarea:focus-visible,
+.workspace-task-dialog select:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (max-width: 700px) {
+  .workspace-task-row {
+    align-items: flex-start;
+  }
+
+  .workspace-task-row-actions {
+    flex-direction: column;
+  }
+}

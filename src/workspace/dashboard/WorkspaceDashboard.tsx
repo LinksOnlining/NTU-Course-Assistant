@@ -8,6 +8,7 @@ import {
   type WorkspaceDashboardViewModel,
 } from "../../application/workspace/index.ts";
 import { layoutTimelineItems } from "../../application/timeline/index.ts";
+import { createWorkspaceTasksTarget } from "../../navigation/navigation.ts";
 import type { AppRoute } from "../../navigation/types.ts";
 import type { TermConfig } from "../../types/reminder.ts";
 import "./workspace-dashboard.css";
@@ -75,7 +76,7 @@ function useDashboardSources(
 }
 
 function taskRoute(): AppRoute {
-  return { area: "workspace", page: "tasks" };
+  return createWorkspaceTasksTarget().route;
 }
 
 function TimelineCard({

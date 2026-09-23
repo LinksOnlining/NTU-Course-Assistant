@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Planner / Personal Task Domain Contract
 
-状态：Phase 2.0 Domain Contract 已冻结；Phase 2.1 Debug DB 隔离与 schema 5→6 迁移实现及验证已完成。后续 Phase 2 实现必须遵守本契约。
+状态：Phase 2.0 Domain Contract 已冻结；Phase 2.1 Debug DB 隔离与 schema 5→6 迁移及 Phase 2.2 PersonalTask 实现、验证已完成。后续 Phase 2 实现必须遵守本契约。
 
 ## 1. 当前实现审计基线
 
@@ -118,6 +118,14 @@ The application validator performs exact Gregorian date and `HH:mm` checks in ad
 - 新鲜数据库直接创建 schema 6；旧 schema 1–5 在迁移前使用 SQLite `VACUUM INTO` 创建并校验一致性备份，备份失败则迁移失败关闭。
 - schema 5→6 的三张表、索引与版本号在单个事务内创建；迁移后校验表、索引、外键、`user_version` 与 `integrity_check`，任一失败则回滚。
 - Phase 2.1 结果与自动验证见 `docs/v2-phase-2.1-verification.md`。
+
+### Phase 2.2 PersonalTask 实施
+
+- PersonalTask CRUD 已通过 Application use cases 与 storage adapter 暴露给 Workspace Tasks；个人任务和 AcademicTask 在同一页面分组呈现，但 AcademicTask 保持只读并链接回 Academic 管理入口。
+- 状态仅为 `open | completed`；完成可从已完成列表重新打开。任务删除前明确确认关联 TimeBlock 将级联删除。日期、日期+时间、无截止日期均受支持；单独设置时间会被拒绝。
+- Deadline、逾期分组、自然日期标签、排序及表单校验位于 `src/application/planner/personal-tasks.ts`；Workspace presentation 不直接调用 Tauri 或访问存储。
+- PersonalTask deadline 不生成 TimelineItem；对应保护测试位于 `tests/architecture/planner-application-boundary.test.mjs`。
+- Phase 2.2 自动验证见 `docs/v2-phase-2.2-verification.md`。
 
 ### Migration safety sequence
 
