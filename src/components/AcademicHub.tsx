@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { resolveCourseOccurrences } from "../core/course-occurrence.ts";
+import { loadAcademicHubData, resolveAcademicOccurrences } from "../application/academic/index.ts";
 import { getTodayDashboard } from "../core/today-dashboard.ts";
 import { summarizeCourseChanges } from "../core/course-change.ts";
 import { getShanghaiDate, getShanghaiTime, getTeachingWeek } from "../core/reminder.ts";
@@ -9,10 +9,6 @@ import {
   archiveSemester,
   deleteAcademicTask,
   deleteExam,
-  loadAcademicTasks,
-  loadCourseOverrides,
-  loadExams,
-  loadSemesters,
   revokeCourseOverride,
   saveAcademicTask,
   saveCourseOverride,
@@ -103,7 +99,7 @@ function makeSemester(termConfig: TermConfig): Semester {
 }
 
 function makeOverride(
-  occurrence: ReturnType<typeof resolveCourseOccurrences>[number],
+  occurrence: ReturnType<typeof resolveAcademicOccurrences>[number],
   kind: CourseOverrideKind,
   targetDate: string | null,
   startTime: string | null,
@@ -134,8 +130,8 @@ function makeOverride(
 }
 
 function confirmScheduleConflict(
-  occurrences: readonly ReturnType<typeof resolveCourseOccurrences>[number][],
-  source: ReturnType<typeof resolveCourseOccurrences>[number],
+  occurrences: readonly ReturnType<typeof resolveAcademicOccurrences>[number][],
+  source: ReturnType<typeof resolveAcademicOccurrences>[number],
   date: string,
   startTime: string,
   endTime: string,
@@ -177,7 +173,7 @@ type CourseChangeEditor = {
 interface CourseChangePageStateOptions {
   readonly tab: AcademicHubTab;
   readonly courses: readonly Course[];
-  readonly occurrences: readonly ReturnType<typeof resolveCourseOccurrences>[number][];
+  readonly occurrences: readonly ReturnType<typeof resolveAcademicOccurrences>[number][];
   readonly overrides: readonly CourseOverride[];
   readonly setOverrides: Dispatch<SetStateAction<readonly CourseOverride[]>>;
   readonly semester: Semester | null;
@@ -313,7 +309,7 @@ function useCourseChangePageState({
   }
 
   function openChangeEditor(
-    item: ReturnType<typeof resolveCourseOccurrences>[number],
+    item: ReturnType<typeof resolveAcademicOccurrences>[number],
     kind: Exclude<CourseOverrideKind, "CANCEL">,
   ) {
     setChangeOccurrenceKey(item.occurrenceKey);
@@ -332,7 +328,7 @@ function useCourseChangePageState({
     setChangeEditor((current) => (current ? { ...current, ...patch } : current));
   }
 
-  function submitChangeEditor(item: ReturnType<typeof resolveCourseOccurrences>[number]) {
+  function submitChangeEditor(item: ReturnType<typeof resolveAcademicOccurrences>[number]) {
     const editor = changeEditor;
     if (!editor || editor.occurrenceKey !== item.occurrenceKey || !semester) return;
     if (editor.kind !== "MODIFY" && (!editor.targetDate || !editor.startTime || !editor.endTime))
@@ -425,6 +421,7 @@ export function AcademicHub({
   const [examCourseId, setExamCourseId] = useState("");
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
   const activeTabRef = useRef(tab);
+  const initiallyLoadedSemesterId = useRef<string | null>(null);
   activeTabRef.current = tab;
 
   useEffect(() => {
@@ -433,18 +430,25 @@ export function AcademicHub({
 
   useEffect(() => {
     let active = true;
-    void loadSemesters()
-      .then(async (items) => {
+    void loadAcademicHubData()
+      .then(async (loadedData) => {
         if (!active) return;
+        let nextData = loadedData;
+        const items = loadedData.semesters;
         let nextItems = [...items];
         let next = nextItems.find((item) => item.status === "ACTIVE") ?? null;
         if (!next && termConfig) {
           next = await saveSemester(makeSemester(termConfig));
           nextItems = [next, ...nextItems];
+          nextData = await loadAcademicHubData({ semesterId: next.id });
         }
         if (active) {
+          initiallyLoadedSemesterId.current = next?.id ?? null;
           setSemesters(nextItems);
           setSemester(next);
+          setOverrides(nextData.overrides);
+          setTasks(nextData.tasks);
+          setExams(nextData.exams);
         }
       })
       .catch(
@@ -458,18 +462,19 @@ export function AcademicHub({
 
   useEffect(() => {
     if (!semester) {
+      initiallyLoadedSemesterId.current = null;
       setOverrides([]);
       setTasks([]);
       setExams([]);
       return;
     }
+    if (initiallyLoadedSemesterId.current === semester.id) {
+      initiallyLoadedSemesterId.current = null;
+      return;
+    }
     let active = true;
-    void Promise.all([
-      loadCourseOverrides(semester.id),
-      loadAcademicTasks(semester.id),
-      loadExams(semester.id),
-    ])
-      .then(([nextOverrides, nextTasks, nextExams]) => {
+    void loadAcademicHubData({ semesterId: semester.id })
+      .then(({ overrides: nextOverrides, tasks: nextTasks, exams: nextExams }) => {
         if (!active) return;
         setOverrides(nextOverrides);
         setTasks(nextTasks);
@@ -486,7 +491,7 @@ export function AcademicHub({
 
   const occurrences = useMemo(
     () =>
-      semester ? resolveCourseOccurrences(courses, semester, overrides, undefined, periods) : [],
+      semester ? resolveAcademicOccurrences(courses, semester, overrides, undefined, periods) : [],
     [courses, overrides, periods, semester],
   );
   const nowDate = getShanghaiDate(Date.now());

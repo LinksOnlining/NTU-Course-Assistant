@@ -20,7 +20,7 @@
 
 ## 7.5 Academic Adapter Strategy
 
-Phase 1.0 审计发现的候选 seam：`resolveCourseOccurrences`、`getTodayDashboard`、`loadSemesters`、`loadAcademicTasks`、`loadExams`、`loadCourseOverrides`、`buildUnifiedReminderPlans`。它们是现有实现的包装入口候选，不代表要立即重写成新的 API。未来由新增 Academic Application Adapter 包装稳定能力。
+Phase 1.0 审计发现的候选 seam：`resolveCourseOccurrences`、`getTodayDashboard`、`loadSemesters`、`loadAcademicTasks`、`loadExams`、`loadCourseOverrides`、`buildUnifiedReminderPlans`。Phase 1.3 已在 `src/application/academic/` 建立首阶段读取边界：`loadAcademicScheduleData`、`loadAcademicHubData` 与 `resolveAcademicOccurrences`。App 和 AcademicHub 的 Academic 读取经此 API 组合既有 storage service；occurrence 解析直接委托稳定的 `resolveCourseOccurrences`。Academic 写入仍由既有组件调用 storage service，Widget 与 Reminder 消费者尚未迁移，均为刻意保留的增量边界，不表示持久化层已重写。
 
 ## 7.6 Navigation Contract
 

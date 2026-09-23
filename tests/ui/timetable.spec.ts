@@ -1864,6 +1864,26 @@ test("unsupported database version leaves the app usable but disables writes", a
           if (command === "load_courses") {
             throw "本地课程数据暂时无法加载：数据库来自较新版本，请升级应用后重试。";
           }
+          if (command === "load_period_times") return null;
+          if (command === "load_reminder_configuration") {
+            return {
+              termConfig: null,
+              reminderSettings: { enabled: false, advanceMinutes: 15 },
+              warnings: [],
+            };
+          }
+          if (command === "load_widget_settings") {
+            return {
+              enabled: false,
+              displayMode: "today",
+              locked: false,
+              x: null,
+              y: null,
+              width: null,
+              height: null,
+            };
+          }
+          if (command === "load_day_count") return 7;
           throw "存储不可用";
         },
       },

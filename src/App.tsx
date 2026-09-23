@@ -13,6 +13,11 @@ import {
 } from "./core/import-proposal.ts";
 import { getTimelineBounds, resolveCourseTime } from "./core/period-time.ts";
 import { resolveCourseOccurrences } from "./core/course-occurrence.ts";
+import {
+  loadAcademicHubData,
+  loadAcademicScheduleData,
+  resolveAcademicOccurrences,
+} from "./application/academic/index.ts";
 import { buildUnifiedReminderPlans } from "./core/reminder-v2.ts";
 import { courseTiming, layoutCourses } from "./core/timetable-layout.ts";
 import { parseNtuPdfTimetable } from "./importers/ntu-pdf/parse.ts";
@@ -33,8 +38,6 @@ import {
   importStoredCourses,
   loadHandledReminderKeys,
   insertStoredCourse,
-  loadStoredCourses,
-  loadStoredPeriodTimes,
   loadStoredDayCount,
   loadStoredReminderConfiguration,
   loadStoredWidgetSettings,
@@ -67,12 +70,6 @@ import type { AcademicTask } from "./types/academic-task.ts";
 import type { CourseOverride } from "./types/course-override.ts";
 import type { Exam } from "./types/exam.ts";
 import type { Semester } from "./types/semester.ts";
-import {
-  loadAcademicTasks,
-  loadCourseOverrides,
-  loadExams,
-  loadSemesters,
-} from "./services/academic-storage.ts";
 import {
   createAcademicScheduleTarget,
   createWorkspaceHomeTarget,
@@ -200,7 +197,7 @@ export function App() {
   const canonicalOccurrences = useMemo(
     () =>
       activeSemester
-        ? resolveCourseOccurrences(courses, activeSemester, academicOverrides, undefined, periods)
+        ? resolveAcademicOccurrences(courses, activeSemester, academicOverrides, undefined, periods)
         : hasAcademicSemesters
           ? []
           : null,
@@ -251,7 +248,10 @@ export function App() {
   );
 
   async function refreshAcademicData() {
-    const items = await loadSemesters();
+    const data = await loadAcademicHubData({
+      fallbackSemesterId: reminderConfiguration.termConfig ? "legacy-active-semester" : undefined,
+    });
+    const items = data.semesters;
     setHasAcademicSemesters(items.length > 0);
     const active =
       items.find((item) => item.status === "ACTIVE") ??
@@ -268,20 +268,9 @@ export function App() {
           }
         : null);
     setActiveSemester(active);
-    if (!active) {
-      setAcademicOverrides([]);
-      setAcademicTasks([]);
-      setAcademicExams([]);
-      return;
-    }
-    const [nextOverrides, nextTasks, nextExams] = await Promise.all([
-      loadCourseOverrides(active.id),
-      loadAcademicTasks(active.id),
-      loadExams(active.id),
-    ]);
-    setAcademicOverrides(nextOverrides);
-    setAcademicTasks(nextTasks);
-    setAcademicExams(nextExams);
+    setAcademicOverrides(data.overrides);
+    setAcademicTasks(data.tasks);
+    setAcademicExams(data.exams);
   }
 
   useEffect(() => {
@@ -365,58 +354,49 @@ export function App() {
   useEffect(() => {
     let active = true;
     void Promise.all([
-      loadStoredCourses(),
-      loadStoredPeriodTimes(),
+      loadAcademicScheduleData(),
       loadStoredReminderConfiguration(),
       loadStoredWidgetSettings(),
       loadStoredDayCount(),
     ])
-      .then(
-        ([
-          result,
-          storedPeriods,
-          storedReminderConfiguration,
-          storedWidgetSettings,
-          storedDayCount,
-        ]) => {
-          if (!active) return;
-          const activePeriods = storedPeriods ?? TEST_TIMETABLE.periods;
-          setPeriods(activePeriods);
-          setIsUsingTestSchedule(storedPeriods === null);
-          setPeriodMessage(
-            storedPeriods === null
-              ? "尚未确认作息时间，请在设置中保存你的实际作息。"
-              : "已使用自定义作息。",
-          );
-          const displayAxis = getTimelineBounds(TEST_TIMETABLE.axis, activePeriods);
-          const warnings = [...result.warnings, ...storedReminderConfiguration.warnings];
-          setReminderConfiguration({
-            termConfig: storedReminderConfiguration.termConfig,
-            reminderSettings: storedReminderConfiguration.reminderSettings,
-          });
-          setWidgetSettings(storedWidgetSettings);
-          setDayCount(storedDayCount);
-          const renderableCourses = result.courses.filter((course) => {
-            const time = resolveCourseTime(course, storedPeriods ?? []);
-            if (time === null) {
-              warnings.push(
-                `课程“${course.name}”的节次无法由当前作息解析，暂不显示，请检查作息设置。`,
-              );
-              return true;
-            }
-            try {
-              courseTiming({ ...course, ...time }, displayAxis);
-              return true;
-            } catch {
-              warnings.push(`课程“${course.name}”超出当前显示范围，已跳过且未修改原数据。`);
-              return false;
-            }
-          });
-          setUserCourses(renderableCourses);
-          setStorageMessage(warnings.join(" "));
-          setStorageStatus("ready");
-        },
-      )
+      .then(([scheduleData, storedReminderConfiguration, storedWidgetSettings, storedDayCount]) => {
+        if (!active) return;
+        const activePeriods = scheduleData.periodTimes ?? TEST_TIMETABLE.periods;
+        setPeriods(activePeriods);
+        setIsUsingTestSchedule(scheduleData.periodTimes === null);
+        setPeriodMessage(
+          scheduleData.periodTimes === null
+            ? "尚未确认作息时间，请在设置中保存你的实际作息。"
+            : "已使用自定义作息。",
+        );
+        const displayAxis = getTimelineBounds(TEST_TIMETABLE.axis, activePeriods);
+        const warnings = [...scheduleData.warnings, ...storedReminderConfiguration.warnings];
+        setReminderConfiguration({
+          termConfig: storedReminderConfiguration.termConfig,
+          reminderSettings: storedReminderConfiguration.reminderSettings,
+        });
+        setWidgetSettings(storedWidgetSettings);
+        setDayCount(storedDayCount);
+        const renderableCourses = scheduleData.courses.filter((course) => {
+          const time = resolveCourseTime(course, scheduleData.periodTimes ?? []);
+          if (time === null) {
+            warnings.push(
+              `课程“${course.name}”的节次无法由当前作息解析，暂不显示，请检查作息设置。`,
+            );
+            return true;
+          }
+          try {
+            courseTiming({ ...course, ...time }, displayAxis);
+            return true;
+          } catch {
+            warnings.push(`课程“${course.name}”超出当前显示范围，已跳过且未修改原数据。`);
+            return false;
+          }
+        });
+        setUserCourses(renderableCourses);
+        setStorageMessage(warnings.join(" "));
+        setStorageStatus("ready");
+      })
       .catch((error: unknown) => {
         if (!active) return;
         setStorageMessage(error instanceof Error ? error.message : "本地课程数据库不可用。");
