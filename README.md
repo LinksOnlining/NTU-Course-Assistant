@@ -19,7 +19,7 @@ Windows 10 本地课程表与学习中心：管理课程、课表变化、任务
 ## 系统要求与安装
 
 - Windows 10 是当前主要实际运行与验收环境，Windows 11 作为兼容目标。
-- 从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 下载 `NTU Course Assistant_1.3.1_x64-setup.exe`，按安装向导完成安装后，从开始菜单启动应用。当前版本未进行 Windows Authenticode 商业代码签名，Windows 可能显示未知发布者提示。
+- 从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 下载 `NTU.Course.Assistant_1.3.1_x64-setup.exe`，按安装向导完成安装后，从开始菜单启动应用。当前版本未进行 Windows Authenticode 商业代码签名，Windows 可能显示未知发布者提示。
 - 首次使用请在“设置”中确认作息时间、学期首周和提醒选项。
 
 ## 使用说明
