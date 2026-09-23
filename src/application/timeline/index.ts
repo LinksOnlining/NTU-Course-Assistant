@@ -1,5 +1,16 @@
 export { projectAcademicOccurrencesToTimelineItems } from "./academic-timeline.ts";
 export {
+  computeFreeTimeIntervals,
+  effectiveOccupancy,
+  findTimelineConflicts,
+  formatTimelineMinute,
+  moveTimelineInterval,
+  PLANNER_POINTER_MIN_DURATION,
+  PLANNER_POINTER_SNAP_MINUTES,
+  resizeTimelineInterval,
+} from "./planner-interactions.ts";
+export type { MinuteInterval, ResizeEdge } from "./planner-interactions.ts";
+export {
   projectPlannerEventsToTimelineItems,
   projectTimeBlocksToTimelineItems,
 } from "./planner-timeline.ts";

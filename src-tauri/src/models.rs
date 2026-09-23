@@ -554,7 +554,11 @@ fn validate_planner_interval(
 ) -> Result<(), String> {
     parse_date(date)?;
     let start = parse_time(start_time)?;
-    let end = parse_time(end_time)?;
+    let end = if end_time == "24:00" {
+        24 * 60
+    } else {
+        parse_time(end_time)?
+    };
     if start == end {
         return Err("结束时间必须晚于开始时间".into());
     }
@@ -690,6 +694,19 @@ mod tests {
         };
         assert!(event.validate().is_ok());
         assert!(PlannerEvent {
+            start_time: "23:55".into(),
+            end_time: "24:00".into(),
+            ..event.clone()
+        }
+        .validate()
+        .is_ok());
+        assert!(PlannerEvent {
+            end_time: "24:01".into(),
+            ..event.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(PlannerEvent {
             date: "2026-02-30".into(),
             ..event.clone()
         }
@@ -727,6 +744,13 @@ mod tests {
             updated_at: "2026-09-23T08:00:00.000Z".into(),
         };
         assert!(block.validate().is_ok());
+        assert!(TimeBlock {
+            start_time: "23:55".into(),
+            end_time: "24:00".into(),
+            ..block.clone()
+        }
+        .validate()
+        .is_ok());
         assert!(TimeBlock {
             personal_task_id: " ".into(),
             ..block.clone()

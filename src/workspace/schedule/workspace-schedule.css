@@ -82,10 +82,60 @@
 
 .workspace-schedule-item--plannerEvent,
 .workspace-schedule-item--timeBlock {
+  position: absolute;
   pointer-events: auto;
   font: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.workspace-schedule-item--plannerEvent:active,
+.workspace-schedule-item--timeBlock:active,
+.workspace-schedule-item--dragging {
+  cursor: grabbing;
+  z-index: 4;
+  box-shadow: var(--shadow-medium);
+}
+
+.workspace-schedule-resize-handle {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  left: 0;
+  height: 10px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.workspace-schedule-resize-handle--start {
+  top: 0;
+}
+
+.workspace-schedule-resize-handle--end {
+  bottom: 0;
+}
+
+.workspace-schedule-mutation-error {
+  margin: 0;
+  color: var(--status-danger);
+}
+
+.workspace-schedule-conflict-backdrop {
+  z-index: 100;
+}
+
+.workspace-schedule-conflict-dialog > p {
+  color: var(--text-secondary);
+}
+
+.workspace-schedule-conflict-dialog ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text-primary);
 }
 
 .workspace-schedule-item--plannerEvent {

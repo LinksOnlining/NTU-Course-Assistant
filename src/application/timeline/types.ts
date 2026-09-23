@@ -19,5 +19,8 @@ export interface TimelineItem {
   readonly draggable: boolean;
   readonly resizable: boolean;
   readonly occupiesTime: boolean;
+  /** Planner-only time buffers affect occupancy, never the displayed interval. */
+  readonly bufferBeforeMinutes?: number;
+  readonly bufferAfterMinutes?: number;
   readonly warnings: readonly string[];
 }

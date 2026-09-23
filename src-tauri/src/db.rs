@@ -1998,6 +1998,35 @@ mod tests {
     }
 
     #[test]
+    fn planner_events_and_time_blocks_round_trip_end_of_day_boundary() {
+        let database = database();
+        let task = personal_task("task-end-of-day");
+        database.create_personal_task(&task).unwrap();
+
+        let mut event = planner_event("event-end-of-day", "2026-09-24");
+        event.start_time = "23:55".into();
+        event.end_time = "24:00".into();
+        assert_eq!(database.create_planner_event(&event).unwrap(), event);
+        assert_eq!(
+            database
+                .load_planner_events("2026-09-24", "2026-09-24")
+                .unwrap(),
+            vec![event]
+        );
+
+        let mut block = time_block("block-end-of-day", &task.id, "2026-09-24");
+        block.start_time = "23:55".into();
+        block.end_time = "24:00".into();
+        assert_eq!(database.create_time_block(&block).unwrap(), block);
+        assert_eq!(
+            database
+                .load_time_blocks("2026-09-24", "2026-09-24")
+                .unwrap(),
+            vec![block]
+        );
+    }
+
+    #[test]
     fn planner_storage_rejects_invalid_range_and_cross_midnight_records() {
         let database = database();
         assert!(database

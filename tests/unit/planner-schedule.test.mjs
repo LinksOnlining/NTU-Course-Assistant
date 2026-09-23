@@ -88,6 +88,7 @@ function repository() {
 
 test("PlannerEvent validation accepts local dates, optional fields, and bounded buffers", () => {
   assert.deepEqual(validatePlannerEventDraft(eventDraft), {});
+  assert.deepEqual(validatePlannerEventDraft({ ...eventDraft, endTime: "24:00" }), {});
   assert.equal(
     validatePlannerEventDraft({ ...eventDraft, date: "2026-02-30" }).date,
     "请输入有效的日期。",

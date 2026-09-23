@@ -13,6 +13,10 @@ export function isValidPlannerTime(value: string): boolean {
   return /^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(value);
 }
 
+export function isValidPlannerEndTime(value: string): boolean {
+  return value === "24:00" || isValidPlannerTime(value);
+}
+
 export function validatePlannerDateRange(startDate: string, endDate: string): string | null {
   if (!isValidPlannerDate(startDate) || !isValidPlannerDate(endDate))
     return "请输入有效的日期范围。";

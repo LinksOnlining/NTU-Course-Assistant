@@ -134,7 +134,11 @@ export function TimeBlockEditor({
             <label>
               结束时间
               <input
-                type="time"
+                type="text"
+                inputMode="numeric"
+                maxLength={5}
+                pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]|24:00"
+                placeholder="HH:MM（可填 24:00）"
                 value={draft.endTime}
                 onChange={(input) => update("endTime", input.currentTarget.value)}
                 aria-invalid={Boolean(errors.endTime)}

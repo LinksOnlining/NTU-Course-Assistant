@@ -5,7 +5,12 @@ import type {
   TimeBlock,
   TimeBlockDraft,
 } from "../../types/planner.ts";
-import { isValidPlannerDate, isValidPlannerTime, validatePlannerDateRange } from "./date-time.ts";
+import {
+  isValidPlannerDate,
+  isValidPlannerEndTime,
+  isValidPlannerTime,
+  validatePlannerDateRange,
+} from "./date-time.ts";
 
 export interface PlannerScheduleRepository {
   loadPlannerEvents(startDate: string, endDate: string): Promise<readonly PlannerEvent[]>;
@@ -30,7 +35,7 @@ function validateInterval(
 ): void {
   if (!isValidPlannerDate(date)) errors.date = "请输入有效的日期。";
   if (!isValidPlannerTime(startTime)) errors.startTime = "请输入有效的开始时间。";
-  if (!isValidPlannerTime(endTime)) errors.endTime = "请输入有效的结束时间。";
+  if (!isValidPlannerEndTime(endTime)) errors.endTime = "请输入有效的结束时间。";
   if (!errors.startTime && !errors.endTime) {
     if (startTime === endTime) errors.endTime = "结束时间必须晚于开始时间。";
     else if (startTime > endTime) errors.endTime = "当前版本暂不支持跨午夜日程。";

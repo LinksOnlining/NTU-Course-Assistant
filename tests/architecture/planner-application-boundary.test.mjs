@@ -44,7 +44,7 @@ test("PersonalTask deadlines remain outside the Timeline source adapter", () => 
   assert.doesNotMatch(adapter, /PersonalTask|personal_tasks|deadlineDate/u);
 });
 
-test("PlannerEvent and TimeBlock timeline adapters preserve source identity and real intervals", () => {
+test("PlannerEvent and TimeBlock timeline adapters preserve source identity, real intervals, and buffers", () => {
   const adapter = source("src/application/timeline/planner-timeline.ts");
   assert.match(adapter, /sourceType: "plannerEvent"/u);
   assert.match(adapter, /sourceRef: \{ type: "plannerEvent", id: event\.id \}/u);
@@ -52,7 +52,8 @@ test("PlannerEvent and TimeBlock timeline adapters preserve source identity and 
   assert.match(adapter, /sourceRef: \{ type: "timeBlock", id: block\.id \}/u);
   assert.match(adapter, /startTime: block\.startTime/u);
   assert.match(adapter, /endTime: block\.endTime/u);
-  assert.doesNotMatch(adapter, /bufferBeforeMinutes|bufferAfterMinutes/u);
+  assert.match(adapter, /bufferBeforeMinutes: block\.bufferBeforeMinutes/u);
+  assert.match(adapter, /bufferAfterMinutes: block\.bufferAfterMinutes/u);
   assert.doesNotMatch(adapter, /deadlineDate/u);
 });
 
@@ -65,4 +66,10 @@ test("Planner editors use Application validation and do not reach storage direct
     assert.match(editor, /application\/planner\/planner-schedule\.ts/u);
     assert.doesNotMatch(editor, /services\/planner-storage|@tauri-apps|\bSELECT\b|\bINSERT\b/u);
   }
+});
+
+test("Schedule time changes cannot mutate PersonalTask deadline fields", () => {
+  const page = source("src/workspace/schedule/WorkspaceSchedulePage.tsx");
+  assert.match(page, /updatePlannerEvent|updateTimeBlock/u);
+  assert.doesNotMatch(page, /updatePersonalTask|deadlineDate|deadlineTime/u);
 });

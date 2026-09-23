@@ -19,6 +19,8 @@ export function projectPlannerEventsToTimelineItems(
     draggable: true,
     resizable: true,
     occupiesTime: true,
+    bufferBeforeMinutes: event.bufferBeforeMinutes,
+    bufferAfterMinutes: event.bufferAfterMinutes,
     warnings: [],
   }));
 }
@@ -44,6 +46,8 @@ export function projectTimeBlocksToTimelineItems(
       draggable: true,
       resizable: true,
       occupiesTime: true,
+      bufferBeforeMinutes: block.bufferBeforeMinutes,
+      bufferAfterMinutes: block.bufferAfterMinutes,
       warnings: taskTitle ? [] : ["未找到关联任务名称。"],
     };
   });

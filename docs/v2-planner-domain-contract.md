@@ -135,6 +135,14 @@ The application validator performs exact Gregorian date and `HH:mm` checks in ad
 - `PlannerEventEditor` 与 `TimeBlockEditor` 使用 Planner Application draft 校验；Timeline adapters 为两种来源建立稳定 sourceRef，设为可编辑、可拖动、可 resize、占用时间。
 - Phase 2.3 自动验证见 `docs/v2-phase-2.3-verification.md`。
 
+### Phase 2.5 interactive scheduling
+
+- Only PlannerEvent and TimeBlock accept pointer drag/resize. Drag moves in five-minute increments; resize has a five-minute interaction minimum; both clamp within 00:00–24:00 and never cross into another date. Forms remain the keyboard-accessible editing alternative.
+- `24:00` is accepted only as a planner interval end. It is stored as the same-day boundary; start times and Academic/PeriodTime clocks still use 00:00–23:59.
+- Conflict and free-time functions operate on Timeline projections. Planner buffers expand effective occupancy for those calculations only; displayed/persisted actual start/end are unchanged. Cancelled Academic occurrences do not occupy time; adjacent intervals without a buffer do not conflict.
+- Conflict is a pre-save warning with “仍然保存” / “返回调整”, not a persistence invariant. Editing excludes the same source reference; save failures leave the existing time unchanged.
+- Verification: `docs/v2-phase-2.5-verification.md`.
+
 ### Migration safety sequence
 
 1. Reject unsupported future schema. A fresh version-0 DB follows the existing bootstrap and initializes directly to schema 6 without a legacy backup.
