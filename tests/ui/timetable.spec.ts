@@ -6,6 +6,13 @@ async function box(locator: Locator) {
   return value!;
 }
 
+async function settingsPage(dialog: Locator, name: string) {
+  await dialog
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name, exact: true })
+    .click();
+}
+
 interface CourseFields {
   readonly name: string;
   readonly teacher?: string;
@@ -206,21 +213,21 @@ test("persisted period-based course follows schedule edits without rewriting the
   const time = card.locator(".course-time");
   await expect(time).toHaveText("第1节 · 08:00–08:45");
   await page.getByRole("button", { name: "设置" }).click();
-  let settings = page.getByRole("dialog", { name: "作息时间" });
+  let settings = page.getByRole("dialog", { name: "设置" });
   await settings.getByLabel("第1节开始时间").fill("07:50");
   await settings.getByRole("button", { name: "保存作息" }).click();
   await expect(settings).toHaveCount(0);
   await expect(time).toHaveText("第1节 · 07:50–08:35");
 
   await page.getByRole("button", { name: "设置" }).click();
-  settings = page.getByRole("dialog", { name: "作息时间" });
+  settings = page.getByRole("dialog", { name: "设置" });
   await settings.getByLabel("第1节开始时间").fill("08:10");
   await settings.getByRole("button", { name: "保存作息" }).click();
   await expect(settings).toHaveCount(0);
   await expect(time).toHaveText("第1节 · 08:10–08:55");
 
   await page.getByRole("button", { name: "设置" }).click();
-  settings = page.getByRole("dialog", { name: "作息时间" });
+  settings = page.getByRole("dialog", { name: "设置" });
   await settings.getByLabel("第1节开始时间").fill("07:40");
   await settings.getByRole("button", { name: "保存作息" }).click();
   await expect(settings).toHaveCount(0);
@@ -253,7 +260,8 @@ test("Academic subnavigation stays compact and course changes use a course-first
   page,
 }) => {
   await page.getByRole("button", { name: "设置" }).click();
-  const settings = page.getByRole("dialog", { name: "作息时间" });
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settingsPage(settings, "提醒");
   await settings.getByLabel("第 1 教学周星期一").fill("2026-09-07");
   await settings.getByLabel("总教学周数").fill("16");
   await settings.getByRole("button", { name: "保存作息" }).click();
@@ -361,7 +369,8 @@ test("widget settings default to disabled and save the requested mode and lock",
   page,
 }) => {
   await page.getByRole("button", { name: "设置" }).click();
-  const settings = page.getByRole("dialog", { name: "作息时间" });
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settingsPage(settings, "Widget");
   await expect(settings.getByLabel("启用桌面课程小组件")).not.toBeChecked();
   await settings.getByLabel("启用桌面课程小组件").check();
   await settings.getByLabel("小组件显示模式").selectOption("week");
@@ -592,7 +601,7 @@ test("a user course without stored periods shows time without a fabricated perio
 
 test("period settings save custom proportions and can add a twelfth period", async ({ page }) => {
   await page.getByRole("button", { name: "设置" }).click();
-  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByTestId("period-row")).toHaveCount(11);
   await dialog.getByLabel("第1节结束时间").fill("08:30");
@@ -616,7 +625,7 @@ test("period settings save custom proportions and can add a twelfth period", asy
   await expect(unchangedCourse.locator(".course-time")).toHaveText("第1节 · 08:00–08:30");
 
   await page.getByRole("button", { name: "设置" }).click();
-  const secondDialog = page.getByRole("dialog", { name: "作息时间" });
+  const secondDialog = page.getByRole("dialog", { name: "设置" });
   await secondDialog.getByRole("button", { name: "添加节次" }).click();
   await expect(secondDialog.getByTestId("period-row")).toHaveCount(12);
   await secondDialog.getByRole("button", { name: "保存作息" }).click();
@@ -625,7 +634,7 @@ test("period settings save custom proportions and can add a twelfth period", asy
 
 test("new periods with edited times round-trip through the save operation", async ({ page }) => {
   await page.getByRole("button", { name: "设置" }).click();
-  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
   await dialog.getByRole("button", { name: "添加节次" }).click();
   await dialog.getByLabel("第12节开始时间").fill("20:40");
   await dialog.getByLabel("第12节结束时间").fill("21:25");
@@ -636,7 +645,7 @@ test("new periods with edited times round-trip through the save operation", asyn
   await expect(dialog).toHaveCount(0);
 
   await page.getByRole("button", { name: "设置" }).click();
-  const reopened = page.getByRole("dialog", { name: "作息时间" });
+  const reopened = page.getByRole("dialog", { name: "设置" });
   await expect(reopened.getByTestId("period-row")).toHaveCount(13);
   await expect(reopened.getByLabel("第12节开始时间")).toHaveValue("20:40");
   await expect(reopened.getByLabel("第12节结束时间")).toHaveValue("21:25");
@@ -646,7 +655,8 @@ test("new periods with edited times round-trip through the save operation", asyn
 
 test("term and reminder settings validate and persist with the schedule", async ({ page }) => {
   await page.getByRole("button", { name: "设置" }).click();
-  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
+  await settingsPage(dialog, "提醒");
   await expect(dialog.getByText("学期与课程提醒")).toBeVisible();
   await dialog.getByLabel("启用课程提醒").check();
   await dialog.getByRole("button", { name: "保存作息" }).click();
@@ -657,7 +667,8 @@ test("term and reminder settings validate and persist with the schedule", async 
   await dialog.getByRole("button", { name: "保存作息" }).click();
   await expect(dialog).toHaveCount(0);
   await page.getByRole("button", { name: "设置" }).click();
-  const reopened = page.getByRole("dialog", { name: "作息时间" });
+  const reopened = page.getByRole("dialog", { name: "设置" });
+  await settingsPage(reopened, "提醒");
   await expect(reopened.getByLabel("第 1 教学周星期一")).toHaveValue("2026-09-07");
   await expect(reopened.getByLabel("启用课程提醒")).toBeChecked();
   await expect(reopened.getByLabel("提前提醒分钟")).toHaveValue("60");
@@ -667,7 +678,8 @@ test("reminder settings can request a Windows test notification without changing
   page,
 }) => {
   await page.getByRole("button", { name: "设置" }).click();
-  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
+  await settingsPage(dialog, "提醒");
   await page.evaluate(() => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       configurable: true,
@@ -688,7 +700,8 @@ test("reminder settings can request a Windows test notification without changing
 
 test("Windows 登录启动开关默认关闭且能立即启用或关闭", async ({ page }) => {
   await page.getByRole("button", { name: "设置" }).click();
-  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
+  await settingsPage(dialog, "提醒");
   const toggle = dialog.getByLabel("登录 Windows 后自动启动应用");
   await expect(dialog.getByText("启动设置")).toBeVisible();
   await expect(toggle).toBeEnabled();
@@ -754,7 +767,8 @@ test("Windows 登录启动失败和系统状态不一致不会显示伪成功", 
   });
   await reloadTimetable(page);
   await page.getByRole("button", { name: "设置" }).click();
-  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
+  await settingsPage(dialog, "提醒");
   const toggle = dialog.getByLabel("登录 Windows 后自动启动应用");
   await expect(toggle).not.toBeChecked();
 
@@ -779,7 +793,7 @@ test("period end edits move only later periods and cancel keeps the previous sch
   page,
 }) => {
   await page.getByRole("button", { name: "设置" }).click();
-  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
   await dialog.getByLabel("第1节结束时间").fill("09:00");
   await expect(dialog.getByLabel("第2节开始时间")).toHaveValue("09:05");
   await expect(dialog.getByLabel("第2节结束时间")).toHaveValue("09:50");
@@ -829,7 +843,7 @@ test("failed schedule save keeps the old timeline", async ({ page }) => {
   });
   await reloadTimetable(page);
   await page.getByRole("button", { name: "设置" }).click();
-  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
   await dialog.getByLabel("第1节结束时间").fill("08:30");
   await dialog.getByRole("button", { name: "保存作息" }).click();
   await expect(dialog.getByRole("alert")).toHaveText("保存设置失败，请稍后重试。");
@@ -892,7 +906,7 @@ test("failed schedule save can be retried without a permanent saving state", asy
   });
   await reloadTimetable(page);
   await page.getByRole("button", { name: "设置" }).click();
-  const dialog = page.getByRole("dialog", { name: "作息时间" });
+  const dialog = page.getByRole("dialog", { name: "设置" });
   await dialog.getByLabel("第1节结束时间").fill("08:30");
   await dialog.getByRole("button", { name: "保存作息" }).click();
   await expect(dialog.getByRole("alert")).toHaveText("第一次保存失败");
@@ -960,7 +974,7 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
   await reloadTimetable(page);
   await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
   await page.getByRole("button", { name: "设置" }).click();
-  const settings = page.getByRole("dialog", { name: "作息时间" });
+  const settings = page.getByRole("dialog", { name: "设置" });
 
   const invokePdfDialog = () =>
     page.locator(".pdf-import-button").evaluate((button) => (button as HTMLButtonElement).click());
@@ -971,14 +985,16 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
       ).__pdfDialogRegression.dialogCalls(),
     );
 
+  await settingsPage(settings, "Widget");
   await settings.getByRole("button", { name: "保存小组件设置" }).click();
   await expect(settings.getByRole("button", { name: "保存中…" })).toBeVisible();
   await invokePdfDialog();
   await expect.poll(dialogCalls).toBe(1);
   await expect(page.getByRole("button", { name: "导入 PDF" })).toBeEnabled();
 
+  await settingsPage(settings, "作息");
   await settings.getByRole("button", { name: "保存作息" }).click();
-  await expect(settings.getByRole("button", { name: "保存中…" })).toHaveCount(2);
+  await expect(settings.getByRole("button", { name: "保存中…" })).toHaveCount(1);
   await invokePdfDialog();
   await expect.poll(dialogCalls).toBe(2);
   await expect(page.getByRole("button", { name: "导入 PDF" })).toBeEnabled();
@@ -988,6 +1004,7 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
       window as Window & { __pdfDialogRegression: { resolve(key: string): void } }
     ).__pdfDialogRegression.resolve("widget"),
   );
+  await settingsPage(settings, "Widget");
   await expect(settings.getByRole("button", { name: "保存小组件设置" })).toBeEnabled();
   await invokePdfDialog();
   await expect.poll(dialogCalls).toBe(3);
@@ -997,9 +1014,10 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
       window as Window & { __pdfDialogRegression: { reject(key: string, reason: string): void } }
     ).__pdfDialogRegression.reject("schedule", "模拟保存失败"),
   );
+  await settingsPage(settings, "作息");
   await expect(settings.getByRole("alert")).toHaveText("模拟保存失败");
 
-  await settings.getByRole("button", { name: "关闭作息设置" }).click();
+  await settings.getByRole("button", { name: "关闭设置" }).click();
   await page.getByRole("button", { name: "导入 PDF" }).click();
   await expect.poll(dialogCalls).toBe(4);
   await expect(page.getByRole("button", { name: "导入 PDF" })).toBeEnabled();
@@ -1186,9 +1204,11 @@ test("canceling PDF picker returns to idle before subsequent settings saves", as
   await expect(importButton).toBeEnabled();
 
   await page.getByRole("button", { name: "设置" }).click();
-  const settings = page.getByRole("dialog", { name: "作息时间" });
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settingsPage(settings, "Widget");
   await settings.getByRole("button", { name: "保存小组件设置" }).click();
   await expect(settings.getByRole("button", { name: "保存小组件设置" })).toBeEnabled();
+  await settingsPage(settings, "作息");
   await settings.getByRole("button", { name: "保存作息" }).click();
   await expect(settings).toHaveCount(0);
 });
@@ -1687,7 +1707,8 @@ test("confirmed course clearing updates the timetable without touching the setti
   await reloadTimetable(page);
   await expect(page.locator('[data-course-id="clear-course"]')).toBeVisible();
   await page.getByRole("button", { name: "设置" }).click();
-  const settings = page.getByRole("dialog", { name: "作息时间" });
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settingsPage(settings, "导入与数据");
   await settings.getByRole("button", { name: "清空全部课程" }).click();
   const confirmation = page.getByRole("alertdialog", { name: "清空全部课程确认" });
   await expect(confirmation).toContainText("1 门课程");
@@ -1757,6 +1778,7 @@ test("failed course clearing keeps the confirmation and the existing timetable",
   });
   await reloadTimetable(page);
   await page.getByRole("button", { name: "设置" }).click();
+  await settingsPage(page.getByRole("dialog", { name: "设置" }), "导入与数据");
   await page.getByRole("button", { name: "清空全部课程" }).click();
   const confirmation = page.getByRole("alertdialog", { name: "清空全部课程确认" });
   await confirmation.getByRole("button", { name: "确认清空" }).click();
@@ -1802,7 +1824,8 @@ test("manual updater failures can be retried and dismissed without blocking the 
   });
   await reloadTimetable(page);
   await page.getByRole("button", { name: "设置" }).click();
-  const settings = page.getByRole("dialog", { name: "作息时间" });
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settingsPage(settings, "关于");
   await settings.getByRole("button", { name: "检查更新" }).click();
   const updateError = page.getByRole("dialog", { name: "检查更新失败" });
   await expect(updateError).toBeVisible();

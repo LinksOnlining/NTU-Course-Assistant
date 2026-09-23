@@ -796,7 +796,80 @@ select:focus-visible {
 }
 
 .period-settings-dialog {
-  width: min(100%, 620px);
+  width: min(100%, 900px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.settings-domain-layout {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: var(--space-4);
+  min-height: 0;
+  overflow: hidden;
+}
+.settings-domain-sidebar {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  overflow: auto;
+  padding: var(--space-2);
+  border-right: 1px solid var(--border-subtle);
+}
+.settings-domain-sidebar h3 {
+  margin: var(--space-2) 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-secondary);
+}
+.settings-domain-sidebar button {
+  display: block;
+  width: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-domain-sidebar button[aria-current="page"] {
+  background: var(--surface-selected);
+  color: var(--text-heading);
+  font-weight: 650;
+}
+.settings-domain-sidebar button:hover {
+  background: var(--surface-hover);
+}
+.settings-domain-sidebar button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+}
+.settings-domain-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 0 var(--space-2) var(--space-2);
+}
+.settings-domain-content > .form-actions:last-child {
+  margin-top: auto;
+  padding-top: var(--space-4);
+}
+.settings-domain-title {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: var(--font-size-module);
+}
+.settings-domain-note {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+}
+@media (max-width: 650px) {
+  .settings-domain-layout {
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: var(--space-2);
+  }
 }
 
 .period-settings-note {

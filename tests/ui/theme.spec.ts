@@ -7,7 +7,11 @@ async function openApp(page: import("@playwright/test").Page) {
 
 async function chooseTheme(page: import("@playwright/test").Page, preference: string) {
   await page.getByRole("button", { name: "设置" }).click();
-  await page.getByRole("dialog", { name: "作息时间" }).getByLabel("主题").selectOption(preference);
+  await page
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "外观" })
+    .click();
+  await page.getByRole("dialog", { name: "设置" }).getByLabel("主题").selectOption(preference);
 }
 
 test("defaults to light and a manual theme choice applies and persists", async ({ page }) => {
@@ -46,7 +50,7 @@ test("system preference follows live color-scheme changes", async ({ page }) => 
 test("dark schedule, Academic Hub, and settings retain readable surfaces", async ({ page }) => {
   await openApp(page);
   await chooseTheme(page, "dark");
-  await page.getByRole("button", { name: "关闭作息设置" }).click();
+  await page.getByRole("button", { name: "关闭设置" }).click();
   await page
     .getByRole("navigation", { name: "产品模式" })
     .getByRole("button", { name: "课表" })
@@ -67,7 +71,7 @@ test("dark schedule, Academic Hub, and settings retain readable surfaces", async
     "rgb(40, 49, 46)",
   );
 
-  await page.getByRole("button", { name: "关闭作息设置" }).click();
+  await page.getByRole("button", { name: "关闭设置" }).click();
   await page
     .getByRole("navigation", { name: "课表二级导航" })
     .getByRole("button", { name: "学业事项" })

@@ -1050,6 +1050,7 @@ export function App() {
       )}
       {isPeriodSettingsOpen && (
         <PeriodSettings
+          initialDomain={currentRoute.area === "academic" ? "academic" : "workspace"}
           periods={periods}
           isUsingTestSchedule={isUsingTestSchedule}
           reminderConfiguration={reminderConfiguration}

@@ -37,6 +37,12 @@ export function localTimeKey(date: Date): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function nextLocalDate(date: string): string {
+  const next = new Date(`${date}T12:00:00`);
+  next.setDate(next.getDate() + 1);
+  return localDateKey(next);
+}
+
 function legacySemester(termConfig: TermConfig | null): Semester | null {
   if (!termConfig) return null;
   return {
@@ -66,22 +72,39 @@ export async function loadWorkspaceDashboardSources(
   const activeSemester =
     hub.semesters.find((semester) => semester.status === "ACTIVE") ??
     (hub.semesters.length === 0 ? legacySemester(termConfig) : null);
+  const tomorrow = nextLocalDate(date);
   const occurrences = activeSemester
     ? resolveAcademicOccurrences(
         schedule.courses,
         activeSemester,
         hub.overrides,
-        { from: date, to: date },
+        { from: date, to: tomorrow },
         schedule.periodTimes ?? [],
       )
     : [];
 
   return {
     date,
-    timelineItems: projectAcademicOccurrencesToTimelineItems(occurrences, schedule.courses),
+    timelineItems: projectAcademicOccurrencesToTimelineItems(
+      occurrences.filter((item) => item.date === date),
+      schedule.courses,
+    ),
+    tomorrowItems: projectAcademicOccurrencesToTimelineItems(
+      occurrences.filter((item) => item.date === tomorrow),
+      schedule.courses,
+    ),
     tasks: hub.tasks,
     warnings: schedule.warnings,
   };
+}
+
+function naturalDueDate(taskDate: string, today: string): string {
+  if (taskDate === today) return "今天";
+  if (taskDate === nextLocalDate(today)) return "明天";
+  const date = new Date(`${taskDate}T12:00:00`);
+  const delta = (date.getTime() - new Date(`${today}T12:00:00`).getTime()) / 86_400_000;
+  if (delta > 1 && delta < 7) return `周${"日一二三四五六"[date.getDay()]}`;
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
 function taskDeadline(task: AcademicTask, today: string, nowTime: string): WorkspaceTaskPreview {
@@ -118,12 +141,7 @@ function taskDeadline(task: AcademicTask, today: string, nowTime: string): Works
       : taskDate === today
         ? "today"
         : "upcoming";
-  const deadlineLabel =
-    deadlineKind === "overdue"
-      ? `已逾期 · ${taskDate} ${taskTime}`
-      : deadlineKind === "today"
-        ? `今天 ${taskTime} 到期`
-        : `${taskDate} ${taskTime}`;
+  const deadlineLabel = `${deadlineKind === "overdue" ? "已逾期 · " : ""}${naturalDueDate(taskDate, today)} ${taskTime}`;
   return {
     id: task.id,
     title: task.title,
@@ -191,6 +209,77 @@ function findNextItem(
   );
 }
 
+function minutes(time: string): number {
+  const [hour, minute] = time.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function durationLabel(value: number): string {
+  if (value < 60) return `${value} 分钟`;
+  const hours = Math.floor(value / 60);
+  return `${hours} 小时${value % 60 ? ` ${value % 60} 分钟` : ""}`;
+}
+
+function timeContext(sources: WorkspaceDashboardSources, nowTime: string) {
+  const occupied = sources.timelineItems
+    .filter((item) => item.occupiesTime)
+    .sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime));
+  const now = minutes(nowTime);
+  const active = occupied.find(
+    (item) => minutes(item.startTime) <= now && now < minutes(item.endTime),
+  );
+  const next = active ?? occupied.find((item) => minutes(item.startTime) > now);
+  const tomorrow = sources.tomorrowItems
+    ?.filter((item) => item.occupiesTime)
+    .sort((a, b) => a.startTime.localeCompare(b.startTime))[0];
+  const item = next ?? tomorrow;
+  const nextCourseContext = item
+    ? {
+        label: active
+          ? `正在上课 · 还剩 ${durationLabel(minutes(active.endTime) - now)}`
+          : next
+            ? `${durationLabel(minutes(next.startTime) - now)}后上课`
+            : "下一节在明天",
+        title: item.title,
+        time: `${next ? "今天" : "明天"} ${item.startTime}–${item.endTime}`,
+        location: item.location,
+      }
+    : { label: "今天已无课程", title: "可以安排自己的时间", time: "", location: null };
+  let freeStart = now;
+  if (active) {
+    for (const entry of occupied) {
+      if (minutes(entry.startTime) > freeStart) break;
+      freeStart = Math.max(freeStart, minutes(entry.endTime));
+    }
+  }
+  const nextStart =
+    occupied.map((entry) => minutes(entry.startTime)).find((start) => start > freeStart) ?? 1440;
+  const nextFreeSlot =
+    freeStart >= 1440
+      ? "今天已无空闲时段"
+      : nextStart <= freeStart
+        ? "暂无可用空闲时段"
+        : `${active ? "下一段空闲" : "当前空闲"} · ${durationLabel(nextStart - freeStart)}`;
+  const remaining = occupied.filter((entry) => minutes(entry.endTime) > now).length;
+  const openTaskCount = sources.tasks.filter((task) => task.status !== "COMPLETED").length;
+  return {
+    nextCourseContext,
+    nextFreeSlot,
+    todayStatusText: active
+      ? "正在上课"
+      : remaining
+        ? `今天还有 ${remaining} 节课`
+        : occupied.length
+          ? "今天的课程已结束"
+          : "今天暂无课程",
+    todaySummaryText: occupied.length
+      ? `${occupied.length} 节课程 · ${openTaskCount} 项待办`
+      : openTaskCount
+        ? `${openTaskCount} 项待办`
+        : "可自由安排今天的时间",
+  };
+}
+
 export function buildWorkspaceDashboardViewModel(
   sources: WorkspaceDashboardSources,
   nowTime: string,
@@ -200,6 +289,7 @@ export function buildWorkspaceDashboardViewModel(
     timelineItems: sources.timelineItems,
     todayItemCount: sources.timelineItems.length,
     nextItem: findNextItem(sources.timelineItems, nowTime),
+    ...timeContext(sources, nowTime),
     taskSummary: buildTaskSummary(sources.tasks, sources.date, nowTime),
     moduleAvailability: {
       diary: "unavailable",

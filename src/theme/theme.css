@@ -12,6 +12,8 @@
     radial-gradient(circle at 94% 12%, rgb(239 228 208 / 56%), transparent 29%),
     linear-gradient(145deg, #edf4f0 0%, #f7f4ed 52%, #e8f1ed 100%);
   --surface-primary: #fff;
+  --surface-utility: #f7faf9;
+  --surface-flat: #f7faf9;
   --surface-secondary: #f7faf9;
   --surface-elevated: #fbfdfc;
   --surface-hover: #f0f5f3;
@@ -75,6 +77,9 @@
 
   --shadow-small: 0 4px 15px rgb(37 69 59 / 6%);
   --shadow-medium: 0 14px 36px rgb(35 67 57 / 10%);
+  --motion-fast: 120ms;
+  --motion-standard: 180ms;
+  --motion-slow: 240ms;
 
   --radius-control: 8px;
   --radius-card: 12px;
@@ -137,6 +142,8 @@
   --surface-app: #151a18;
   --surface-app-gradient: linear-gradient(145deg, #151a18 0%, #191f1c 52%, #151a18 100%);
   --surface-primary: #1b211f;
+  --surface-utility: #222a27;
+  --surface-flat: #222a27;
   --surface-secondary: #222a27;
   --surface-elevated: #28312e;
   --surface-hover: #2b3531;

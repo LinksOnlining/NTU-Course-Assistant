@@ -19,6 +19,7 @@ import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings
 import type { ThemePreference } from "../theme/types.ts";
 
 interface PeriodSettingsProps {
+  readonly initialDomain: "workspace" | "academic";
   readonly periods: readonly PeriodTime[];
   readonly isUsingTestSchedule: boolean;
   readonly reminderConfiguration: ReminderConfiguration;
@@ -37,11 +38,32 @@ interface PeriodSettingsProps {
   readonly onCancel: () => void;
 }
 
+type SettingsPage =
+  | "首页"
+  | "时间轴"
+  | "每日寄语"
+  | "天气"
+  | "作息"
+  | "显示"
+  | "提醒"
+  | "Widget"
+  | "导入与数据"
+  | "外观"
+  | "数据与备份"
+  | "隐私"
+  | "关于";
+const SETTINGS_GROUPS = [
+  { title: "工作台", pages: ["首页", "时间轴", "每日寄语", "天气"] },
+  { title: "课表", pages: ["作息", "显示", "提醒", "Widget", "导入与数据"] },
+  { title: "通用", pages: ["外观", "数据与备份", "隐私", "关于"] },
+] as const;
+
 function isSaveOperationBusy(state: SaveOperationState): boolean {
   return state.kind === "validating" || state.kind === "saving";
 }
 
 export function PeriodSettings({
+  initialDomain,
   periods,
   isUsingTestSchedule,
   reminderConfiguration,
@@ -55,6 +77,7 @@ export function PeriodSettings({
   onCheckUpdates,
   onCancel,
 }: PeriodSettingsProps) {
+  const [page, setPage] = useState<SettingsPage>(initialDomain === "workspace" ? "首页" : "作息");
   const [draft, setDraft] = useState<PeriodTime[]>(() => periods.map((period) => ({ ...period })));
   const draftRef = useRef(draft);
   const [timeDrafts, setTimeDrafts] = useState<Record<string, string>>(() =>
@@ -343,350 +366,438 @@ export function PeriodSettings({
       >
         <div className="course-form-heading">
           <div>
-            <h2 id="period-settings-title">作息时间</h2>
-            <p className="period-settings-note">
-              {isUsingTestSchedule
-                ? "请设置并保存你的实际作息时间。"
-                : "修改后只影响时间轴和后续节次映射，不会改动已有课程时间。"}
-            </p>
+            <h2 id="period-settings-title">设置</h2>
+            <p className="period-settings-note">工作台、课表与通用偏好</p>
           </div>
-          <button
-            type="button"
-            className="icon-button"
-            onClick={onCancel}
-            aria-label="关闭作息设置"
-          >
+          <button type="button" className="icon-button" onClick={onCancel} aria-label="关闭设置">
             ×
           </button>
         </div>
-        <div className="period-settings-list">
-          {draft.map((period, index) => (
-            <div className="period-settings-row" data-testid="period-row" key={period.period}>
-              <strong>第{period.period}节</strong>
-              <label>
-                <span className="visually-hidden">第{period.period}节开始时间</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={5}
-                  pattern="[0-2][0-9]:[0-5][0-9]"
-                  value={timeDrafts[`${period.period}:startTime`] ?? period.startTime}
-                  onChange={(event) => update(index, "startTime", event.target.value)}
-                  aria-label={`第${period.period}节开始时间`}
-                />
-              </label>
-              <span aria-hidden="true">—</span>
-              <label>
-                <span className="visually-hidden">第{period.period}节结束时间</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={5}
-                  pattern="[0-2][0-9]:[0-5][0-9]"
-                  value={timeDrafts[`${period.period}:endTime`] ?? period.endTime}
-                  onChange={(event) => update(index, "endTime", event.target.value)}
-                  aria-label={`第${period.period}节结束时间`}
-                />
-              </label>
-            </div>
-          ))}
-        </div>
-        <div className="period-settings-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={addPeriod}
-            disabled={isSaving}
-          >
-            ＋ 添加节次
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={removeLastPeriod}
-            disabled={isSaving || draft.length <= 1}
-          >
-            删除最后一节
-          </button>
-        </div>
-        <section className="settings-section" aria-labelledby="period-duration-title">
-          <div>
-            <h3 id="period-duration-title">单节课时长</h3>
-            <p>应用后仅更新当前预览；保存作息后才会写入本地数据。</p>
-          </div>
-          <div className="settings-fields">
-            <label>
-              <span>分钟</span>
-              <input
-                type="number"
-                min="20"
-                max="120"
-                step="1"
-                value={uniformDuration}
-                onChange={(event) => setUniformDuration(event.target.value)}
-                aria-label="单节课时长分钟"
-              />
-            </label>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={applyDuration}
-              disabled={isSaving}
-            >
-              应用到全部节次
-            </button>
-          </div>
-        </section>
-        <section className="settings-section" aria-labelledby="reminder-settings-title">
-          <div>
-            <h3 id="reminder-settings-title">学期与课程提醒</h3>
-            <p>运行中的应用会在到期时发送 Windows 系统通知；可先发送测试提醒确认系统设置。</p>
-          </div>
-          <div className="settings-fields">
-            <label>
-              <span>第 1 教学周星期一</span>
-              <input
-                type="date"
-                value={firstWeekMonday}
-                onChange={(event) => setFirstWeekMonday(event.target.value)}
-                aria-label="第 1 教学周星期一"
-              />
-            </label>
-            <label>
-              <span>总教学周数</span>
-              <input
-                type="number"
-                min="1"
-                max="30"
-                value={totalWeeks}
-                onChange={(event) => setTotalWeeks(event.target.value)}
-                aria-label="总教学周数"
-              />
-            </label>
-            <label className="settings-toggle">
-              <input
-                type="checkbox"
-                checked={remindersEnabled}
-                onChange={(event) => setRemindersEnabled(event.target.checked)}
-                aria-label="启用课程提醒"
-              />
-              <span>启用课程提醒</span>
-            </label>
-            <label>
-              <span>提前提醒分钟</span>
-              <input
-                type="number"
-                min="0"
-                max="180"
-                value={advanceMinutes}
-                onChange={(event) => setAdvanceMinutes(event.target.value)}
-                disabled={!remindersEnabled}
-                aria-label="提前提醒分钟"
-              />
-            </label>
-          </div>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => void sendTestReminder()}
-            disabled={isSendingTestReminder}
-          >
-            {isSendingTestReminder ? "发送中…" : "发送测试提醒"}
-          </button>
-          {testReminderMessage && (
-            <p className="form-message" role="status">
-              {testReminderMessage}
-            </p>
-          )}
-        </section>
-        <section className="settings-section" aria-labelledby="autostart-settings-title">
-          <div>
-            <h3 id="autostart-settings-title">启动设置</h3>
-            <p>登录 Windows 后自动启动应用。默认关闭，可随时修改。</p>
-          </div>
-          <label className="settings-toggle">
-            <input
-              type="checkbox"
-              checked={autostartEnabled ?? false}
-              disabled={autostartEnabled === null || isUpdatingAutostart}
-              onChange={(event) => void updateAutostart(event.target.checked)}
-              aria-label="登录 Windows 后自动启动应用"
-            />
-            <span>
-              {autostartEnabled === null ? "正在读取启动状态…" : "登录 Windows 后自动启动应用"}
-            </span>
-          </label>
-          {autostartError && (
-            <p className="form-error" role="alert">
-              {autostartError}
-            </p>
-          )}
-        </section>
-        <section className="settings-section" aria-labelledby="widget-settings-title">
-          <div>
-            <h3 id="widget-settings-title">桌面课程小组件</h3>
-            <p>默认关闭；显示模式和锁定状态会在下次打开时恢复。</p>
-          </div>
-          <label className="settings-toggle">
-            <input
-              type="checkbox"
-              checked={widgetEnabled}
-              disabled={isSavingWidget}
-              onChange={(event) => setWidgetEnabled(event.target.checked)}
-              aria-label="启用桌面课程小组件"
-            />
-            <span>启用桌面课程小组件</span>
-          </label>
-          <div className="settings-fields">
-            <label>
-              <span>显示</span>
-              <select
-                value={widgetMode}
-                disabled={isSavingWidget}
-                onChange={(event) => setWidgetMode(event.target.value as WidgetDisplayMode)}
-                aria-label="小组件显示模式"
-              >
-                <option value="today">今日</option>
-                <option value="week">本周</option>
-                <option value="next">下一节</option>
-                <option value="deadlines">Deadline</option>
-              </select>
-            </label>
-            <label className="settings-toggle">
-              <input
-                type="checkbox"
-                checked={widgetLocked}
-                disabled={isSavingWidget}
-                onChange={(event) => setWidgetLocked(event.target.checked)}
-                aria-label="锁定小组件位置"
-              />
-              <span>锁定位置</span>
-            </label>
-          </div>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => void saveWidget()}
-            disabled={isSavingWidget}
-          >
-            {isSavingWidget ? "保存中…" : "保存小组件设置"}
-          </button>
-          {widgetError && (
-            <p className="form-error" role="alert">
-              {widgetError}
-            </p>
-          )}
-        </section>
-        <section className="settings-section" aria-labelledby="course-data-settings-title">
-          <div>
-            <h3 id="course-data-settings-title">课表数据</h3>
-            <p>清空只会删除课程，不会修改作息、学期、提醒、小组件或其他应用偏好。</p>
-          </div>
-          <button
-            type="button"
-            className="danger-button"
-            onClick={() => {
-              setClearCoursesError("");
-              setClearCoursesMessage("");
-              setIsConfirmingClearCourses(true);
-            }}
-            disabled={courseCount === 0 || isClearingCourses}
-          >
-            清空全部课程
-          </button>
-          {clearCoursesMessage && (
-            <p className="form-message" role="status">
-              {clearCoursesMessage}
-            </p>
-          )}
-          {isConfirmingClearCourses && (
-            <div className="delete-confirmation" role="alertdialog" aria-label="清空全部课程确认">
-              <p>
-                确定清空全部 {courseCount}{" "}
-                门课程吗？此操作不会删除作息、学期、提醒、小组件设置或其他应用偏好。
-              </p>
-              {clearCoursesError && <p className="form-error">{clearCoursesError}</p>}
-              <div>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setIsConfirmingClearCourses(false)}
-                  disabled={isClearingCourses}
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  className="danger-button danger-button--confirm"
-                  onClick={() => void clearAllCourses()}
-                  disabled={isClearingCourses}
-                >
-                  {isClearingCourses ? "正在清空…" : "确认清空"}
-                </button>
+        <div className="settings-domain-layout">
+          <nav className="settings-domain-sidebar" aria-label="设置分类">
+            {SETTINGS_GROUPS.map((group) => (
+              <div key={group.title}>
+                <h3>{group.title}</h3>
+                {group.pages.map((entry) => (
+                  <button
+                    key={entry}
+                    type="button"
+                    aria-current={page === entry ? "page" : undefined}
+                    onClick={() => setPage(entry)}
+                  >
+                    {entry}
+                  </button>
+                ))}
               </div>
-            </div>
-          )}
-        </section>
-        <section className="settings-section" aria-labelledby="appearance-settings-title">
-          <div>
-            <h3 id="appearance-settings-title">外观</h3>
-            <p>选择浅色、深色，或跟随 Windows 系统主题。</p>
-          </div>
-          <div className="settings-fields">
-            <label>
-              <span>主题</span>
-              <select
-                aria-label="主题"
-                value={themePreference}
-                onChange={(event) => onThemePreferenceChange(event.target.value as ThemePreference)}
+            ))}
+          </nav>
+          <div className="settings-domain-content">
+            <h3 className="settings-domain-title">{page}</h3>
+            {page === "首页" && (
+              <p className="settings-domain-note">
+                工作台首页汇集今日课程、时间概览和任务。课程与任务来自已有本地数据。
+              </p>
+            )}
+            {page === "时间轴" && (
+              <p className="settings-domain-note">
+                今日日程按 24 小时展示；目前暂无可调整的时间轴选项。
+              </p>
+            )}
+            {page === "每日寄语" && (
+              <p className="settings-domain-note">每日寄语随日期更新；目前暂无可调整的选项。</p>
+            )}
+            {page === "天气" && <p className="settings-domain-note">天气功能尚未开放。</p>}
+            {page === "显示" && (
+              <p className="settings-domain-note">
+                课表显示选项请在课表页面使用；此处暂无独立设置。
+              </p>
+            )}
+            {page === "数据与备份" && (
+              <p className="settings-domain-note">数据备份功能尚未开放。课程数据保存在本机。</p>
+            )}
+            {page === "隐私" && (
+              <p className="settings-domain-note">课程数据保存在本机，不会上传到服务器。</p>
+            )}
+            {page === "作息" && (
+              <>
+                <p className="settings-domain-note">
+                  {isUsingTestSchedule
+                    ? "请设置并保存你的实际作息时间。"
+                    : "按节次课程的实际时间将跟随当前作息变化。"}
+                </p>
+                <div className="period-settings-list">
+                  {draft.map((period, index) => (
+                    <div
+                      className="period-settings-row"
+                      data-testid="period-row"
+                      key={period.period}
+                    >
+                      <strong>第{period.period}节</strong>
+                      <label>
+                        <span className="visually-hidden">第{period.period}节开始时间</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={5}
+                          pattern="[0-2][0-9]:[0-5][0-9]"
+                          value={timeDrafts[`${period.period}:startTime`] ?? period.startTime}
+                          onChange={(event) => update(index, "startTime", event.target.value)}
+                          aria-label={`第${period.period}节开始时间`}
+                        />
+                      </label>
+                      <span aria-hidden="true">—</span>
+                      <label>
+                        <span className="visually-hidden">第{period.period}节结束时间</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={5}
+                          pattern="[0-2][0-9]:[0-5][0-9]"
+                          value={timeDrafts[`${period.period}:endTime`] ?? period.endTime}
+                          onChange={(event) => update(index, "endTime", event.target.value)}
+                          aria-label={`第${period.period}节结束时间`}
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <div className="period-settings-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={addPeriod}
+                    disabled={isSaving}
+                  >
+                    ＋ 添加节次
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={removeLastPeriod}
+                    disabled={isSaving || draft.length <= 1}
+                  >
+                    删除最后一节
+                  </button>
+                </div>
+                <section className="settings-section" aria-labelledby="period-duration-title">
+                  <div>
+                    <h3 id="period-duration-title">单节课时长</h3>
+                    <p>应用后仅更新当前预览；保存作息后才会写入本地数据。</p>
+                  </div>
+                  <div className="settings-fields">
+                    <label>
+                      <span>分钟</span>
+                      <input
+                        type="number"
+                        min="20"
+                        max="120"
+                        step="1"
+                        value={uniformDuration}
+                        onChange={(event) => setUniformDuration(event.target.value)}
+                        aria-label="单节课时长分钟"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={applyDuration}
+                      disabled={isSaving}
+                    >
+                      应用到全部节次
+                    </button>
+                  </div>
+                </section>
+              </>
+            )}
+            {page === "提醒" && (
+              <>
+                <section className="settings-section" aria-labelledby="reminder-settings-title">
+                  <div>
+                    <h3 id="reminder-settings-title">学期与课程提醒</h3>
+                    <p>
+                      运行中的应用会在到期时发送 Windows 系统通知；可先发送测试提醒确认系统设置。
+                    </p>
+                  </div>
+                  <div className="settings-fields">
+                    <label>
+                      <span>第 1 教学周星期一</span>
+                      <input
+                        type="date"
+                        value={firstWeekMonday}
+                        onChange={(event) => setFirstWeekMonday(event.target.value)}
+                        aria-label="第 1 教学周星期一"
+                      />
+                    </label>
+                    <label>
+                      <span>总教学周数</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        value={totalWeeks}
+                        onChange={(event) => setTotalWeeks(event.target.value)}
+                        aria-label="总教学周数"
+                      />
+                    </label>
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={remindersEnabled}
+                        onChange={(event) => setRemindersEnabled(event.target.checked)}
+                        aria-label="启用课程提醒"
+                      />
+                      <span>启用课程提醒</span>
+                    </label>
+                    <label>
+                      <span>提前提醒分钟</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="180"
+                        value={advanceMinutes}
+                        onChange={(event) => setAdvanceMinutes(event.target.value)}
+                        disabled={!remindersEnabled}
+                        aria-label="提前提醒分钟"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => void sendTestReminder()}
+                    disabled={isSendingTestReminder}
+                  >
+                    {isSendingTestReminder ? "发送中…" : "发送测试提醒"}
+                  </button>
+                  {testReminderMessage && (
+                    <p className="form-message" role="status">
+                      {testReminderMessage}
+                    </p>
+                  )}
+                </section>
+                <section className="settings-section" aria-labelledby="autostart-settings-title">
+                  <div>
+                    <h3 id="autostart-settings-title">启动设置</h3>
+                    <p>登录 Windows 后自动启动应用。默认关闭，可随时修改。</p>
+                  </div>
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={autostartEnabled ?? false}
+                      disabled={autostartEnabled === null || isUpdatingAutostart}
+                      onChange={(event) => void updateAutostart(event.target.checked)}
+                      aria-label="登录 Windows 后自动启动应用"
+                    />
+                    <span>
+                      {autostartEnabled === null
+                        ? "正在读取启动状态…"
+                        : "登录 Windows 后自动启动应用"}
+                    </span>
+                  </label>
+                  {autostartError && (
+                    <p className="form-error" role="alert">
+                      {autostartError}
+                    </p>
+                  )}
+                </section>
+              </>
+            )}
+            {page === "Widget" && (
+              <>
+                <section className="settings-section" aria-labelledby="widget-settings-title">
+                  <div>
+                    <h3 id="widget-settings-title">桌面课程小组件</h3>
+                    <p>默认关闭；显示模式和锁定状态会在下次打开时恢复。</p>
+                  </div>
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={widgetEnabled}
+                      disabled={isSavingWidget}
+                      onChange={(event) => setWidgetEnabled(event.target.checked)}
+                      aria-label="启用桌面课程小组件"
+                    />
+                    <span>启用桌面课程小组件</span>
+                  </label>
+                  <div className="settings-fields">
+                    <label>
+                      <span>显示</span>
+                      <select
+                        value={widgetMode}
+                        disabled={isSavingWidget}
+                        onChange={(event) => setWidgetMode(event.target.value as WidgetDisplayMode)}
+                        aria-label="小组件显示模式"
+                      >
+                        <option value="today">今日</option>
+                        <option value="week">本周</option>
+                        <option value="next">下一节</option>
+                        <option value="deadlines">Deadline</option>
+                      </select>
+                    </label>
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={widgetLocked}
+                        disabled={isSavingWidget}
+                        onChange={(event) => setWidgetLocked(event.target.checked)}
+                        aria-label="锁定小组件位置"
+                      />
+                      <span>锁定位置</span>
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => void saveWidget()}
+                    disabled={isSavingWidget}
+                  >
+                    {isSavingWidget ? "保存中…" : "保存小组件设置"}
+                  </button>
+                  {widgetError && (
+                    <p className="form-error" role="alert">
+                      {widgetError}
+                    </p>
+                  )}
+                </section>
+              </>
+            )}
+            {page === "导入与数据" && (
+              <>
+                <section className="settings-section" aria-labelledby="course-data-settings-title">
+                  <div>
+                    <h3 id="course-data-settings-title">课表数据</h3>
+                    <p>清空只会删除课程，不会修改作息、学期、提醒、小组件或其他应用偏好。</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => {
+                      setClearCoursesError("");
+                      setClearCoursesMessage("");
+                      setIsConfirmingClearCourses(true);
+                    }}
+                    disabled={courseCount === 0 || isClearingCourses}
+                  >
+                    清空全部课程
+                  </button>
+                  {clearCoursesMessage && (
+                    <p className="form-message" role="status">
+                      {clearCoursesMessage}
+                    </p>
+                  )}
+                  {isConfirmingClearCourses && (
+                    <div
+                      className="delete-confirmation"
+                      role="alertdialog"
+                      aria-label="清空全部课程确认"
+                    >
+                      <p>
+                        确定清空全部 {courseCount}{" "}
+                        门课程吗？此操作不会删除作息、学期、提醒、小组件设置或其他应用偏好。
+                      </p>
+                      {clearCoursesError && <p className="form-error">{clearCoursesError}</p>}
+                      <div>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => setIsConfirmingClearCourses(false)}
+                          disabled={isClearingCourses}
+                        >
+                          取消
+                        </button>
+                        <button
+                          type="button"
+                          className="danger-button danger-button--confirm"
+                          onClick={() => void clearAllCourses()}
+                          disabled={isClearingCourses}
+                        >
+                          {isClearingCourses ? "正在清空…" : "确认清空"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              </>
+            )}
+            {page === "外观" && (
+              <>
+                <section className="settings-section" aria-labelledby="appearance-settings-title">
+                  <div>
+                    <h3 id="appearance-settings-title">外观</h3>
+                    <p>选择浅色、深色，或跟随 Windows 系统主题。</p>
+                  </div>
+                  <div className="settings-fields">
+                    <label>
+                      <span>主题</span>
+                      <select
+                        aria-label="主题"
+                        value={themePreference}
+                        onChange={(event) =>
+                          onThemePreferenceChange(event.target.value as ThemePreference)
+                        }
+                      >
+                        <option value="light">浅色</option>
+                        <option value="dark">深色</option>
+                        <option value="system">跟随系统</option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+              </>
+            )}
+            {page === "关于" && (
+              <>
+                <section className="settings-section" aria-labelledby="about-settings-title">
+                  <div>
+                    <h3 id="about-settings-title">关于</h3>
+                    <p>Links Workplace · Version v{__APP_VERSION__}</p>
+                  </div>
+                  <div className="form-actions">
+                    <button type="button" className="secondary-button" onClick={onCheckUpdates}>
+                      检查更新
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() =>
+                        window.open(
+                          "https://github.com/LinksOnlining/NTU-Course-Assistant/releases",
+                          "_blank",
+                        )
+                      }
+                    >
+                      GitHub Release
+                    </button>
+                  </div>
+                </section>
+              </>
+            )}
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={onCancel}
+                disabled={isSaving}
               >
-                <option value="light">浅色</option>
-                <option value="dark">深色</option>
-                <option value="system">跟随系统</option>
-              </select>
-            </label>
+                取消
+              </button>
+              {(page === "作息" || page === "提醒") && (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => void save()}
+                  disabled={isSaving}
+                >
+                  {isSaving ? "保存中…" : "保存作息"}
+                </button>
+              )}
+            </div>
           </div>
-        </section>
-        <section className="settings-section" aria-labelledby="about-settings-title">
-          <div>
-            <h3 id="about-settings-title">关于</h3>
-            <p>Links Workplace · Version v{__APP_VERSION__}</p>
-          </div>
-          <div className="form-actions">
-            <button type="button" className="secondary-button" onClick={onCheckUpdates}>
-              检查更新
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() =>
-                window.open(
-                  "https://github.com/LinksOnlining/NTU-Course-Assistant/releases",
-                  "_blank",
-                )
-              }
-            >
-              GitHub Release
-            </button>
-          </div>
-        </section>
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="form-actions">
-          <button type="button" className="secondary-button" onClick={onCancel} disabled={isSaving}>
-            取消
-          </button>
-          <button
-            type="button"
-            className="primary-button"
-            onClick={() => void save()}
-            disabled={isSaving}
-          >
-            {isSaving ? "保存中…" : "保存作息"}
-          </button>
         </div>
       </section>
     </div>

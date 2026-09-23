@@ -67,3 +67,16 @@ test("workspace/home renders the new Dashboard rather than the legacy AcademicHu
   assert.match(appSource, /isWorkspaceHome\s*\?\s*\(\s*<WorkspaceDashboard/u);
   assert.match(appSource, /\)\s*:\s*isAcademicHubPage\s*\?\s*\(\s*<AcademicHub/u);
 });
+
+test("Time Context is a summary projection, not a second timeline", () => {
+  const source = readFileSync(
+    path.join(root, "workspace/dashboard/WorkspaceDashboard.tsx"),
+    "utf8",
+  );
+  const context = source.split("function TimeContext(")[1]?.split("function TaskCard(")[0] ?? "";
+  assert.match(context, /workspace-time-context/u);
+  assert.doesNotMatch(
+    context,
+    /timeline-tick|timeline-grid|draggable|resizable|hour ticks|<canvas/u,
+  );
+});

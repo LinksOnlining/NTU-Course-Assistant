@@ -81,7 +81,14 @@ test("课表模式显示 Academic 导航与控件，并记住离开前的 Academ
 test("设置可从两个产品模式打开和关闭，且保留当前页面与主题设置", async ({ page }) => {
   await openApp(page);
   await page.getByRole("button", { name: "设置" }).click();
-  const settings = page.getByRole("dialog", { name: "作息时间" });
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await expect(
+    settings.getByRole("navigation", { name: "设置分类" }).getByRole("button", { name: "首页" }),
+  ).toHaveAttribute("aria-current", "page");
+  await settings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "外观" })
+    .click();
   await expect(settings.getByLabel("主题")).toHaveValue("light");
   await settings.getByRole("button", { name: "取消" }).click();
   await expect(settings).toHaveCount(0);
@@ -94,10 +101,10 @@ test("设置可从两个产品模式打开和关闭，且保留当前页面与�
   const subnav = page.getByRole("navigation", { name: "课表二级导航" });
   await subnav.getByRole("button", { name: "学期管理" }).click();
   await page.getByRole("button", { name: "设置" }).click();
-  await page
-    .getByRole("dialog", { name: "作息时间" })
-    .getByRole("button", { name: "取消" })
-    .click();
+  await expect(
+    page.getByRole("navigation", { name: "设置分类" }).getByRole("button", { name: "作息" }),
+  ).toHaveAttribute("aria-current", "page");
+  await page.getByRole("dialog", { name: "设置" }).getByRole("button", { name: "取消" }).click();
   await expect(subnav.getByRole("button", { name: "学期管理" })).toHaveAttribute(
     "aria-current",
     "page",
@@ -108,7 +115,11 @@ test("Shell 在浅色和深色下可见，并在桌面及最小窗口保持主�
   await openApp(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.getByRole("button", { name: "设置" }).click();
-  const settings = page.getByRole("dialog", { name: "作息时间" });
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "外观" })
+    .click();
   await settings.getByLabel("主题").selectOption("dark");
   await settings.getByRole("button", { name: "取消" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");

@@ -111,11 +111,19 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
   page,
 }) => {
   await seedDashboardRuntime(page);
-  await expect(page.getByText("数学基础", { exact: true })).toBeVisible();
+  await expect(
+    page.getByTestId("timeline-item").getByText("数学基础", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: /日记，尚未开放/u })).toBeVisible();
   await expect(page.getByRole("button", { name: /收件箱，尚未开放/u })).toBeVisible();
   await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
   await expect(page.getByText("已完成事项", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("workspace-today-overview")).toBeVisible();
+  await expect(
+    page.getByTestId("workspace-today-overview").locator(".workspace-ambient"),
+  ).toHaveAttribute("aria-hidden", "true");
+  await expect(page.getByTestId("workspace-time-context")).toBeVisible();
+  await expect(page.getByTestId("workspace-time-context")).toContainText("正在上课");
 
   const timeline = page.getByRole("region", { name: "今日日程时间轴" });
   await expect(timeline).toBeVisible();
@@ -145,7 +153,8 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
       const nowLine = document.querySelector<HTMLElement>(".workspace-current-time-line");
       const dashboard = document.querySelector<HTMLElement>(".workspace-dashboard");
       const rail = document.querySelector<HTMLElement>(".workspace-dashboard-rail");
-      if (!timelineElement || !nowLine || !dashboard || !rail) return null;
+      const context = document.querySelector<HTMLElement>(".workspace-time-context");
+      if (!timelineElement || !nowLine || !dashboard || !rail || !context) return null;
       const timelineBox = timelineElement.getBoundingClientRect();
       const nowBox = nowLine.getBoundingClientRect();
       return {
@@ -154,6 +163,9 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
           document.body.scrollHeight > window.innerHeight + 1,
         mainVerticalScroll: dashboard.scrollHeight > dashboard.clientHeight + 1,
         rightRailVerticalScroll: rail.scrollHeight > rail.clientHeight + 1,
+        threeColumnOrder:
+          timelineElement.getBoundingClientRect().right < context.getBoundingClientRect().left &&
+          context.getBoundingClientRect().right < rail.getBoundingClientRect().left,
         timelineHasInternalScroll: timelineElement.scrollHeight > timelineElement.clientHeight,
         nowLineViewportRatio: (nowBox.top - timelineBox.top) / timelineBox.height,
       };
@@ -162,6 +174,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
     expect(measurements?.pageVerticalScroll).toBe(false);
     expect(measurements?.mainVerticalScroll).toBe(false);
     expect(measurements?.rightRailVerticalScroll).toBe(false);
+    expect(measurements?.threeColumnOrder).toBe(true);
     expect(measurements?.timelineHasInternalScroll).toBe(true);
     expect(measurements?.nowLineViewportRatio).toBeGreaterThanOrEqual(0.35);
     expect(measurements?.nowLineViewportRatio).toBeLessThanOrEqual(0.45);
@@ -182,6 +195,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
       ).not.toBeVisible();
     }
     if (viewport.width === 720) {
+      await expect(page.locator(".workspace-task-list li").first()).toBeVisible();
       await expect(page.getByRole("button", { name: /工作台/u })).toBeVisible();
       await expect(page.getByRole("button", { name: /课表/u })).toBeVisible();
       await expect(page.getByRole("button", { name: "设置" })).toBeVisible();
@@ -191,6 +205,15 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
       await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
     }
   }
+});
+
+test("reduced motion keeps Overview, Time Context and Settings available", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await seedDashboardRuntime(page);
+  await expect(page.getByTestId("workspace-today-overview")).toBeVisible();
+  await expect(page.getByTestId("workspace-time-context")).toBeVisible();
+  await page.getByRole("button", { name: "设置" }).click();
+  await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
 });
 
 test("minute updates move the current-time line without taking back manual scroll position", async ({
@@ -270,7 +293,11 @@ test("Dashboard cards remain visible in both light and dark themes", async ({ pa
   await visibleModules();
 
   await page.getByRole("button", { name: "设置" }).click();
-  const settings = page.getByRole("dialog", { name: "作息时间" });
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "外观" })
+    .click();
   await settings.getByLabel("主题").selectOption("dark");
   await settings.getByRole("button", { name: "取消" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -284,6 +311,7 @@ test("empty Academic data still renders the complete axis and truthful empty/una
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
   const timeline = page.getByRole("region", { name: "今日日程时间轴" });
   await expect(timeline.getByText("今天暂无日程", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("workspace-time-context")).toContainText("今天已无课程");
   await expect(timeline.getByText("00:00")).toBeVisible();
   await expect(timeline.getByText("24:00")).toBeVisible();
   await expect(page.getByText("暂无未完成学业事项")).toBeVisible();

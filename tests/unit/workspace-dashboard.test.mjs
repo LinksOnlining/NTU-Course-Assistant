@@ -114,6 +114,59 @@ test("next item prefers the active occurrence, ignores cancelled items, and trac
   );
 });
 
+test("time context separates active, upcoming, tomorrow, and free intervals from occupied occurrences", () => {
+  const sources = {
+    date,
+    timelineItems: [
+      timelineItem("first", "09:00", "10:00", { location: "A101" }),
+      timelineItem("cancelled", "10:00", "11:00", { occupiesTime: false, status: "cancelled" }),
+      timelineItem("second", "12:00", "13:00"),
+    ],
+    tomorrowItems: [timelineItem("tomorrow", "08:00", "09:00")],
+    tasks: [task("todo", "")],
+    warnings: [],
+  };
+  const active = buildWorkspaceDashboardViewModel(sources, "09:30");
+  assert.match(active.nextCourseContext.label, /正在上课.*30 分钟/u);
+  assert.equal(active.nextCourseContext.location, "A101");
+  assert.equal(active.nextFreeSlot, "下一段空闲 · 2 小时");
+  const free = buildWorkspaceDashboardViewModel(sources, "10:30");
+  assert.equal(free.nextFreeSlot, "当前空闲 · 1 小时 30 分钟");
+  assert.match(free.nextCourseContext.label, /后上课/u);
+  const tomorrow = buildWorkspaceDashboardViewModel(sources, "14:00");
+  assert.equal(tomorrow.nextCourseContext.label, "下一节在明天");
+  assert.equal(tomorrow.nextCourseContext.title, "tomorrow");
+  assert.equal(
+    buildWorkspaceDashboardViewModel({ ...sources, tomorrowItems: [] }, "14:00").nextCourseContext
+      .label,
+    "今天已无课程",
+  );
+  assert.equal(
+    buildWorkspaceDashboardViewModel({ ...sources, timelineItems: [] }, "10:00").nextFreeSlot,
+    "当前空闲 · 14 小时",
+  );
+});
+
+test("task previews use natural relative dates without changing dueAt", () => {
+  const sources = {
+    date,
+    timelineItems: [],
+    warnings: [],
+    tasks: [
+      task("today", "2026-09-23T18:00:00"),
+      task("tomorrow", "2026-09-24T18:00:00"),
+      task("weekday", "2026-09-25T18:00:00"),
+      task("later", "2026-10-02T18:00:00"),
+    ],
+  };
+  const preview = buildWorkspaceDashboardViewModel(sources, "08:00").taskSummary.items;
+  assert.deepEqual(
+    preview.map((item) => item.deadlineLabel),
+    ["今天 18:00", "明天 18:00", "周五 18:00", "10月2日 18:00"],
+  );
+  assert.equal(preview[1].dueAt, "2026-09-24T18:00:00");
+});
+
 test("workspace loader reuses Academic application reads and canonical occurrence resolution", async () => {
   const calls = [];
   const sources = await loadWorkspaceDashboardSources(date, null, {

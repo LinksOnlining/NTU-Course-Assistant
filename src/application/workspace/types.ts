@@ -28,6 +28,15 @@ export interface WorkspaceDashboardViewModel {
   readonly timelineItems: readonly TimelineItem[];
   readonly todayItemCount: number;
   readonly nextItem: TimelineItem | null;
+  readonly todayStatusText: string;
+  readonly todaySummaryText: string;
+  readonly nextCourseContext: {
+    readonly label: string;
+    readonly title: string;
+    readonly time: string;
+    readonly location: string | null;
+  };
+  readonly nextFreeSlot: string;
   readonly taskSummary: WorkspaceTaskSummary;
   readonly moduleAvailability: {
     readonly diary: WorkspaceModuleAvailability;
@@ -40,6 +49,7 @@ export interface WorkspaceDashboardViewModel {
 export interface WorkspaceDashboardSources {
   readonly date: string;
   readonly timelineItems: readonly TimelineItem[];
+  readonly tomorrowItems?: readonly TimelineItem[];
   readonly tasks: readonly AcademicTask[];
   readonly warnings: readonly string[];
 }

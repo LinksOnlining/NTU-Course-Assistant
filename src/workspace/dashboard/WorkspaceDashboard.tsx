@@ -78,16 +78,6 @@ function taskRoute(): AppRoute {
   return { area: "workspace", page: "tasks" };
 }
 
-function formatNextItem(model: WorkspaceDashboardViewModel, nowTime: string): string {
-  if (!model.nextItem) {
-    return model.timelineItems.length === 0 ? "今天暂无日程" : "今天已无后续安排";
-  }
-  const item = model.nextItem;
-  return item.startTime <= nowTime && nowTime < item.endTime
-    ? `进行中：${item.title}`
-    : `${item.startTime} · ${item.title}`;
-}
-
 function TimelineCard({
   model,
   nowTime,
@@ -120,11 +110,7 @@ function TimelineCard({
       <header className="workspace-card-header workspace-timeline-header">
         <div>
           <h2>今日日程</h2>
-          <p className="workspace-timeline-summary">
-            <span>{model.todayItemCount} 项安排</span>
-            <span aria-hidden="true">·</span>
-            <span>{formatNextItem(model, nowTime)}</span>
-          </p>
+          <p className="workspace-timeline-summary">{model.todayItemCount} 项安排</p>
         </div>
         <button
           type="button"
@@ -222,6 +208,27 @@ function TimelineCard({
   );
 }
 
+function TimeContext({ model }: { readonly model: WorkspaceDashboardViewModel }) {
+  const next = model.nextCourseContext;
+  return (
+    <aside
+      className="workspace-time-context"
+      aria-label="时间概览"
+      data-testid="workspace-time-context"
+    >
+      <h2>时间概览</h2>
+      <p className="workspace-time-kicker">{next.label}</p>
+      <strong>{next.title}</strong>
+      {next.time && <span>{next.time}</span>}
+      {next.location && <span>{next.location}</span>}
+      <div className="workspace-free-slot">
+        <span>空闲时间</span>
+        <strong>{model.nextFreeSlot}</strong>
+      </div>
+    </aside>
+  );
+}
+
 function TaskCard({
   model,
   onNavigate,
@@ -241,7 +248,6 @@ function TaskCard({
           >
             任务
           </button>
-          <span className="workspace-source-label">学业</span>
         </h2>
         <button
           type="button"
@@ -262,7 +268,7 @@ function TaskCard({
                 <span
                   className={`workspace-task-deadline workspace-task-deadline--${task.deadlineKind}`}
                 >
-                  {task.deadlineLabel}
+                  {task.deadlineLabel} · {task.sourceLabel}
                 </span>
               </button>
             </li>
@@ -349,31 +355,44 @@ export function WorkspaceDashboard({
   }
 
   return (
-    <div className="workspace-dashboard" data-testid="workspace-dashboard" data-date={model.date}>
-      <TimelineCard model={model} nowTime={nowTime} onNavigate={onNavigate} />
-      <aside className="workspace-dashboard-rail" aria-label="工作台摘要">
-        <TaskCard model={model} onNavigate={onNavigate} />
-        <div className="workspace-module-pair">
+    <div className="workspace-dashboard-page">
+      <section
+        className="workspace-today-overview"
+        aria-label="今日概览"
+        data-testid="workspace-today-overview"
+      >
+        <div className="workspace-ambient" aria-hidden="true" />
+        <p className="workspace-overview-eyebrow">今日概览</p>
+        <h2>{model.todayStatusText}</h2>
+        <p>{model.todaySummaryText}</p>
+      </section>
+      <div className="workspace-dashboard" data-testid="workspace-dashboard" data-date={model.date}>
+        <TimelineCard model={model} nowTime={nowTime} onNavigate={onNavigate} />
+        <TimeContext model={model} />
+        <aside className="workspace-dashboard-rail" aria-label="工作台摘要">
+          <TaskCard model={model} onNavigate={onNavigate} />
+          <div className="workspace-module-pair">
+            <UnavailableCard
+              title="日记"
+              description="日记模块将在后续阶段开放"
+              route={{ area: "workspace", page: "diary" }}
+              onNavigate={onNavigate}
+            />
+            <UnavailableCard
+              title="收件箱"
+              description="收件箱将在后续阶段开放"
+              route={{ area: "workspace", page: "inbox" }}
+              onNavigate={onNavigate}
+            />
+          </div>
           <UnavailableCard
-            title="日记"
-            description="日记模块将在后续阶段开放"
-            route={{ area: "workspace", page: "diary" }}
+            title="AI"
+            description="智能规划将在后续阶段开放"
+            route={{ area: "workspace", page: "ai" }}
             onNavigate={onNavigate}
           />
-          <UnavailableCard
-            title="收件箱"
-            description="收件箱将在后续阶段开放"
-            route={{ area: "workspace", page: "inbox" }}
-            onNavigate={onNavigate}
-          />
-        </div>
-        <UnavailableCard
-          title="AI"
-          description="智能规划将在后续阶段开放"
-          route={{ area: "workspace", page: "ai" }}
-          onNavigate={onNavigate}
-        />
-      </aside>
+        </aside>
+      </div>
     </div>
   );
 }

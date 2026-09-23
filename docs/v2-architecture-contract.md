@@ -76,7 +76,7 @@ Academic、Planner、Tasks、Diary、Inbox、Timeline、Reminder 和本地 Searc
 
 ## 7.17 Dashboard Contract
 
-Workspace Home 页面自身无纵向滚动。主区域左侧约 68–70% 为 24 小时 Timeline（00:00–24:00），右侧约 30–32% 固定摘要为 Tasks、Diary、Inbox、AI。仅 Timeline viewport 可以独立纵向滚动；默认定位当前时间附近并实时显示 current-time indicator。右侧在目标尺寸下不独立滚动；内容过多显示摘要和“查看全部”，不无限扩高卡片。
+Workspace Home 页面自身无纵向滚动。Phase 1.6.1 起主区域采用 Timeline / Time Context / Workspace Rail 三栏，宽度随视口伸缩，Time Context 在桌面目标宽度约 212–248px。仅 Timeline viewport 可以独立纵向滚动；默认定位当前时间附近并实时显示 current-time indicator。右侧在目标尺寸下不独立滚动；内容过多显示摘要和“查看全部”，不无限扩高卡片。
 
 ## 7.18 Dashboard Header Contract
 
@@ -164,3 +164,10 @@ OpenAI unavailable、Weather API unavailable 或网络断开时，Academic、Pla
 - 单日布局为 1,440 分钟 / 1,440 CSS px，半小时刻度；重叠安排进行稳定分栏。时间无效或超出日边界的条目从布局排除并生成可审查警告；视觉最小高度不得更改事实起止时间。
 - 页面进入/返回工作台时读取当天 Academic 数据；本地分钟时钟只重算当前/下一课程摘要和当前位置，不轮询数据库。跨本地午夜后切换日期并重新读取当天数据。时间轴为内部滚动区，初次定位到当前时间附近，不持续抢回用户手动滚动位置。
 - Phase 1.6 不改变 Academic core、存储、Tauri、数据库/schema、产品身份、依赖或其他应用模块。
+
+## 7.37 Phase 1.6.1 Workspace Presentation & Settings
+
+- 公共 Header 与 Today Overview 构成连续 Top Canvas；Overview 使用已解析课表投影及现有学业任务生成确定性摘要。背景只允许静态、低对比氛围效果，不显示虚构天气或未实现领域的数据。
+- 主工作区为 Timeline / Time Context / Workspace Rail。Time Context 是文字摘要，消费已解析 Timeline 投影，显示当前或下一课程、下一段真实空闲；不得变成第二条时间轴或自行解析 CourseOverride。任务截止日只在任务摘要展示，不占 Timeline。
+- Surface 层级为 Canvas、Primary Timeline、Utility Time Context、Flat Tile；交互动画使用语义化 120/180/240ms token，`prefers-reduced-motion` 下取消非必要过渡。浅色/深色共用语义 token。
+- 设置使用统一容器与分类侧栏：从工作台进入默认“工作台 / 首页”，从课表进入默认“课表 / 作息”；主题位于“通用 / 外观”，沿用原 `links-workplace.theme-preference`。未实现页仅显示真实说明，不提供虚假开关；现有作息、提醒、Widget、启动与课程数据操作仍使用原保存逻辑。
