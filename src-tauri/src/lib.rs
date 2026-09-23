@@ -4,7 +4,7 @@ mod notification;
 mod scheduler;
 
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -31,6 +31,18 @@ const TRAY_TOGGLE_WIDGET: &str = "tray-toggle-widget";
 const TRAY_QUIT: &str = "tray-quit";
 
 static RUNTIME_OPERATION_ID: AtomicU64 = AtomicU64::new(1);
+
+fn database_path_for_mode(app_local_data_dir: &Path, debug_build: bool) -> PathBuf {
+    if debug_build {
+        app_local_data_dir.join("dev-v2").join("courses.sqlite3")
+    } else {
+        app_local_data_dir.join("courses.sqlite3")
+    }
+}
+
+fn database_path_for_build(app_local_data_dir: &Path) -> PathBuf {
+    database_path_for_mode(app_local_data_dir, cfg!(debug_assertions))
+}
 
 #[cfg(debug_assertions)]
 fn trace_runtime(stage: &str, request_id: u64, elapsed: std::time::Duration) {
@@ -765,7 +777,7 @@ pub fn run() {
         .setup(|app| {
             let course_state = match app.path().app_local_data_dir() {
                 Ok(directory) => {
-                    let path = directory.join("courses.sqlite3");
+                    let path = database_path_for_build(&directory);
                     match CourseDatabase::open(&path) {
                         Ok(database) => {
                             match database.schema_version() {
@@ -865,7 +877,8 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{restored_widget_position, ScreenRect};
+    use super::{database_path_for_mode, restored_widget_position, ScreenRect};
+    use std::path::Path;
 
     const PRIMARY: ScreenRect = ScreenRect {
         x: 0,
@@ -873,6 +886,19 @@ mod tests {
         width: 1920,
         height: 1080,
     };
+
+    #[test]
+    fn debug_database_is_isolated_while_release_path_stays_compatible() {
+        let root = Path::new("C:/Users/example/AppData/Local/com.ntu-course-assistant.desktop");
+        assert_eq!(
+            database_path_for_mode(root, true),
+            root.join("dev-v2").join("courses.sqlite3")
+        );
+        assert_eq!(
+            database_path_for_mode(root, false),
+            root.join("courses.sqlite3")
+        );
+    }
 
     #[test]
     fn visible_widget_position_is_retained_across_available_monitors() {

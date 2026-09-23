@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Planner / Personal Task Domain Contract
 
-状态：Phase 2.0 已审查并冻结；后续 Phase 2 实现必须遵守本契约。
+状态：Phase 2.0 Domain Contract 已冻结；Phase 2.1 Debug DB 隔离与 schema 5→6 迁移实现及验证已完成。后续 Phase 2 实现必须遵守本契约。
 
 ## 1. 当前实现审计基线
 
@@ -54,9 +54,9 @@
 - 冲突是提示而不是数据库约束：保存前列出冲突，用户可以返回调整/取消，或明确选择仍然保存。保存失败必须与冲突提示区分。
 - Free Time 仅使用 `occupiesTime=true` 的有效占用：排序后合并重叠或相邻区间，再生成 00:00–24:00 内空闲间隔；取消课程被忽略。Timeline 展示仍按实际而非有效占用区间。
 
-## 5. schema 6 单次迁移提案
+## 5. schema 6 单次迁移
 
-Phase 2 只新增一个生产迁移：`5 → 6`；Phase 2.2 / 2.3 不再递增 schema。新表与 Academic 数据共用原 `courses.sqlite3`。
+Phase 2 只新增一个生产迁移：`5 → 6`；Phase 2.2 / 2.3 不再递增 schema。此迁移已在 Phase 2.1 实现。新表与 Academic 数据共用原 `courses.sqlite3`。
 
 ```sql
 CREATE TABLE personal_tasks (
@@ -112,16 +112,23 @@ CREATE INDEX time_blocks_task_date ON time_blocks(personal_task_id, date, start_
 
 The application validator performs exact Gregorian date and `HH:mm` checks in addition to SQL structural checks. All planner SQLite connections enable foreign keys. Foreign-key enforcement, task deletion cascade, populated schema-5 preservation, new-schema integrity, and rejected partial migration are migration gates.
 
+### Phase 2.1 实施与安全验证
+
+- Debug app 数据库位于 `<app_local_data_dir>/dev-v2/courses.sqlite3`；Release 仍为 `<app_local_data_dir>/courses.sqlite3`，不访问或复制真实用户数据库。
+- 新鲜数据库直接创建 schema 6；旧 schema 1–5 在迁移前使用 SQLite `VACUUM INTO` 创建并校验一致性备份，备份失败则迁移失败关闭。
+- schema 5→6 的三张表、索引与版本号在单个事务内创建；迁移后校验表、索引、外键、`user_version` 与 `integrity_check`，任一失败则回滚。
+- Phase 2.1 结果与自动验证见 `docs/v2-phase-2.1-verification.md`。
+
 ### Migration safety sequence
 
-1. Confirm source schema exactly 5; reject unsupported future schema.
-2. Create a SQLite-consistent snapshot in the matching app-data root under `backups/migrations/`, named with source/target schema and UTC timestamp. Do not copy only the main DB while WAL is active; do not delete migration backups.
-3. Reopen/validate the snapshot (`user_version=5`, SQLite integrity check) before touching the live database. Backup failure aborts migration.
-4. Execute all schema-6 DDL and `user_version=6` in one transaction; validate required objects, foreign keys, `PRAGMA foreign_key_check` and integrity before commit.
-5. On any failure, rollback leaves the original schema/data at 5 and the validated backup available. Tests inject an in-transaction failure and compare existing Academic fixture rows before/after.
-6. Fresh DB initializes directly to schema 6; an already-valid schema 6 reopens without repeating migration or creating another backup.
+1. Reject unsupported future schema. A fresh version-0 DB follows the existing bootstrap and initializes directly to schema 6 without a legacy backup.
+2. For an existing schema 1–5 DB, create a SQLite-consistent snapshot in the matching app-data root under `backups/migrations/`; the current supported production upgrade is schema 5 → 6. Names include source schema, target schema, UTC epoch-millisecond timestamp and a collision suffix. Do not copy only the main DB while WAL is active; do not delete migration backups.
+3. Reopen/validate the snapshot (`user_version` equals the original source version, SQLite integrity and foreign keys clean) before touching the live database. Backup failure aborts migration. Existing legacy migrations 1–4 remain supported and keep their original-version backup before those migrations run.
+4. Execute schema-6 DDL and `user_version=6` in one transaction; validate required objects, foreign keys, `PRAGMA foreign_key_check` and integrity before commit.
+5. On any schema-6 migration failure, transaction rollback leaves the live DB at schema 5 with Academic rows intact and the validated backup available. Tests inject a post-DDL in-transaction failure and compare populated Academic fixtures before/after.
+6. An already-valid schema 6 reopens without repeating migration or creating another backup.
 
-Backup mechanics are a Phase 2.1 implementation detail: use the bundled SQLite / existing rusqlite capabilities; if SQLite backup API requires its feature, enable that feature on the existing dependency rather than add a runtime crate. Verify WAL consistency in tests.
+Backup uses SQLite `VACUUM INTO` for a consistent snapshot, including committed WAL data; no dependency or rusqlite feature is added. Reopen and integrity-check each snapshot before migration.
 
 ## 6. Implementation boundaries
 

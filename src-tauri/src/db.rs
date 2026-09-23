@@ -1,4 +1,8 @@
-use std::{fmt, fs, path::Path, time::Duration};
+use std::{
+    fmt, fs,
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
@@ -9,7 +13,7 @@ use crate::models::{
     ReminderSettings, Semester, SemesterStatus, TermConfig, WidgetSettings, WidgetSettingsPatch,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 5;
+const CURRENT_SCHEMA_VERSION: i64 = 6;
 const HANDLED_REMINDER_RETENTION_MILLISECONDS: i64 = 400 * 24 * 60 * 60 * 1_000;
 
 #[derive(Debug)]
@@ -75,22 +79,239 @@ pub struct CourseDatabase {
     connection: Connection,
 }
 
+fn create_validated_migration_backup(
+    connection: &Connection,
+    backup_root: &Path,
+    source_version: i64,
+) -> Result<PathBuf, StorageError> {
+    let directory = backup_root.join("backups").join("migrations");
+    fs::create_dir_all(&directory)?;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    for suffix in 0..1000_u16 {
+        let path = directory.join(format!(
+            "courses-v{source_version}-to-v{CURRENT_SCHEMA_VERSION}-{timestamp}-{suffix}.sqlite3"
+        ));
+        if path.exists() {
+            continue;
+        }
+
+        let path_text = path.to_string_lossy();
+        if let Err(error) = connection.execute("VACUUM INTO ?1", [path_text.as_ref()]) {
+            let _ = fs::remove_file(&path);
+            return Err(StorageError::Sqlite(error));
+        }
+
+        let validation = (|| {
+            let snapshot = Connection::open(&path)?;
+            let version: i64 =
+                snapshot.pragma_query_value(None, "user_version", |row| row.get(0))?;
+            if version != source_version {
+                return Err(StorageError::InvalidData(
+                    "迁移备份的数据库版本校验失败，数据库未迁移。".into(),
+                ));
+            }
+            validate_integrity(&snapshot)
+        })();
+        if let Err(error) = validation {
+            let _ = fs::remove_file(&path);
+            return Err(error);
+        }
+        return Ok(path);
+    }
+
+    Err(StorageError::InvalidData(
+        "无法生成唯一的迁移备份文件名，数据库未迁移。".into(),
+    ))
+}
+
+fn validate_integrity(connection: &Connection) -> Result<(), StorageError> {
+    let result: String = connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+    if result != "ok" {
+        return Err(StorageError::InvalidData(format!(
+            "SQLite integrity check failed: {result}"
+        )));
+    }
+    let mut statement = connection.prepare("PRAGMA foreign_key_check")?;
+    if statement.query([])?.next()?.is_some() {
+        return Err(StorageError::InvalidData(
+            "SQLite foreign key check failed".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn migrate_schema_five_to_six(connection: &mut Connection) -> Result<(), StorageError> {
+    migrate_schema_five_to_six_with_hook(connection, || Ok(()))
+}
+
+fn migrate_schema_five_to_six_with_hook(
+    connection: &mut Connection,
+    before_validation: impl FnOnce() -> Result<(), StorageError>,
+) -> Result<(), StorageError> {
+    let transaction = connection.transaction()?;
+    transaction.execute_batch(
+        "CREATE TABLE personal_tasks (
+            id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) > 0),
+            title TEXT NOT NULL CHECK(length(trim(title)) BETWEEN 1 AND 200),
+            description TEXT NULL CHECK(description IS NULL OR length(description) <= 5000),
+            status TEXT NOT NULL CHECK(status IN ('OPEN', 'COMPLETED')),
+            priority TEXT NOT NULL DEFAULT 'NONE'
+                CHECK(priority IN ('NONE', 'LOW', 'MEDIUM', 'HIGH')),
+            deadline_date TEXT NULL CHECK(deadline_date IS NULL OR length(deadline_date) = 10),
+            deadline_time TEXT NULL CHECK(deadline_time IS NULL OR length(deadline_time) = 5),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            completed_at TEXT NULL,
+            CHECK(deadline_time IS NULL OR deadline_date IS NOT NULL),
+            CHECK((status = 'OPEN' AND completed_at IS NULL) OR
+                  (status = 'COMPLETED' AND completed_at IS NOT NULL))
+        );
+        CREATE INDEX personal_tasks_status_deadline
+            ON personal_tasks(status, deadline_date, deadline_time, priority);
+
+        CREATE TABLE planner_events (
+            id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) > 0),
+            title TEXT NOT NULL CHECK(length(trim(title)) BETWEEN 1 AND 200),
+            description TEXT NULL CHECK(description IS NULL OR length(description) <= 5000),
+            date TEXT NOT NULL CHECK(length(date) = 10),
+            start_time TEXT NOT NULL CHECK(length(start_time) = 5),
+            end_time TEXT NOT NULL CHECK(length(end_time) = 5),
+            location TEXT NULL CHECK(location IS NULL OR length(trim(location)) BETWEEN 1 AND 200),
+            buffer_before_minutes INTEGER NOT NULL DEFAULT 0
+                CHECK(buffer_before_minutes BETWEEN 0 AND 240),
+            buffer_after_minutes INTEGER NOT NULL DEFAULT 0
+                CHECK(buffer_after_minutes BETWEEN 0 AND 240),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            CHECK(start_time < end_time)
+        );
+        CREATE INDEX planner_events_date_time
+            ON planner_events(date, start_time, end_time);
+
+        CREATE TABLE time_blocks (
+            id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) > 0),
+            personal_task_id TEXT NOT NULL REFERENCES personal_tasks(id) ON DELETE CASCADE,
+            date TEXT NOT NULL CHECK(length(date) = 10),
+            start_time TEXT NOT NULL CHECK(length(start_time) = 5),
+            end_time TEXT NOT NULL CHECK(length(end_time) = 5),
+            buffer_before_minutes INTEGER NOT NULL DEFAULT 0
+                CHECK(buffer_before_minutes BETWEEN 0 AND 240),
+            buffer_after_minutes INTEGER NOT NULL DEFAULT 0
+                CHECK(buffer_after_minutes BETWEEN 0 AND 240),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            CHECK(start_time < end_time)
+        );
+        CREATE INDEX time_blocks_date_time
+            ON time_blocks(date, start_time, end_time);
+        CREATE INDEX time_blocks_task_date
+            ON time_blocks(personal_task_id, date, start_time);",
+    )?;
+    transaction.pragma_update(None, "user_version", 6)?;
+    before_validation()?;
+    validate_schema_six(&transaction)?;
+    transaction.commit()?;
+    Ok(())
+}
+
+fn validate_schema_six(connection: &Connection) -> Result<(), StorageError> {
+    const REQUIRED_TABLES: &[&str] = &[
+        "courses",
+        "period_times",
+        "app_settings",
+        "handled_reminders",
+        "semesters",
+        "course_overrides",
+        "academic_tasks",
+        "exams",
+        "reminder_rules",
+        "reminder_instances",
+        "personal_tasks",
+        "planner_events",
+        "time_blocks",
+    ];
+    const REQUIRED_INDEXES: &[&str] = &[
+        "personal_tasks_status_deadline",
+        "planner_events_date_time",
+        "time_blocks_date_time",
+        "time_blocks_task_date",
+    ];
+
+    for (kind, name) in REQUIRED_TABLES
+        .iter()
+        .map(|name| ("table", *name))
+        .chain(REQUIRED_INDEXES.iter().map(|name| ("index", *name)))
+    {
+        let exists: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = ?1 AND name = ?2)",
+            params![kind, name],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Err(StorageError::InvalidData(format!(
+                "schema 6 缺少必需的 {kind}: {name}"
+            )));
+        }
+    }
+
+    let foreign_key_exists: bool = connection.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM pragma_foreign_key_list('time_blocks')
+            WHERE \"table\" = 'personal_tasks'
+              AND \"from\" = 'personal_task_id'
+              AND \"to\" = 'id'
+              AND upper(\"on_delete\") = 'CASCADE'
+        )",
+        [],
+        |row| row.get(0),
+    )?;
+    if !foreign_key_exists {
+        return Err(StorageError::InvalidData(
+            "schema 6 缺少 TimeBlock → PersonalTask 级联外键。".into(),
+        ));
+    }
+
+    let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version != CURRENT_SCHEMA_VERSION {
+        return Err(StorageError::InvalidData("schema 6 版本校验失败。".into()));
+    }
+    validate_integrity(connection)
+}
+
 impl CourseDatabase {
     pub fn open(path: &Path) -> Result<Self, StorageError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
         let connection = Connection::open(path)?;
-        Self::from_connection(connection)
+        Self::from_connection_with_backup_dir(connection, path.parent())
     }
 
+    #[cfg(test)]
     fn from_connection(connection: Connection) -> Result<Self, StorageError> {
+        Self::from_connection_with_backup_dir(connection, None)
+    }
+
+    fn from_connection_with_backup_dir(
+        connection: Connection,
+        backup_dir: Option<&Path>,
+    ) -> Result<Self, StorageError> {
         connection.busy_timeout(Duration::from_secs(3))?;
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
         if version > CURRENT_SCHEMA_VERSION {
             return Err(StorageError::UnsupportedSchema(version));
         }
         connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")?;
+        if (1..CURRENT_SCHEMA_VERSION).contains(&version) {
+            let backup_dir = backup_dir.ok_or_else(|| {
+                StorageError::InvalidData("迁移前备份目录不可用，数据库未迁移。".into())
+            })?;
+            create_validated_migration_backup(&connection, backup_dir, version)?;
+        }
         let mut database = Self { connection };
         database.migrate()?;
         Ok(database)
@@ -277,6 +498,12 @@ impl CourseDatabase {
                 PRAGMA user_version = 5;",
             )?;
             transaction.commit()?;
+        }
+        let version: i64 = self
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version < 6 {
+            migrate_schema_five_to_six(&mut self.connection)?;
         }
         Ok(())
     }
@@ -1123,17 +1350,111 @@ mod tests {
     }
 
     fn temporary_database_path() -> std::path::PathBuf {
-        std::env::temp_dir().join(format!(
-            "ntu-course-assistant-{}-{}.sqlite3",
+        let root = std::env::temp_dir().join(format!(
+            "ntu-course-assistant-{}-{}",
             std::process::id(),
             DATABASE_NUMBER.fetch_add(1, Ordering::Relaxed)
-        ))
+        ));
+        fs::create_dir_all(&root).expect("create temporary database directory");
+        root.join("courses.sqlite3")
+    }
+
+    fn isolated_database_root() -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "ntu-course-assistant-migration-{}-{}",
+            std::process::id(),
+            DATABASE_NUMBER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).expect("create isolated test directory");
+        root
+    }
+
+    fn create_populated_schema_five_database(path: &Path) {
+        let database = CourseDatabase::open(path).expect("create synthetic schema six database");
+        database.insert_course(&course()).expect("seed course");
+        database
+            .save_period_times(&[PeriodTime {
+                period: 1,
+                start_time: "08:00".into(),
+                end_time: "08:45".into(),
+            }])
+            .expect("seed period time");
+        database
+            .connection
+            .execute_batch(
+                "INSERT INTO semesters
+                    (id, name, first_week_monday, total_weeks, timezone, status, created_at, updated_at)
+                 VALUES ('semester-id', '2026 秋季学期', '2026-09-07', 16,
+                         'Asia/Shanghai', 'ACTIVE', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z');
+                 INSERT INTO course_overrides
+                    (id, course_id, semester_id, kind, original_occurrence_key, original_date,
+                     target_date, start_period, end_period, start_time, end_time, classroom,
+                     teacher, note, active, created_at, updated_at)
+                 VALUES ('override-id', 'course-id', 'semester-id', 'MODIFY', 'occurrence-key',
+                         '2026-09-24', NULL, NULL, NULL, NULL, NULL, 'JX05-101', NULL, NULL,
+                         1, '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z');
+                 INSERT INTO academic_tasks
+                    (id, semester_id, course_id, type, title, note, due_at, priority, status,
+                     completed_at, created_at, updated_at)
+                 VALUES ('academic-task-id', 'semester-id', 'course-id', 'ASSIGNMENT',
+                         '已有学业事项', NULL, '2026-09-25T18:00:00+08:00', 1, 'TODO', NULL,
+                         '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z');
+                 INSERT INTO exams
+                    (id, semester_id, course_id, title, starts_at, ends_at, location, seat_info,
+                     note, status, created_at, updated_at)
+                 VALUES ('exam-id', 'semester-id', 'course-id', '已有考试',
+                         '2026-12-20T09:00:00+08:00', '2026-12-20T11:00:00+08:00',
+                         '考场 A', NULL, NULL, 'SCHEDULED',
+                         '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z');
+                 INSERT INTO reminder_rules
+                    (id, target_type, target_id, offsets_minutes, enabled, created_at, updated_at)
+                 VALUES ('rule-id', 'COURSE', 'course-id', '[15]', 1,
+                         '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z');
+                 INSERT INTO reminder_instances
+                    (id, rule_id, occurrence_key, trigger_at_milliseconds, status, handled_at_milliseconds)
+                 VALUES ('instance-id', 'rule-id', 'occurrence-key', 1000, 'PENDING', NULL);
+                 INSERT INTO handled_reminders (occurrence_key, handled_at_milliseconds)
+                 VALUES ('handled-key', 1000);
+                 INSERT INTO app_settings (key, value)
+                 VALUES ('reminder_settings', '{\"enabled\":false,\"advanceMinutes\":15}');
+                 DROP TABLE time_blocks;
+                 DROP TABLE planner_events;
+                 DROP TABLE personal_tasks;
+                 PRAGMA user_version = 5;",
+            )
+            .expect("seed schema five data and downgrade synthetic database");
+    }
+
+    fn migration_backups(root: &Path) -> Vec<PathBuf> {
+        let directory = root.join("backups").join("migrations");
+        if !directory.is_dir() {
+            return Vec::new();
+        }
+        fs::read_dir(directory)
+            .expect("list migration backups")
+            .map(|entry| entry.expect("read migration backup entry").path())
+            .collect()
     }
 
     fn remove_database_files(path: &Path) {
+        let had_database_files = path.exists()
+            || PathBuf::from(format!("{}-wal", path.display())).exists()
+            || PathBuf::from(format!("{}-shm", path.display())).exists();
         let _ = fs::remove_file(path);
         let _ = fs::remove_file(format!("{}-wal", path.display()));
         let _ = fs::remove_file(format!("{}-shm", path.display()));
+        if had_database_files {
+            if let Some(parent) = path.parent() {
+                if parent.starts_with(std::env::temp_dir())
+                    && parent
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with("ntu-course-assistant-"))
+                {
+                    let _ = fs::remove_dir_all(parent);
+                }
+            }
+        }
     }
 
     #[test]
@@ -1192,7 +1513,7 @@ mod tests {
                 .expect("insert legacy course");
         }
         let migrated = CourseDatabase::open(&path).expect("migrate schema four database");
-        assert_eq!(migrated.schema_version().expect("schema version"), 5);
+        assert_eq!(migrated.schema_version().expect("schema version"), 6);
         assert_eq!(
             migrated.load_courses().expect("load legacy course").courses,
             vec![expected]
@@ -1214,7 +1535,7 @@ mod tests {
     #[test]
     fn empty_database_runs_versioned_migration() {
         let database = database();
-        assert_eq!(database.schema_version().expect("schema version"), 5);
+        assert_eq!(database.schema_version().expect("schema version"), 6);
         let table_count: i64 = database
             .connection
             .query_row(
@@ -1233,6 +1554,232 @@ mod tests {
             )
             .expect("academic tables");
         assert_eq!(academic_table_count, 6);
+    }
+
+    #[test]
+    fn fresh_database_starts_at_schema_six_without_a_migration_backup() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        {
+            let database = CourseDatabase::open(&path).expect("create fresh database");
+            assert_eq!(database.schema_version().expect("schema version"), 6);
+        }
+        {
+            let database = CourseDatabase::open(&path).expect("reopen schema six database");
+            assert_eq!(database.schema_version().expect("schema version"), 6);
+        }
+        assert!(migration_backups(&root).is_empty());
+        fs::remove_dir_all(root).expect("remove fresh database fixture");
+    }
+
+    #[test]
+    fn populated_schema_five_gets_a_validated_backup_before_schema_six_migration() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        create_populated_schema_five_database(&path);
+
+        let migrated = CourseDatabase::open(&path).expect("migrate populated schema five");
+        assert_eq!(migrated.schema_version().expect("schema version"), 6);
+        assert_eq!(
+            migrated.load_courses().expect("courses").courses,
+            vec![course()]
+        );
+        assert_eq!(
+            migrated
+                .load_period_times()
+                .expect("periods")
+                .unwrap()
+                .len(),
+            1
+        );
+        for table in [
+            "app_settings",
+            "handled_reminders",
+            "semesters",
+            "course_overrides",
+            "academic_tasks",
+            "exams",
+            "reminder_rules",
+            "reminder_instances",
+        ] {
+            let count: i64 = migrated
+                .connection
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .expect("count preserved academic table");
+            assert_eq!(count, 1, "{table} data should be preserved");
+        }
+        for (table, key_column, expected) in [
+            ("app_settings", "key", "reminder_settings"),
+            ("handled_reminders", "occurrence_key", "handled-key"),
+            ("semesters", "id", "semester-id"),
+            ("course_overrides", "id", "override-id"),
+            ("academic_tasks", "id", "academic-task-id"),
+            ("exams", "id", "exam-id"),
+            ("reminder_rules", "id", "rule-id"),
+            ("reminder_instances", "id", "instance-id"),
+        ] {
+            let value: String = migrated
+                .connection
+                .query_row(&format!("SELECT {key_column} FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .expect("read preserved record identity");
+            assert_eq!(value, expected, "{table} record identity is preserved");
+        }
+        validate_schema_six(&migrated.connection).expect("schema six integrity");
+        assert_eq!(migration_backups(&root).len(), 1);
+        let backup_path = migration_backups(&root).remove(0);
+        assert!(backup_path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("courses-v5-to-v6-"));
+        let backup = Connection::open(&backup_path).expect("open verified backup");
+        assert_eq!(
+            backup
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                .expect("backup version"),
+            5
+        );
+        validate_integrity(&backup).expect("backup integrity");
+        assert_eq!(
+            backup
+                .query_row("SELECT count(*) FROM courses", [], |row| row
+                    .get::<_, i64>(0))
+                .expect("backup course count"),
+            1
+        );
+        drop(backup);
+        drop(migrated);
+
+        let reopened = CourseDatabase::open(&path).expect("reopen schema six without migration");
+        assert_eq!(reopened.schema_version().expect("reopened schema"), 6);
+        assert_eq!(migration_backups(&root).len(), 1);
+        drop(reopened);
+        fs::remove_dir_all(root).expect("remove migration fixture");
+    }
+
+    #[test]
+    fn schema_six_transaction_rolls_back_after_injected_mid_migration_failure() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        create_populated_schema_five_database(&path);
+        let mut connection = Connection::open(&path).expect("open rollback fixture");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")
+            .expect("configure rollback connection");
+        create_validated_migration_backup(&connection, &root, 5).expect("create rollback backup");
+        let error = migrate_schema_five_to_six_with_hook(&mut connection, || {
+            Err(StorageError::InvalidData(
+                "injected migration failure".into(),
+            ))
+        })
+        .expect_err("failure must abort migration");
+        assert!(matches!(error, StorageError::InvalidData(_)));
+        assert_eq!(
+            connection
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                .expect("rollback version"),
+            5
+        );
+        for table in ["personal_tasks", "planner_events"] {
+            let count: i64 = connection
+                .query_row(
+                    "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .expect("check rolled back table");
+            assert_eq!(count, 0, "{table} must not remain partially migrated");
+        }
+        assert_eq!(
+            connection
+                .query_row("SELECT count(*) FROM courses", [], |row| row
+                    .get::<_, i64>(0))
+                .expect("original course remains"),
+            1
+        );
+        assert_eq!(migration_backups(&root).len(), 1);
+        let backup = Connection::open(migration_backups(&root).remove(0))
+            .expect("rollback backup remains readable");
+        assert_eq!(
+            backup
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                .expect("backup schema version"),
+            5
+        );
+        validate_integrity(&backup).expect("rollback backup remains valid");
+        drop(backup);
+        drop(connection);
+        fs::remove_dir_all(root).expect("remove rollback fixture");
+    }
+
+    #[test]
+    fn backup_failure_aborts_migration_without_changing_schema_five_data() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        create_populated_schema_five_database(&path);
+        fs::write(root.join("backups"), "not a directory").expect("block backup directory");
+
+        assert!(CourseDatabase::open(&path).is_err());
+        let connection = Connection::open(&path).expect("reopen after backup failure");
+        assert_eq!(
+            connection
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                .expect("schema remains five"),
+            5
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT count(*) FROM courses", [], |row| row
+                    .get::<_, i64>(0))
+                .expect("course remains after backup failure"),
+            1
+        );
+        assert!(migration_backups(&root).is_empty());
+        drop(connection);
+        fs::remove_dir_all(root).expect("remove backup failure fixture");
+    }
+
+    #[test]
+    fn time_blocks_enforce_task_foreign_key_and_cascade_on_task_delete() {
+        let database = database();
+        let invalid = database.connection.execute(
+            "INSERT INTO time_blocks
+                (id, personal_task_id, date, start_time, end_time, created_at, updated_at)
+             VALUES ('orphan-block', 'missing-task', '2026-09-24', '09:00', '10:00', 'now', 'now')",
+            [],
+        );
+        assert!(invalid.is_err());
+
+        database
+            .connection
+            .execute(
+                "INSERT INTO personal_tasks (id, title, status, priority, created_at, updated_at)
+                 VALUES ('task-id', '测试任务', 'OPEN', 'NONE', 'now', 'now')",
+                [],
+            )
+            .expect("insert task");
+        database
+            .connection
+            .execute(
+                "INSERT INTO time_blocks
+                    (id, personal_task_id, date, start_time, end_time, created_at, updated_at)
+                 VALUES ('block-id', 'task-id', '2026-09-24', '09:00', '10:00', 'now', 'now')",
+                [],
+            )
+            .expect("insert task time block");
+        database
+            .connection
+            .execute("DELETE FROM personal_tasks WHERE id = 'task-id'", [])
+            .expect("delete task");
+        let remaining: i64 = database
+            .connection
+            .query_row("SELECT count(*) FROM time_blocks", [], |row| row.get(0))
+            .expect("count cascaded time blocks");
+        assert_eq!(remaining, 0);
     }
 
     #[test]
@@ -1600,7 +2147,7 @@ mod tests {
         let mut expected = course();
         {
             let database = CourseDatabase::open(&path).expect("create database file");
-            assert_eq!(database.schema_version().expect("new schema version"), 5);
+            assert_eq!(database.schema_version().expect("new schema version"), 6);
             assert!(database
                 .load_courses()
                 .expect("new database is empty")
@@ -1651,13 +2198,13 @@ mod tests {
             .execute_batch(
                 "CREATE TABLE sentinel(value TEXT NOT NULL);
                  INSERT INTO sentinel VALUES ('keep-me');
-                 PRAGMA user_version = 6;",
+                 PRAGMA user_version = 7;",
             )
             .expect("create future database");
         drop(connection);
         assert!(matches!(
             CourseDatabase::open(&path),
-            Err(StorageError::UnsupportedSchema(6))
+            Err(StorageError::UnsupportedSchema(7))
         ));
         let unchanged = Connection::open(&path).expect("reopen future database");
         let version: i64 = unchanged
@@ -1669,7 +2216,7 @@ mod tests {
         let value: String = unchanged
             .query_row("SELECT value FROM sentinel", [], |row| row.get(0))
             .expect("future data remains");
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         assert_eq!(journal_mode, "delete");
         assert_eq!(value, "keep-me");
         drop(unchanged);
@@ -1787,7 +2334,7 @@ mod tests {
             .expect("create schema one database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema one");
-        assert_eq!(database.schema_version().expect("migrated version"), 5);
+        assert_eq!(database.schema_version().expect("migrated version"), 6);
         assert_eq!(
             database
                 .load_courses()
@@ -1829,7 +2376,7 @@ mod tests {
             .expect("create schema two database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema two");
-        assert_eq!(database.schema_version().expect("schema version"), 5);
+        assert_eq!(database.schema_version().expect("schema version"), 6);
         assert_eq!(database.load_courses().expect("courses").courses.len(), 1);
         assert_eq!(
             database
@@ -1874,7 +2421,7 @@ mod tests {
             .expect("create schema three database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema three");
-        assert_eq!(database.schema_version().expect("schema version"), 5);
+        assert_eq!(database.schema_version().expect("schema version"), 6);
         assert_eq!(database.load_courses().expect("courses").courses.len(), 1);
         assert_eq!(
             database
@@ -1967,7 +2514,7 @@ mod tests {
                 .term_config,
             before.term_config
         );
-        assert_eq!(database.schema_version().expect("schema version"), 5);
+        assert_eq!(database.schema_version().expect("schema version"), 6);
     }
 
     #[test]

@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前阶段：Phase 2.1 — Debug DB 隔离与 schema 5→6 安全迁移。** Phase 2.0 Domain Contract / Schema Design 已完成并提交 `docs: define phase 2 planner domain contract`；起始基线为 `d013199`，Phase 2.0 工作区 clean，schema 仍为 5。开发分支授权连续执行 Phase 2.0–2.7；不得 push、tag、release、升级产品版本、安装或运行 production EXE，不开始 Phase 3。
+- **当前阶段：Phase 2.2 — PersonalTask CRUD。** Phase 2.0 Domain Contract 已提交 `a19c4d3`；Phase 2.1 Debug DB 隔离与 schema 5→6 安全迁移已通过并提交，当前开发 schema 为 6。Debug 数据库独立位于 app local data 的 `dev-v2/courses.sqlite3`，Release 路径保持原样。Phase 2.1 自动验证：`npm run verify` PASS（177 unit、79 architecture、606 UI PASS / 15 skipped；typecheck、lint、Prettier、frontend build PASS）；Rust 46 tests、fmt、clippy PASS。开发分支授权连续执行 Phase 2.0–2.7；不得 push、tag、release、升级产品版本、安装或运行 production EXE，不开始 Phase 3。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 
 - 当前开发分支：`v2/workspace-rebase`，从稳定 `main` commit `3f2d580d2423bdb19d2753023db6414b5408c546` 创建；`main` 继续代表稳定 1.x 基线。
