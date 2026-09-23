@@ -36,6 +36,7 @@
 ## 技术身份与数据
 
 - Tauri identifier `com.ntu-course-assistant.desktop`、`courses.sqlite3` 文件名、GitHub 仓库及 updater 来源在专门迁移任务前保持不变。不得仅为品牌整洁而更改；identifier 变更须先有数据迁移设计、Windows installer/updater E2E 和 Ethan 明确批准。
+- React 界面品牌与 Tauri `productName`、系统窗口标题、Tray、安装器和 updater 身份分开迁移；系统级品牌变更必须经过独立兼容任务。
 - 当前 SQLite schema 为 5。任何 schema 升级前须设计并验证备份、事务迁移、数据校验和失败恢复；当前应用没有 migration 前备份。
 - Presentation 不直接访问 SQLite；Workspace 不绕过 Application API 读取 Academic 内部表；AI 不直接访问 Repository 或 DB。
 

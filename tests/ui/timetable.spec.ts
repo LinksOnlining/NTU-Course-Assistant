@@ -54,17 +54,22 @@ async function selectPdfPath(page: Page, path: string) {
 }
 
 async function openTimetable(page: Page) {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    await page.goto("/");
-    try {
-      await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible({
-        timeout: 10_000,
-      });
-      return;
-    } catch (error) {
-      if (attempt === 1) throw error;
-    }
-  }
+  await page.goto("/");
+  await selectScheduleMode(page);
+}
+
+async function selectScheduleMode(page: Page) {
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "课表" })
+    .click();
+  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("timetable-grid")).toBeVisible();
+}
+
+async function reloadTimetable(page: Page) {
+  await page.reload();
+  await selectScheduleMode(page);
 }
 
 async function addUserCourse(page: Page, fields: CourseFields) {
@@ -170,7 +175,11 @@ async function seedPeriodCourseRuntime(
       },
     });
   }, initialPeriods);
-  await page.reload();
+  await reloadTimetable(page);
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "课表" })
+    .click();
   await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
 }
 
@@ -240,7 +249,7 @@ test("does not use stored clock snapshots when a period course has no confirmed 
   await expect(page.getByText(/节次无法由当前作息解析，暂不显示/u)).toBeVisible();
 });
 
-test("academic hub tabs stay compact and course changes use a course-first picker", async ({
+test("Academic subnavigation stays compact and course changes use a course-first picker", async ({
   page,
 }) => {
   await page.getByRole("button", { name: "设置" }).click();
@@ -249,12 +258,11 @@ test("academic hub tabs stay compact and course changes use a course-first picke
   await settings.getByLabel("总教学周数").fill("16");
   await settings.getByRole("button", { name: "保存作息" }).click();
   await expect(settings).toHaveCount(0);
-  await page.getByRole("tab", { name: "今日", exact: true }).first().click();
-  await expect(page.getByRole("tablist", { name: "学习中心分区" })).toBeVisible();
-  const tabs = page.getByRole("tablist", { name: "学习中心分区" }).getByRole("tab");
+  const tabs = page.getByRole("navigation", { name: "课表二级导航" }).getByRole("button");
+  await expect(tabs).toHaveText(["周课表", "课程变化", "考试", "学期管理", "学业事项"]);
+  await tabs.nth(1).click();
   const academicShell = page.locator(".academic-page-shell");
   const firstBox = await box(tabs.first());
-  await expect(tabs).toHaveCount(5);
   await expect(academicShell).toBeVisible();
   const academicSpacing = await page.evaluate(() => {
     const shell = document.querySelector<HTMLElement>(".academic-page-shell");
@@ -270,7 +278,7 @@ test("academic hub tabs stay compact and course changes use a course-first picke
     };
   });
   expect(academicSpacing).toEqual({ paddingTop: "18px", rowGap: "16px", contentOffset: 18 });
-  for (const index of [1, 2, 3, 4]) {
+  for (const index of [2, 3, 4]) {
     await tabs.nth(index).click();
     const activeBox = await box(tabs.nth(index));
     expect(activeBox.height).toBeLessThanOrEqual(firstBox.height + 2);
@@ -314,8 +322,8 @@ test("academic hub tabs stay compact and course changes use a course-first picke
   await expect(page.locator(".hub-operation-message")).toHaveText("已停课");
   await expect(page.getByRole("button", { name: "撤销停课" })).toBeEnabled();
   await page
-    .getByRole("tablist", { name: "学习中心分区" })
-    .getByRole("tab", { name: "今日", exact: true })
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "工作台" })
     .click();
   await expect(page.locator(".hub-operation-message")).toHaveCount(0);
   await expect(page.getByText("已停课", { exact: true })).toHaveCount(0);
@@ -335,6 +343,10 @@ test("academic hub tabs stay compact and course changes use a course-first picke
     activeBackdrops: 0,
   });
 
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "课表" })
+    .click();
   await tabs.nth(2).click();
   await tabs.nth(1).click();
   await expect(page.getByTestId("course-change-page")).toBeVisible();
@@ -437,7 +449,8 @@ test("seven fixed days and teaching-week filter", async ({ page }) => {
 });
 
 test("week navigation and 5-day view keep the timetable data intact", async ({ page }) => {
-  await expect(page.getByText("本周课表已上线，早七点五十人的苦难开启🔛")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Links Workplace" })).toBeVisible();
+  await expect(page.locator(".shell-daily-quote")).toBeVisible();
   await expect(page.getByText("已使用自定义作息。")).toHaveCount(0);
   await page.getByRole("button", { name: "5天" }).click();
   await expect(page.getByTestId("day-column")).toHaveCount(5);
@@ -739,7 +752,7 @@ test("Windows 登录启动失败和系统状态不一致不会显示伪成功", 
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   await page.getByRole("button", { name: "设置" }).click();
   const dialog = page.getByRole("dialog", { name: "作息时间" });
   const toggle = dialog.getByLabel("登录 Windows 后自动启动应用");
@@ -814,7 +827,7 @@ test("failed schedule save keeps the old timeline", async ({ page }) => {
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   await page.getByRole("button", { name: "设置" }).click();
   const dialog = page.getByRole("dialog", { name: "作息时间" });
   await dialog.getByLabel("第1节结束时间").fill("08:30");
@@ -877,7 +890,7 @@ test("failed schedule save can be retried without a permanent saving state", asy
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   await page.getByRole("button", { name: "设置" }).click();
   const dialog = page.getByRole("dialog", { name: "作息时间" });
   await dialog.getByLabel("第1节结束时间").fill("08:30");
@@ -944,7 +957,7 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
   await page.getByRole("button", { name: "设置" }).click();
   const settings = page.getByRole("dialog", { name: "作息时间" });
@@ -1042,7 +1055,7 @@ test("PDF dialog errors release the cancel-path operation gate", async ({ page }
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   const importButton = page.getByRole("button", { name: "导入 PDF" });
   await importButton.click();
   await expect(page.getByRole("alert")).toHaveText("无法读取该 PDF，请确认文件后重试。");
@@ -1096,7 +1109,7 @@ test("PDF dialog cancel result variants release the operation gate", async ({ pa
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   const importButton = page.getByRole("button", { name: "导入 PDF" });
   for (let index = 0; index < 3; index += 1) {
     await importButton.click();
@@ -1159,7 +1172,7 @@ test("canceling PDF picker returns to idle before subsequent settings saves", as
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   const importButton = page.getByRole("button", { name: "导入 PDF" });
   await importButton.click();
   await expect(page.getByText("正在打开 PDF 文件选择器…")).toBeVisible();
@@ -1554,7 +1567,7 @@ test("storage failures keep the original UI state and show a clear error", async
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   const original = page.locator('[data-course-id="storage-failure-course"]');
   await openUserCourseEditor(original);
   let dialog = page.getByRole("dialog", { name: "编辑课程" });
@@ -1605,7 +1618,7 @@ test("a failed insert does not create a course in the UI", async ({ page }) => {
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   await addUserCourse(page, { name: "不应出现的课程" });
   const dialog = page.getByRole("dialog", { name: "添加课程" });
   await expect(dialog.getByText("保存课程失败，请稍后重试。")).toBeVisible();
@@ -1666,7 +1679,7 @@ test("confirmed course clearing updates the timetable without touching the setti
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   await expect(page.locator('[data-course-id="clear-course"]')).toBeVisible();
   await page.getByRole("button", { name: "设置" }).click();
   const settings = page.getByRole("dialog", { name: "作息时间" });
@@ -1737,7 +1750,7 @@ test("failed course clearing keeps the confirmation and the existing timetable",
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   await page.getByRole("button", { name: "设置" }).click();
   await page.getByRole("button", { name: "清空全部课程" }).click();
   const confirmation = page.getByRole("alertdialog", { name: "清空全部课程确认" });
@@ -1782,7 +1795,7 @@ test("manual updater failures can be retried and dismissed without blocking the 
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   await page.getByRole("button", { name: "设置" }).click();
   const settings = page.getByRole("dialog", { name: "作息时间" });
   await settings.getByRole("button", { name: "检查更新" }).click();
@@ -1847,7 +1860,7 @@ test("a stored course outside the current axis is skipped without crashing", asy
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   await expect(
     page.getByText("课程“轴外损坏课程”超出当前显示范围，已跳过且未修改原数据。"),
   ).toBeVisible();
@@ -1889,7 +1902,7 @@ test("unsupported database version leaves the app usable but disables writes", a
       },
     });
   });
-  await page.reload();
+  await reloadTimetable(page);
   await expect(
     page.getByText("本地课程数据暂时无法加载：数据库来自较新版本，请升级应用后重试。"),
   ).toBeVisible();

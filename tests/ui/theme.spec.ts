@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 async function openApp(page: import("@playwright/test").Page) {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Links Workplace" })).toBeVisible();
 }
 
 async function chooseTheme(page: import("@playwright/test").Page, preference: string) {
@@ -46,6 +46,11 @@ test("system preference follows live color-scheme changes", async ({ page }) => 
 test("dark schedule, Academic Hub, and settings retain readable surfaces", async ({ page }) => {
   await openApp(page);
   await chooseTheme(page, "dark");
+  await page.getByRole("button", { name: "关闭作息设置" }).click();
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "课表" })
+    .click();
   const scheduleSurface = await page
     .locator(".timetable-scroll")
     .evaluate((element) => getComputedStyle(element).backgroundImage);
@@ -56,13 +61,17 @@ test("dark schedule, Academic Hub, and settings retain readable surfaces", async
     .first()
     .evaluate((element) => getComputedStyle(element).color);
   expect(cardColor).not.toBe("rgb(0, 0, 0)");
+  await page.getByRole("button", { name: "设置" }).click();
   await expect(page.locator(".course-form-dialog")).toHaveCSS(
     "background-color",
     "rgb(40, 49, 46)",
   );
 
   await page.getByRole("button", { name: "关闭作息设置" }).click();
-  await page.getByRole("tab", { name: "今日" }).click();
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "工作台" })
+    .click();
   await expect(page.locator(".academic-hub")).toBeVisible();
   const hubTextColor = await page
     .locator(".academic-hub")

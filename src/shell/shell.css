@@ -1,0 +1,251 @@
+.shell-header {
+  display: flex;
+  width: min(100%, 1600px);
+  min-height: 72px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin: 0 auto var(--space-3);
+}
+
+.shell-brand {
+  min-width: 0;
+}
+
+.shell-brand h1 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: clamp(21px, 2.2vw, 28px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.shell-daily-quote {
+  max-width: min(48vw, 620px);
+  overflow: hidden;
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-quote-author {
+  margin-left: var(--space-1);
+  color: var(--text-secondary);
+}
+
+.shell-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.shell-date {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  white-space: nowrap;
+}
+
+.shell-weather-slot {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+.shell-mode-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-secondary);
+}
+
+.shell-mode-switch button {
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.shell-mode-switch button[aria-current="page"] {
+  background: var(--accent-selected);
+  color: var(--text-on-accent);
+  font-weight: 650;
+}
+
+.shell-settings-button {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-button);
+  font-size: var(--font-size-body);
+}
+
+.shell-settings-button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--surface-hover);
+  color: var(--text-heading);
+}
+
+.academic-context-bar {
+  width: min(100%, 1600px);
+  flex: 0 0 auto;
+  margin: 0 auto var(--space-3);
+}
+
+.academic-context-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 0 var(--space-2);
+}
+
+.academic-context-heading h2 {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--text-heading);
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.schedule-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.academic-subnav {
+  display: flex;
+  min-width: 0;
+  gap: var(--space-2);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border-subtle);
+  scrollbar-width: thin;
+}
+
+.academic-subnav button {
+  min-height: 38px;
+  flex: 0 0 auto;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.academic-subnav button[aria-current="page"] {
+  border-bottom-color: var(--accent-border);
+  color: var(--text-heading);
+  font-weight: 650;
+}
+
+.app-shell-content {
+  display: flex;
+  width: min(100%, 1600px);
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin: 0 auto;
+  overflow-x: hidden;
+}
+
+.shell-settings-button:focus-visible,
+.shell-mode-switch button:focus-visible,
+.academic-subnav button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.unsupported-route {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-3);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.unsupported-route h2 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: var(--font-size-module);
+}
+
+.unsupported-route p {
+  margin: 0;
+}
+
+@media (max-width: 960px) {
+  .shell-header {
+    gap: var(--space-3);
+  }
+
+  .shell-header-actions {
+    gap: var(--space-2);
+  }
+
+  .shell-date {
+    font-size: var(--font-size-secondary);
+  }
+
+  .shell-daily-quote {
+    max-width: 36vw;
+  }
+}
+
+@media (max-width: 760px) {
+  .shell-header {
+    min-height: 60px;
+    gap: var(--space-2);
+  }
+
+  .shell-brand h1 {
+    font-size: 20px;
+  }
+
+  .shell-daily-quote,
+  .shell-date {
+    display: none;
+  }
+
+  .shell-header-actions {
+    gap: var(--space-1);
+  }
+
+  .academic-context-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .schedule-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    padding: var(--space-2);
+  }
+}

@@ -78,12 +78,10 @@ import {
   subscribeToSystemTheme,
 } from "./theme/index.ts";
 import type { ThemePreference } from "./theme/index.ts";
-import {
-  createAcademicScheduleTarget,
-  createWorkspaceHomeTarget,
-  getAcademicHubTab,
-} from "./navigation/navigation.ts";
+import { createWorkspaceHomeTarget, getShellRouteView } from "./navigation/navigation.ts";
+import type { AcademicRoute } from "./navigation/navigation.ts";
 import type { AppRoute } from "./navigation/types.ts";
+import { AppShell } from "./shell/index.ts";
 
 interface PdfImportResult {
   readonly inserted: number;
@@ -141,15 +139,15 @@ export function App() {
   const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
     getThemePreference(),
   );
-  // Production opens on the learning dashboard. Development keeps the
-  // timetable-first route so the browser preview and existing layout scenarios
-  // remain focused on schedule editing.
-  const [currentRoute, setCurrentRoute] = useState<AppRoute>(() =>
-    import.meta.env.DEV ? createAcademicScheduleTarget().route : createWorkspaceHomeTarget().route,
+  const [currentRoute, setCurrentRoute] = useState<AppRoute>(
+    () => createWorkspaceHomeTarget().route,
   );
-  const isScheduleView = currentRoute.area === "academic" && currentRoute.page === "schedule";
-  const hubRoute =
-    getAcademicHubTab(currentRoute) === null ? createWorkspaceHomeTarget().route : currentRoute;
+  const [lastAcademicRoute, setLastAcademicRoute] = useState<AcademicRoute | null>(null);
+  const routeView = getShellRouteView(currentRoute);
+  const isScheduleView = routeView === "academic-schedule";
+  const isAcademicHubPage = routeView === "academic-hub";
+  const isWorkspaceHome = routeView === "workspace-home";
+  const isUnsupportedRoute = routeView === "unsupported";
   const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
   const [dayCount, setDayCount] = useState<5 | 7>(7);
   const [scrollRequest, setScrollRequest] = useState(0);
@@ -170,6 +168,11 @@ export function App() {
   const pdfDialogGeneration = useRef(0);
   const pdfDialogActive = useRef(false);
   const reminderRefreshGeneration = useRef(0);
+
+  function navigateToRoute(route: AppRoute) {
+    if (route.area === "academic") setLastAcademicRoute(route);
+    setCurrentRoute(route);
+  }
 
   useEffect(() => {
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
@@ -649,122 +652,106 @@ export function App() {
     }
   }
 
+  const academicContextTitle =
+    currentRoute.area !== "academic"
+      ? undefined
+      : currentRoute.page === "schedule"
+        ? "大学课程表"
+        : currentRoute.page === "changes"
+          ? "课程变化"
+          : currentRoute.page === "tasks-legacy"
+            ? "学业事项"
+            : currentRoute.page === "exams"
+              ? "考试"
+              : "学期管理";
+  const scheduleActions = isScheduleView ? (
+    <div className="schedule-actions">
+      <button
+        type="button"
+        className="pdf-import-button"
+        onClick={() => void importPdf()}
+        disabled={pdfImport.kind === "opening" || pdfImport.kind === "reading"}
+        aria-label="导入 PDF"
+      >
+        导入 PDF
+      </button>
+      <button
+        type="button"
+        className="add-course-button"
+        onClick={() => setIsAdding(true)}
+        disabled={storageStatus !== "ready"}
+        title={storageStatus === "ready" ? "添加课程" : "正在准备本地课程数据库"}
+      >
+        <span aria-hidden="true">＋</span> 添加课程
+      </button>
+      <div className="week-controls" aria-label="教学周切换">
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => setSelectedWeek((week) => Math.max(1, week - 1))}
+          disabled={selectedWeek <= 1}
+          aria-label="上一教学周"
+        >
+          ‹
+        </button>
+        <strong>第 {selectedWeek} 周</strong>
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => setSelectedWeek((week) => Math.min(maxTeachingWeek, week + 1))}
+          disabled={selectedWeek >= maxTeachingWeek}
+          aria-label="下一教学周"
+        >
+          ›
+        </button>
+        <button
+          type="button"
+          className="secondary-button"
+          aria-label="回到本周"
+          title="回到现在"
+          onClick={() => {
+            setSelectedWeek(currentTeachingWeek);
+            setScrollRequest((value) => value + 1);
+          }}
+        >
+          回到现在
+        </button>
+      </div>
+      <div className="day-count-controls" aria-label="课表视图天数">
+        <button
+          type="button"
+          className={dayCount === 5 ? "is-active" : ""}
+          onClick={() => {
+            setDayCount(5);
+            void saveStoredDayCount(5);
+          }}
+        >
+          5天
+        </button>
+        <button
+          type="button"
+          className={dayCount === 7 ? "is-active" : ""}
+          onClick={() => {
+            setDayCount(7);
+            void saveStoredDayCount(7);
+          }}
+        >
+          7天
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   return (
-    <main className="app-shell">
-      <header className="app-header">
-        <div className="app-brand">
-          <p className="eyebrow">NTU COURSE ASSISTANT</p>
-          <div className="title-row">
-            <h1>大学课程表</h1>
-            {showDevelopmentFixtures && <span className="prototype-badge">开发预览</span>}
-          </div>
-          <p className="subtitle">本周课表已上线，早七点五十人的苦难开启🔛</p>
-        </div>
-        <div className="header-actions">
-          <div className="main-view-tabs" role="tablist" aria-label="主页面">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!isScheduleView}
-              className={!isScheduleView ? "is-active" : ""}
-              onClick={() => setCurrentRoute(createWorkspaceHomeTarget().route)}
-            >
-              今日
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isScheduleView}
-              className={isScheduleView ? "is-active" : ""}
-              onClick={() => setCurrentRoute(createAcademicScheduleTarget().route)}
-            >
-              课表
-            </button>
-          </div>
-          <button
-            type="button"
-            className="pdf-import-button"
-            onClick={() => void importPdf()}
-            disabled={pdfImport.kind === "opening" || pdfImport.kind === "reading"}
-            aria-label="导入 PDF"
-          >
-            导入 PDF
-          </button>
-          <button
-            type="button"
-            className="add-course-button"
-            onClick={() => setIsAdding(true)}
-            disabled={storageStatus !== "ready"}
-            title={storageStatus === "ready" ? "添加课程" : "正在准备本地课程数据库"}
-          >
-            <span aria-hidden="true">＋</span> 添加课程
-          </button>
-          <button
-            type="button"
-            className="settings-button"
-            onClick={() => setIsPeriodSettingsOpen(true)}
-            disabled={storageStatus !== "ready"}
-            title="作息设置"
-          >
-            设置
-          </button>
-          <div className="week-controls" aria-label="教学周切换">
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setSelectedWeek((week) => Math.max(1, week - 1))}
-              disabled={selectedWeek <= 1}
-              aria-label="上一教学周"
-            >
-              ‹
-            </button>
-            <strong>第 {selectedWeek} 周</strong>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setSelectedWeek((week) => Math.min(maxTeachingWeek, week + 1))}
-              disabled={selectedWeek >= maxTeachingWeek}
-              aria-label="下一教学周"
-            >
-              ›
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              aria-label="回到本周"
-              title="回到现在"
-              onClick={() => {
-                setSelectedWeek(currentTeachingWeek);
-                setScrollRequest((value) => value + 1);
-              }}
-            >
-              回到现在
-            </button>
-          </div>
-          <div className="day-count-controls" aria-label="课表视图天数">
-            <button
-              type="button"
-              className={dayCount === 5 ? "is-active" : ""}
-              onClick={() => {
-                setDayCount(5);
-                void saveStoredDayCount(5);
-              }}
-            >
-              5天
-            </button>
-            <button
-              type="button"
-              className={dayCount === 7 ? "is-active" : ""}
-              onClick={() => {
-                setDayCount(7);
-                void saveStoredDayCount(7);
-              }}
-            >
-              7天
-            </button>
-          </div>
-        </div>
-      </header>
+    <AppShell
+      route={currentRoute}
+      lastAcademicRoute={lastAcademicRoute}
+      onNavigate={navigateToRoute}
+      onOpenSettings={() => setIsPeriodSettingsOpen(true)}
+      settingsDisabled={storageStatus !== "ready"}
+      contextTitle={academicContextTitle}
+      contextActions={scheduleActions}
+    >
       {showDevelopmentFixtures && (
         <p className="fixture-notice" role="status">
           <strong>开发数据</strong>
@@ -940,10 +927,10 @@ export function App() {
           </button>
         </section>
       )}
-      {!isScheduleView ? (
+      {isWorkspaceHome || isAcademicHubPage ? (
         <AcademicHub
-          route={hubRoute}
-          onNavigate={(route) => setCurrentRoute(route)}
+          route={currentRoute}
+          onNavigate={navigateToRoute}
           courses={courses}
           periods={periods}
           termConfig={reminderConfiguration.termConfig}
@@ -952,7 +939,7 @@ export function App() {
             void refreshAcademicData();
           }}
         />
-      ) : (
+      ) : isScheduleView ? (
         <>
           <Timetable
             courses={courses}
@@ -979,7 +966,19 @@ export function App() {
             </button>
           )}
         </>
-      )}
+      ) : isUnsupportedRoute ? (
+        <section className="unsupported-route" aria-labelledby="unsupported-route-title">
+          <h2 id="unsupported-route-title">该模块尚未开放</h2>
+          <p>此页面暂不可用。</p>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => navigateToRoute(createWorkspaceHomeTarget().route)}
+          >
+            返回工作台
+          </button>
+        </section>
+      ) : null}
       {pdfImport.kind === "success" && (
         <PdfImportPreview
           document={pdfImport.document}
@@ -1087,6 +1086,6 @@ export function App() {
           onCancel={() => setIsPeriodSettingsOpen(false)}
         />
       )}
-    </main>
+    </AppShell>
   );
 }

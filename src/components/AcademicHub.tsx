@@ -751,28 +751,6 @@ export function AcademicHub({
 
   return (
     <section className="academic-hub" aria-label="学习中心">
-      <div className="hub-tabs" role="tablist" aria-label="学习中心分区">
-        {(
-          [
-            ["today", "今日"],
-            ["changes", "课表变化"],
-            ["tasks", "任务"],
-            ["exams", "考试"],
-            ["semesters", "学期管理"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={tab === value}
-            className={tab === value ? "is-active" : ""}
-            onClick={() => onNavigate(routeForAcademicHubTab(value))}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
       <div className="hub-content-viewport academic-page-shell">
         {message && (
           <p className="hub-message" role="status">

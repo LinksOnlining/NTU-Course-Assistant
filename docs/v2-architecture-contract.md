@@ -26,7 +26,7 @@ Phase 1.0 审计发现的候选 seam：`resolveCourseOccurrences`、`getTodayDas
 
 未来建立统一 typed navigation contract，概念路由为 `WorkspaceHome`、`WorkspaceSchedule`、`WorkspaceTasks`、`WorkspaceDiary`、`WorkspaceInbox`、`WorkspaceAI`、`AcademicSchedule`、`AcademicChanges`、`AcademicExams`、`AcademicSemesters`、`Settings`。导航对象可携带 route、selected object ID、optional date。Notification、AI、Search、Ctrl+K 共用该契约，不各造跳转机制。Phase 1.1 不决定是否使用 React Router；第一目标是导航契约。
 
-Phase 1.2 已在 `src/navigation/types.ts` 建立 `AppRoute`、`ObjectRef`、`NavigationTarget`，纯辅助函数位于 `src/navigation/navigation.ts`。当前 App 顶层和 AcademicHub 标签使用同一 `AppRoute` 状态；现有 AcademicTask 以临时 `academic/tasks-legacy` 路由保留。未来路由只有类型定义，没有对应页面；不引入 React Router，当前中文 UI 与窗口行为保持不变。
+Phase 1.2 已在 `src/navigation/types.ts` 建立 `AppRoute`、`ObjectRef`、`NavigationTarget`，纯辅助函数位于 `src/navigation/navigation.ts`。Phase 1.5 的公共 Shell 位于 `src/shell/`，消费既有 `AppRoute`；主窗口默认为 `workspace/home`，Academic 子页面由统一二级导航切换，最近 Academic route 仅保存在运行时 React state。现有 AcademicTask 以临时 `academic/tasks-legacy` 路由及“学业事项”入口保留。未实现路由显示明确状态，不再静默回退到 Today；不引入 React Router。
 
 ## 7.7 Timeline Contract
 
@@ -51,6 +51,8 @@ Unified Timeline 是 Presentation/Application projection，不是数据库实体
 ## 7.11 Brand Strategy
 
 区分 user-facing brand 与 technical identity。用户可见品牌目标为 Links Workplace；为兼容允许继续保留 NTU 技术命名。不要为了“名字干净”破坏升级或 AppData 兼容。productName、EXE/installer branding 在独立 Brand Compatibility Phase 处理；初始 v2 开发保持 GitHub repo 与 updater source 不变。
+
+Phase 1.5 已将 Links Workplace 用于 React 主窗口公共 Header 与纯 UI About 展示；Tauri `productName`、系统窗口标题、Tray、安装器、identifier、GitHub repo 与 updater source 均未迁移。Weather slot 仍无数据，不展示天气占位或假数据。
 
 ## 7.12 Design System Contract
 
