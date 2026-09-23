@@ -69,8 +69,8 @@ test("dark schedule, Academic Hub, and settings retain readable surfaces", async
 
   await page.getByRole("button", { name: "关闭作息设置" }).click();
   await page
-    .getByRole("navigation", { name: "产品模式" })
-    .getByRole("button", { name: "工作台" })
+    .getByRole("navigation", { name: "课表二级导航" })
+    .getByRole("button", { name: "学业事项" })
     .click();
   await expect(page.locator(".academic-hub")).toBeVisible();
   const hubTextColor = await page

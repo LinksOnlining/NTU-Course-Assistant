@@ -155,3 +155,12 @@ Clean Minimal Desktop Workspace：clean、quiet、high information density、not
 ## 7.35 Failure Contract
 
 OpenAI unavailable、Weather API unavailable 或网络断开时，Academic、Planner、Tasks、Diary、Inbox、Timeline、Reminder、Widget、local Search 仍可用。AI 与 Weather 是增强能力，不是核心启动依赖。
+
+## 7.36 Phase 1.6 Workspace Dashboard Implementation
+
+- `workspace/home` 使用 `src/workspace/dashboard/WorkspaceDashboard.tsx`；工作台数据由 `src/application/workspace/` 组合既有 Academic application readers 与 canonical occurrence resolver，不在 UI 中直连 storage。
+- `TimelineItem` 是只读展示投影，不是数据库实体或新的业务事实。Phase 1.6 的唯一时间轴来源为已解析的 `AcademicCourseOccurrence`；保留其日期、实际起止时间、教室及停课/调课状态，不自行解释 CourseOverride，也不允许课程拖动或调整大小。个人 PlannerEvent、TimeBlock、AI proposal 等来源类型只作为类型边界预留，当前不生成数据。
+- AcademicTask 只作为工作台任务摘要显示，不占用时间轴。Diary、Inbox、AI 卡片如目标模块尚未实现，必须显示“尚未开放”，不得伪造内容。
+- 单日布局为 1,440 分钟 / 1,440 CSS px，半小时刻度；重叠安排进行稳定分栏。时间无效或超出日边界的条目从布局排除并生成可审查警告；视觉最小高度不得更改事实起止时间。
+- 页面进入/返回工作台时读取当天 Academic 数据；本地分钟时钟只重算当前/下一课程摘要和当前位置，不轮询数据库。跨本地午夜后切换日期并重新读取当天数据。时间轴为内部滚动区，初次定位到当前时间附近，不持续抢回用户手动滚动位置。
+- Phase 1.6 不改变 Academic core、存储、Tauri、数据库/schema、产品身份、依赖或其他应用模块。

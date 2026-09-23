@@ -82,6 +82,7 @@ import { createWorkspaceHomeTarget, getShellRouteView } from "./navigation/navig
 import type { AcademicRoute } from "./navigation/navigation.ts";
 import type { AppRoute } from "./navigation/types.ts";
 import { AppShell } from "./shell/index.ts";
+import { WorkspaceDashboard } from "./workspace/dashboard/WorkspaceDashboard.tsx";
 
 interface PdfImportResult {
   readonly inserted: number;
@@ -752,14 +753,16 @@ export function App() {
       contextTitle={academicContextTitle}
       contextActions={scheduleActions}
     >
-      {showDevelopmentFixtures && (
+      {showDevelopmentFixtures && !isWorkspaceHome && (
         <p className="fixture-notice" role="status">
           <strong>开发数据</strong>
           浏览器预览显示 fixture；用户课程单独保存在 Windows 应用数据目录。
         </p>
       )}
-      {storageStatus === "loading" && <p className="storage-notice">正在读取本地课程…</p>}
-      {storageMessage && (
+      {!isWorkspaceHome && storageStatus === "loading" && (
+        <p className="storage-notice">正在读取本地课程…</p>
+      )}
+      {!isWorkspaceHome && storageMessage && (
         <p
           className={`storage-notice storage-notice--${storageStatus}`}
           role={storageStatus === "error" ? "alert" : "status"}
@@ -927,7 +930,14 @@ export function App() {
           </button>
         </section>
       )}
-      {isWorkspaceHome || isAcademicHubPage ? (
+      {isWorkspaceHome ? (
+        <WorkspaceDashboard
+          ready={storageStatus === "ready"}
+          storageError={storageStatus === "error" ? storageMessage : ""}
+          termConfig={reminderConfiguration.termConfig}
+          onNavigate={navigateToRoute}
+        />
+      ) : isAcademicHubPage ? (
         <AcademicHub
           route={currentRoute}
           onNavigate={navigateToRoute}

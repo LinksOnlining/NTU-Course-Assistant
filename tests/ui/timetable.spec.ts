@@ -1348,10 +1348,15 @@ test("validated course appears on the correct day with real-time geometry", asyn
   await expect(card).toContainText("机械设计基础");
   await expect(card).not.toContainText("用户添加");
   await expect(card).toHaveAttribute("data-duration-minutes", "90");
-  const day = await box(page.locator('[data-weekday="3"]'));
-  const cardBox = await box(card);
-  expect(cardBox.y - day.y).toBeCloseTo(420, 0);
-  expect(cardBox.height).toBeCloseTo(90, 0);
+  const geometry = await page.locator('[data-weekday="3"]').evaluate((day) => {
+    const card = day.querySelector('[data-source="user"]');
+    if (!card) throw new Error("Expected the saved course card to exist.");
+    const dayBox = day.getBoundingClientRect();
+    const cardBox = card.getBoundingClientRect();
+    return { top: cardBox.top - dayBox.top, height: cardBox.height };
+  });
+  expect(geometry.top).toBeCloseTo(420, 0);
+  expect(geometry.height).toBeCloseTo(90, 0);
 });
 
 test("invalid course stays in the form with errors beside its fields", async ({ page }) => {

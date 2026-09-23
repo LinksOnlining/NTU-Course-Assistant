@@ -12,9 +12,11 @@
 - Phase 1.4 Design Tokens & Theme Foundation：COMPLETE。新增 `src/theme/` 语义令牌与主题逻辑；主窗口支持浅色、深色、跟随系统，默认浅色，偏好存于 `localStorage`。浅色 Accent 保持既有绿色；深色覆盖主课表、Today/AcademicHub、表单与设置、课程卡和 PDF 预览。主题在主窗口 React 渲染前应用，系统主题监听可清理。Widget 外观未迁移；未改 Academic 业务逻辑、导航、Rust、数据库/schema、identifier、依赖、产品名、README 或 CHANGELOG。`npm run verify` PASS：154 unit、70 architecture、480 UI PASS / 15 skipped，typecheck、lint、format、frontend build 均 PASS。
 - Phase 1.5 Links Workplace 公共 Shell：COMPLETE。新增 `src/shell/` 公共应用外壳；主窗口 React UI 品牌为 Links Workplace，默认进入 `workspace/home`，顶部提供工作台/课表切换、本地日期、每日已核验寄语与设置。Weather Slot 已预留但不渲染内容；不获取或伪造天气数据。Academic 子导航及课表专属控制已与工作台分离；学业事项仍是 AcademicTask 临时过渡入口。未实现路由显示明确状态，不再静默回退到 Today。正式工作台 Dashboard 尚未实现；Tauri / 系统品牌身份未迁移。Windows 11 Pro 人工 UI 验收待 Ethan 执行。
 - Phase 1.5 自动验证：`npm run verify` PASS；159 unit、73 architecture、516 UI PASS / 15 条件跳过，typecheck、lint、format、frontend build 均 PASS。本轮未修改 Rust / DB / Tauri config，因此未运行 Rust 或 Tauri production build。
+- Phase 1.6 工作台首页与统一 24 小时时间轴基础：COMPLETE。`workspace/home` 现在渲染 `WorkspaceDashboard`，复用 Academic application reads 与 canonical occurrence resolver；新增仅供展示的 `TimelineItem` 投影和 1,440 分钟日布局，处理重叠分栏、无效时间警告、停课与只读语义。工作台提供今日时间轴、当前/下一课程摘要、最多 4 项学业任务摘要及明确未开放的 Diary / Inbox / AI 卡片；分钟时钟不触发数据库轮询，本地跨日会重新读取当天 Academic 数据。未新增业务事实、数据库结构或模块能力。Windows 11 Pro 人工验收尚待 Ethan 执行。
+- Phase 1.6 验证：新增 15 个 unit、4 个 architecture、6 个 Workspace UI 场景 PASS；完整 `npm run verify` PASS：174 unit、77 architecture、570 UI PASS / 15 条件跳过；typecheck、lint、Prettier、frontend build 均 PASS。本轮未修改 Rust / DB / Tauri config、未新增依赖，因此未运行 Rust checks 或 Tauri production build。Playwright 仍会输出既有 Widget bounds Tauri mock `currentWindow` warning，未导致测试失败。
 - v2 开发及主要人工验收环境：Windows 11 Pro。v1.3.1 的 Windows 10 安装态 ALL PASS 是历史验收事实，不代表在 Windows 11 已执行相同验收。
 - 当前 v2 目标品牌为 Links Workplace；顶层导航 `[工作台] [课表]`；技术 identifier `com.ntu-course-assistant.desktop`、`courses.sqlite3`、GitHub repo/updater source 保持不变。Quick Capture 与 Focus 在当前规划中为 REMOVED。
-- 下一阶段：等待 Ethan / ChatGPT 审核后进入 Phase 1.6，不自动开始。
+- 下一步：Phase 1.6 已完成，等待 Ethan / ChatGPT 审核与 Windows 11 Pro 人工 UI 验收；按用户要求，未经审核不进入 Phase 1.7。
 
 ## 当前稳定版本：NTU Course Assistant v1.3.1
 
