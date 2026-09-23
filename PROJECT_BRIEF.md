@@ -54,7 +54,7 @@
 
 ## 10. Diary
 
-定位为本地优先、高隐私的每日个人记录，不是 Notes/PKM。UI 默认按天呈现主要日记，底层不限制每天只能一条。支持 autosave。DiaryEntry 不进入 Timeline。AI 读取 Diary 需要单独权限；全局 AI read permission 不隐含 Diary permission。
+定位为本地优先、高隐私的每日个人记录，不是 Notes/PKM。UI 按天呈现每日长文本日记；Ethan 在 Phase 3 授权的实现契约明确，同一个本地日期最多一条 DiaryEntry。支持 autosave。DiaryEntry 不进入 Timeline。AI 读取 Diary 需要单独权限；全局 AI read permission 不隐含 Diary permission。
 
 ## 11. Inbox
 

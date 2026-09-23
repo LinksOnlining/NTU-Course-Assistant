@@ -4,7 +4,8 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 2 Overall COMPLETE。** Phase 2.0–2.7 自动验收全部 PASS；最终记录见 `docs/v2-phase-2-verification.md`。最终门禁：`npm run verify`（200 unit、89 architecture、705 UI PASS / 15 条件跳过）、Rust 54 tests/fmt/clippy、Windows Tauri production build（EXE、NSIS、MSI 及 updater `.sig`）均 PASS。SQLite schema 保持 6，产品版本仍为 1.3.1；未运行 production EXE、未安装 installer、未访问真实用户数据库，安装兼容性与 updater E2E 未验证。Phase 2.7 回归修复提交 `173ef58`。未 push、未创建 tag/Release；不得开始 Phase 3，等待 Ethan / ChatGPT 审核并规划下一阶段。
+- **当前状态：Phase 3.0 PASS；Phase 3.1 待执行。** Phase 3.0 完成当前隐私/领域审计、Personal Context Privacy Contract 与 schema 7 proposal；没有运行时功能或 schema bump。`npm run verify` PASS：200 unit、89 architecture、705 UI PASS / 15 条件跳过。Phase 2.0–2.7 保持 COMPLETE（记录见 `docs/v2-phase-2-verification.md`）；Phase 3 总授权为连续执行 3.0–3.7。当前 schema 仍为 6、产品版本仍为 1.3.1；Production EXE 未运行、Installer 未安装、真实用户 DB 未访问。后续 3.1 只允许一条 schema 6→7 迁移；不得开始 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
+- Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 为唯一外网能力且默认关闭、仅使用用户主动选择的城市；Routine 只建议并需用户确认。Phase 3.0 文档提交后工作区 clean。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 
 - 当前开发分支：`v2/workspace-rebase`，从稳定 `main` commit `3f2d580d2423bdb19d2753023db6414b5408c546` 创建；`main` 继续代表稳定 1.x 基线。

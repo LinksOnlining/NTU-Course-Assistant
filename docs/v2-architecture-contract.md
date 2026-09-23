@@ -108,7 +108,7 @@ PersonalTask 概念字段：`id`、`title`、optional `dueAt`、`priority`、opt
 
 ## 7.24 Diary Contract
 
-Diary 是 daily personal record，不是 Notes、PKM、Obsidian 或 Notion clone。UI 默认一天一篇主要日记，但 DB 不得用 `unique(date)` 把一天一条硬编码。支持 autosave、local-first、high privacy。DiaryEntry 不进入 Timeline。AI Diary read permission 独立，Search 是否包含 Diary 也应为独立设置。
+Diary 是 daily personal record，不是 Notes、PKM、Obsidian 或 Notion clone。UI 与数据模型按本地日期呈现，每个本地日期最多一条 DiaryEntry，schema 以 `entry_date UNIQUE` 保证。支持 autosave、local-first、high privacy。DiaryEntry 不进入 Timeline。AI Diary read permission 独立，Search 是否包含 Diary 也应为独立设置。Phase 3 的隐私及实现细则见 `docs/v2-personal-context-privacy-contract.md`。
 
 ## 7.25 Inbox Contract
 
@@ -188,3 +188,7 @@ Phase 1.6.2 将 Time Context 固定为由 Workspace application 层纯投影生�
 - Phase 2.4 已启用 `workspace/schedule` 完整日程视图。Workspace Schedule Application 按所选日期组合 canonical Academic occurrence 与日期范围内 PlannerEvent/TimeBlock；课程只读，Event/TimeBlock 可编辑；PersonalTask 可通过“安排时间”创建关联 TimeBlock。未新增 schema migration。验证记录见 `docs/v2-phase-2.4-verification.md`。
 - Phase 2.5 已为 PlannerEvent/TimeBlock 增加 Pointer Events 拖动与 resize，并提供五分钟吸附、五分钟最小 resize、单日边界限制、键盘表单替代、buffer-aware conflict/free-time 纯逻辑及保存前 warning。Academic course 保持不可拖动/不可 resize；conflict 可由用户选择仍然保存；`24:00` 仅作为 Planner 结束边界。无 schema migration。验证记录见 `docs/v2-phase-2.5-verification.md`。
 - Phase 2.6 将 Academic canonical occurrences、PlannerEvent、TimeBlock 和 AcademicTask/PersonalTask 组合到 Dashboard。当天时间轴只包含真实占时安排；个人任务截止日期仍只进入任务摘要。时间上下文显示通用安排来源，并用 buffers 计算可用时间，不改显示或持久化的事实时间。按天和路由读取数据，分钟时钟仅更新派生视图；返回工作台重新读取任务和安排。schema 保持 6。验证记录见 `docs/v2-phase-2.6-verification.md`。
+
+## 7.39 Phase 3 Personal Context / Privacy Contract
+
+Phase 3 的有效隐私与领域事实以 `docs/v2-personal-context-privacy-contract.md` 为准。Diary、Inbox raw 与 Local Search 保持本地；Context 是纯确定性投影且不得包含私人正文；Weather 是唯一允许主动访问网络的模块，默认关闭，地点由用户主动选择；Routine 仅生成建议并需用户明确确认后才创建 PlannerEvent。Phase 3 只新增一条 schema 6→7 生产迁移，包含 Diary、Inbox、Routine 三表；Weather cache、Context 与 Search 不建表。不得实现 AI、schema 8、全局快捷捕获或云搜索。

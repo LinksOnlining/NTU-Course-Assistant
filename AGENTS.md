@@ -39,8 +39,14 @@ Planner 领域边界：`PersonalTask` deadline 不占时间轴；Academic Course
 
 - Tauri identifier `com.ntu-course-assistant.desktop`、`courses.sqlite3` 文件名、GitHub 仓库及 updater 来源在专门迁移任务前保持不变。不得仅为品牌整洁而更改；identifier 变更须先有数据迁移设计、Windows installer/updater E2E 和 Ethan 明确批准。
 - React 界面品牌与 Tauri `productName`、系统窗口标题、Tray、安装器和 updater 身份分开迁移；系统级品牌变更必须经过独立兼容任务。
-- 当前 SQLite schema 为 5。任何 schema 升级前须设计并验证备份、事务迁移、数据校验和失败恢复；当前应用没有 migration 前备份。
+- 当前 SQLite schema 为 6。Phase 2 已建立 migration 前 `VACUUM INTO` 备份、事务迁移、数据校验和失败回滚；Phase 3 只允许在其上新增一条 `6 → 7` 迁移，不得访问真实用户数据库。
 - Presentation 不直接访问 SQLite；Workspace 不绕过 Application API 读取 Academic 内部表；AI 不直接访问 Repository 或 DB。
+
+## Phase 3 Personal Context 隐私边界
+
+- 细则以 `docs/v2-personal-context-privacy-contract.md` 为准：Diary、Inbox raw 和 Search 均本地化；Diary/raw 不进日志或网络；Context 是不含私人正文的纯确定性投影。
+- Weather 是本阶段唯一允许的外网能力；默认关闭，只能由用户主动选城市，不读取设备精确位置，也不携带其他工作区个人数据。
+- Routine 只给建议，必须由用户明确保存后才生成 PlannerEvent；不自动创建 Task/Event/TimeBlock。Phase 3 不实现 AI、云搜索或全局快捷捕获。
 
 ## 产品方向保护
 
