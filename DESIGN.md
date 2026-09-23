@@ -194,7 +194,9 @@ Release Candidate 使用稳定 identifier `com.ntu-course-assistant.desktop`、s
 
 ## v1.3.0 Academic Hub
 
-v1.3.0 在不破坏 v1.2.1 数据的前提下把课程表扩展为学习中心。基础 `Course` 表示固定安排；`Semester` 表示学期生命周期；`CourseOverride` 表示一次停课、调课、换教室或补课；`resolveCourseOccurrences` 动态输出 `AcademicCourseOccurrence[]`。周课表、今日中心、Widget 和 Reminder 只能消费该 canonical read model，不在组件内重复推导调课规则；周课表布局过滤 `CANCELLED` occurrence，`MAKEUP` 保留为额外 occurrence，同一目标 occurrence 的最新 active override 优先。
+v1.3.0 在不破坏 v1.2.1 数据的前提下把课程表扩展为学习中心。基础 `Course` 表示周期安排；同时存在 `startPeriod/endPeriod` 时为按节次安排，否则为固定钟点；`Semester` 表示学期生命周期；`CourseOverride` 表示一次停课、调课、换教室或补课；`resolveCourseOccurrences` 动态输出 `AcademicCourseOccurrence[]`。周课表、今日中心、Widget 和 Reminder 只能消费该 canonical read model，不在组件内重复推导调课规则；周课表布局过滤 `CANCELLED` occurrence，`MAKEUP` 保留为额外 occurrence，同一目标 occurrence 的最新 active override 优先。
+
+v1.3.1 将 `Course.startPeriod/endPeriod` 是否同时存在作为时间语义判别：两个索引均存在时，课程为按节次安排，实际钟点由当前 `PeriodTime[]` 在 `resolveCourseOccurrences` 中解析；两个索引均为空时，课程为固定时间，使用保存的 `startTime/endTime`。为兼容 v1.3.0 SQLite 行，旧 `startTime/endTime` 保留为兼容快照/无作息映射时的回退，但不再覆盖有效节次索引与当前作息。没有 schema migration 或批量改写课程数据。明确写入钟点的 RESCHEDULE/MAKEUP 保持固定单次时间；仅改变教室的 MODIFY 与 CANCEL 继续基于更新后的基础 occurrence。作息状态更新后，主课表/学习中心重新解析，提醒计划依赖新的 periods 重建，小组件从数据刷新中重新读取作息并解析；无学期兼容显示路径也使用当前作息解析有节次课程。
 
 schema 5 使用非破坏 migration 新增 `semesters`、`course_overrides`、`academic_tasks`、`exams`、`reminder_rules` 和 `reminder_instances`，旧的 courses、period_times、app_settings 与 handled_reminders 保持不变。已有 v1.2.1 课程没有 semester 外键时按 legacy active semester 兼容读取；新建的学期相关记录始终带有 semesterId。ACTIVE 学期最多一个，ARCHIVED 学期默认只读，恢复操作通过统一保存事务切换当前学期。
 

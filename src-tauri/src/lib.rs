@@ -231,6 +231,7 @@ struct LoadCoursesResponse {
 #[serde(rename_all = "camelCase")]
 struct WidgetDataResponse {
     courses: Vec<Course>,
+    periods: Option<Vec<PeriodTime>>,
     term_config: Option<TermConfig>,
     settings: WidgetSettings,
 }
@@ -513,6 +514,7 @@ async fn load_widget_data(state: State<'_, CourseState>) -> Result<WidgetDataRes
             let configuration = database.load_reminder_configuration()?;
             Ok(WidgetDataResponse {
                 courses,
+                periods: database.load_period_times()?,
                 term_config: configuration.term_config,
                 settings: database.load_widget_settings()?,
             })

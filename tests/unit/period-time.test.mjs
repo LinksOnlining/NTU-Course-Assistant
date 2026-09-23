@@ -7,6 +7,7 @@ import {
   getTimelineBounds,
   periodRangeToTimeRange,
   periodToTime,
+  resolveCourseTime,
   timeRangeToPeriods,
   validatePeriodTimes,
 } from "../../src/core/period-time.ts";
@@ -16,6 +17,34 @@ const shortSchedule = [
   { period: 2, startTime: "08:50", endTime: "09:35" },
   { period: 3, startTime: "09:55", endTime: "10:40" },
 ];
+
+test("period-based courses resolve current clock times while fixed-time courses remain fixed", () => {
+  const periodBased = {
+    startPeriod: 1,
+    endPeriod: 2,
+    startTime: "08:00",
+    endTime: "09:35",
+  };
+  const updatedPeriods = [
+    { period: 1, startTime: "07:50", endTime: "08:35" },
+    { period: 2, startTime: "08:45", endTime: "09:30" },
+  ];
+  assert.deepEqual(resolveCourseTime(periodBased, updatedPeriods), {
+    startTime: "07:50",
+    endTime: "09:30",
+  });
+  const fixedTime = resolveCourseTime(
+    { ...periodBased, startPeriod: null, endPeriod: null },
+    updatedPeriods,
+  );
+  assert.deepEqual([fixedTime.startTime, fixedTime.endTime], ["08:00", "09:35"]);
+  assert.deepEqual(resolveCourseTime(periodBased, []), {
+    startPeriod: 1,
+    endPeriod: 2,
+    startTime: "08:00",
+    endTime: "09:35",
+  });
+});
 
 test("period start edits preserve duration and shift later periods with their breaks", () => {
   assert.deepEqual(adjustPeriodSchedule(shortSchedule, 0, { startTime: "08:10" }), [

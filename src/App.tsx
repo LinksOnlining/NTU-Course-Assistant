@@ -11,7 +11,7 @@ import {
   materializeImportCourses,
   prepareImportPlan,
 } from "./core/import-proposal.ts";
-import { getTimelineBounds } from "./core/period-time.ts";
+import { getTimelineBounds, resolveCourseTime } from "./core/period-time.ts";
 import { resolveCourseOccurrences } from "./core/course-occurrence.ts";
 import { buildUnifiedReminderPlans } from "./core/reminder-v2.ts";
 import { courseTiming, layoutCourses } from "./core/timetable-layout.ts";
@@ -153,8 +153,25 @@ export function App() {
   const pdfDialogGeneration = useRef(0);
   const pdfDialogActive = useRef(false);
   const reminderRefreshGeneration = useRef(0);
-  const fixtureCourses = showDevelopmentFixtures ? TEST_COURSES : [];
-  const courses = useMemo(() => [...fixtureCourses, ...userCourses], [fixtureCourses, userCourses]);
+  const fixtureCourses = useMemo(
+    () =>
+      showDevelopmentFixtures
+        ? TEST_COURSES.map((course) => ({ ...course, ...resolveCourseTime(course, periods) }))
+        : [],
+    [periods, showDevelopmentFixtures],
+  );
+  const effectiveUserCourses = useMemo(
+    () =>
+      userCourses.map((course) => ({
+        ...course,
+        ...resolveCourseTime(course, periods),
+      })),
+    [periods, userCourses],
+  );
+  const courses = useMemo(
+    () => [...fixtureCourses, ...effectiveUserCourses],
+    [effectiveUserCourses, fixtureCourses],
+  );
   const axis = useMemo(() => getTimelineBounds(TEST_TIMETABLE.axis, periods), [periods]);
   const currentTeachingWeek = useMemo(() => {
     const config = reminderConfiguration.termConfig;
@@ -171,11 +188,11 @@ export function App() {
   const canonicalOccurrences = useMemo(
     () =>
       activeSemester
-        ? resolveCourseOccurrences(courses, activeSemester, academicOverrides)
+        ? resolveCourseOccurrences(courses, activeSemester, academicOverrides, undefined, periods)
         : hasAcademicSemesters
           ? []
           : null,
-    [academicOverrides, activeSemester, courses, hasAcademicSemesters],
+    [academicOverrides, activeSemester, courses, hasAcademicSemesters, periods],
   );
   const weekendOccurrenceCount = useMemo(
     () =>
@@ -198,8 +215,8 @@ export function App() {
     ],
   );
   const userCourseIds = useMemo(
-    () => new Set(userCourses.map((course) => course.id)),
-    [userCourses],
+    () => new Set(effectiveUserCourses.map((course) => course.id)),
+    [effectiveUserCourses],
   );
   const effectiveCandidates = useMemo(
     () =>
@@ -211,8 +228,14 @@ export function App() {
     [candidateEdits, pdfImport],
   );
   const importEvaluation = useMemo(
-    () => evaluateImportCandidates(effectiveCandidates, periods, isUsingTestSchedule, userCourses),
-    [effectiveCandidates, isUsingTestSchedule, periods, userCourses],
+    () =>
+      evaluateImportCandidates(
+        effectiveCandidates,
+        periods,
+        isUsingTestSchedule,
+        effectiveUserCourses,
+      ),
+    [effectiveCandidates, effectiveUserCourses, isUsingTestSchedule, periods],
   );
 
   async function refreshAcademicData() {
@@ -270,14 +293,20 @@ export function App() {
       const trace = beginRuntimeTrace("reminder.refresh", generation);
       const plans = activeSemester
         ? buildUnifiedReminderPlans(
-            resolveCourseOccurrences(userCourses, activeSemester, academicOverrides),
+            resolveCourseOccurrences(
+              userCourses,
+              activeSemester,
+              academicOverrides,
+              undefined,
+              periods,
+            ),
             academicTasks,
             academicExams,
             reminderConfiguration,
           )
         : hasAcademicSemesters
           ? []
-          : buildReminderPlans(userCourses, reminderConfiguration);
+          : buildReminderPlans(effectiveUserCourses, reminderConfiguration);
       trace(`plans-${plans.length}`);
       if (plans.length === 0) {
         if (!active || refreshGeneration !== reminderRefreshGeneration.current) return;
@@ -314,6 +343,8 @@ export function App() {
     academicTasks,
     activeSemester,
     hasAcademicSemesters,
+    effectiveUserCourses,
+    periods,
     reminderConfiguration,
     storageStatus,
     userCourses,
@@ -355,7 +386,7 @@ export function App() {
           setDayCount(storedDayCount);
           const renderableCourses = result.courses.filter((course) => {
             try {
-              courseTiming(course, displayAxis);
+              courseTiming({ ...course, ...resolveCourseTime(course, activePeriods) }, displayAxis);
               return true;
             } catch {
               warnings.push(`课程“${course.name}”超出当前显示范围，已跳过且未修改原数据。`);
@@ -535,7 +566,7 @@ export function App() {
     const proposals = importEvaluation.candidates.flatMap((entry) =>
       entry.proposal === null ? [] : [entry.proposal],
     );
-    const plan = prepareImportPlan(proposals, userCourses);
+    const plan = prepareImportPlan(proposals, effectiveUserCourses);
     try {
       const courses = materializeImportCourses(plan, () => crypto.randomUUID());
       setImportPlan(plan);
@@ -739,7 +770,9 @@ export function App() {
             <div className="course-form-heading">
               <div>
                 <h2>发现新版本</h2>
-                <p>当前版本 v1.3.0 · 新版本 v{availableUpdate.version}</p>
+                <p>
+                  当前版本 v{__APP_VERSION__} · 新版本 v{availableUpdate.version}
+                </p>
               </div>
             </div>
             {availableUpdate.date && (
@@ -884,6 +917,7 @@ export function App() {
       {mainView === "hub" ? (
         <AcademicHub
           courses={courses}
+          periods={periods}
           termConfig={reminderConfiguration.termConfig}
           onDataChanged={() => {
             notifyWidgetDataChanged();
@@ -948,6 +982,7 @@ export function App() {
       {(isAdding || editingCourse) && (
         <CourseForm
           axis={axis}
+          periods={periods}
           course={editingCourse ?? undefined}
           onSave={async (course) => {
             if (editingCourse) {

@@ -53,20 +53,7 @@ jobs:
           releaseBody: |
             NTU Course Assistant ${{ github.ref_name }}
 
-            这次更新加入了完整的 Academic Hub。
-
-            新功能：
-            - 单次停课、调课、换教室、补课和撤销变化
-            - 学习事项与考试管理
-            - Today 学习中心与升级后的课程提醒
-            - Widget NEXT / DEADLINES 模式
-            - 学期归档与历史查看
-
-            界面与稳定性：
-            - 统一 Academic Hub 页面布局和滚动体验
-            - 修复课程变化状态泄漏与操作长期 Busy
-            - 完成 Windows 10 安装态人工回归验证
-
+            本版本的用户可见变更请查看仓库 CHANGELOG.md 中对应版本的记录。
             首选下载 NSIS setup.exe；当前版本未进行 Windows Authenticode 商业代码签名。
           releaseDraft: true
           prerelease: false

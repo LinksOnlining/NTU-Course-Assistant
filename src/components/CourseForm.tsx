@@ -8,6 +8,8 @@ import {
 import { formatWeeks } from "../core/weeks.ts";
 import type { Course } from "../types/course.ts";
 import type { CourseInput, CourseInputErrors } from "../types/course-input.ts";
+import type { PeriodTime } from "../types/time.ts";
+import { resolveCourseTime } from "../core/period-time.ts";
 import type { TimeRange } from "../types/time.ts";
 import { CourseFormField } from "./CourseFormField.tsx";
 
@@ -24,28 +26,30 @@ const INITIAL_INPUT: CourseInput = {
 
 interface CourseFormProps {
   readonly axis: TimeRange;
+  readonly periods: readonly PeriodTime[];
   readonly course?: Course;
   readonly onSave: (course: Course) => Promise<void>;
   readonly onDelete?: (id: string) => Promise<void>;
   readonly onCancel: () => void;
 }
 
-function inputFromCourse(course: Course): CourseInput {
+function inputFromCourse(course: Course, periods: readonly PeriodTime[]): CourseInput {
+  const time = resolveCourseTime(course, periods);
   return {
     name: course.name,
     teacher: course.teacher ?? "",
     classroom: course.classroom ?? "",
     weekday: course.weekday,
-    startTime: course.startTime,
-    endTime: course.endTime,
+    startTime: time.startTime,
+    endTime: time.endTime,
     weeks: formatWeeks(course.weeks),
   };
 }
 
-export function CourseForm({ axis, course, onSave, onDelete, onCancel }: CourseFormProps) {
+export function CourseForm({ axis, periods, course, onSave, onDelete, onCancel }: CourseFormProps) {
   const isEditing = course !== undefined;
   const [input, setInput] = useState<CourseInput>(() =>
-    course ? inputFromCourse(course) : INITIAL_INPUT,
+    course ? inputFromCourse(course, periods) : INITIAL_INPUT,
   );
   const [errors, setErrors] = useState<CourseInputErrors>({});
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
@@ -67,7 +71,19 @@ export function CourseForm({ axis, course, onSave, onDelete, onCancel }: CourseF
     setIsSaving(true);
     setStorageError("");
     try {
-      await onSave(result.course);
+      const currentPeriodTime =
+        course && course.startPeriod !== null && course.endPeriod !== null
+          ? resolveCourseTime(course, periods)
+          : null;
+      const unchangedPeriodBasedTime =
+        currentPeriodTime !== null &&
+        input.startTime === currentPeriodTime.startTime &&
+        input.endTime === currentPeriodTime.endTime;
+      await onSave(
+        unchangedPeriodBasedTime && course
+          ? { ...result.course, startPeriod: course.startPeriod, endPeriod: course.endPeriod }
+          : result.course,
+      );
     } catch (error) {
       setStorageError(error instanceof Error ? error.message : "课程保存失败，请稍后重试。");
       setIsSaving(false);

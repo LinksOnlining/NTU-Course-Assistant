@@ -541,8 +541,8 @@ test("period settings save custom proportions and can add a twelfth period", asy
   expect(firstStart.y).toBeGreaterThan(firstLabel.y);
   expect(firstEnd.y).toBeGreaterThan(firstStart.y);
   const unchangedCourse = page.locator('[data-course-id="wednesday-first"]');
-  await expect(unchangedCourse).toHaveCSS("height", "45px");
-  await expect(unchangedCourse.locator(".course-time")).toHaveText("08:00–08:45");
+  await expect(unchangedCourse).toHaveCSS("height", "30px");
+  await expect(unchangedCourse.locator(".course-time")).toHaveText("第1节 · 08:00–08:30");
 
   await page.getByRole("button", { name: "设置" }).click();
   const secondDialog = page.getByRole("dialog", { name: "作息时间" });

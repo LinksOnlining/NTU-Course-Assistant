@@ -9,6 +9,8 @@ import type { CourseOverride } from "../types/course-override.ts";
 import type { AcademicCourseOccurrence } from "../types/academic-occurrence.ts";
 import type { Semester } from "../types/semester.ts";
 import type { TermConfig } from "../types/reminder.ts";
+import type { PeriodTime } from "../types/time.ts";
+import { resolveCourseTime } from "./period-time.ts";
 
 export interface OccurrenceDateRange {
   readonly from: string;
@@ -35,9 +37,11 @@ function baseOccurrence(
   course: Course,
   semester: Semester,
   week: number,
+  periods: readonly PeriodTime[],
 ): AcademicCourseOccurrence {
   const config = termConfig(semester);
   const date = getCourseDate(config, week, course.weekday);
+  const time = resolveCourseTime(course, periods);
   return {
     courseId: course.id,
     semesterId: semester.id,
@@ -46,14 +50,14 @@ function baseOccurrence(
     weekday: course.weekday,
     startPeriod: course.startPeriod,
     endPeriod: course.endPeriod,
-    startTime: course.startTime,
-    endTime: course.endTime,
+    startTime: time.startTime,
+    endTime: time.endTime,
     room: course.classroom,
     teacher: course.teacher,
     status: "NORMAL",
     source: "BASE",
     originalOccurrenceKey: null,
-    occurrenceKey: `${course.id}:${semester.id}:${date}:${course.startTime}`,
+    occurrenceKey: `${course.id}:${semester.id}:${date}:${time.startTime}`,
     appliedOverrideId: null,
     appliedOverrideKind: null,
   };
@@ -75,8 +79,14 @@ function applyOverride(
     date,
     teachingWeek: getTeachingWeek(date, termConfig(semester)) ?? occurrence.teachingWeek,
     weekday: weekdayValue,
-    startPeriod: override.startPeriod ?? occurrence.startPeriod,
-    endPeriod: override.endPeriod ?? occurrence.endPeriod,
+    startPeriod:
+      override.startTime !== null || override.endTime !== null
+        ? null
+        : (override.startPeriod ?? occurrence.startPeriod),
+    endPeriod:
+      override.startTime !== null || override.endTime !== null
+        ? null
+        : (override.endPeriod ?? occurrence.endPeriod),
     startTime,
     endTime,
     room: override.classroom ?? occurrence.room,
@@ -106,8 +116,9 @@ function resolveBase(
   semester: Semester,
   overrides: readonly CourseOverride[],
   week: number,
+  periods: readonly PeriodTime[],
 ): AcademicCourseOccurrence {
-  const base = baseOccurrence(course, semester, week);
+  const base = baseOccurrence(course, semester, week, periods);
   const override = overrides
     .filter((item) => item.kind !== "MAKEUP" && matchesBase(base, item))
     .sort(
@@ -131,6 +142,7 @@ function resolveMakeup(
   course: Course,
   semester: Semester,
   override: CourseOverride,
+  periods: readonly PeriodTime[],
 ): AcademicCourseOccurrence | null {
   if (!override.active || override.kind !== "MAKEUP" || override.courseId !== course.id)
     return null;
@@ -139,17 +151,19 @@ function resolveMakeup(
   if (!isWeekday(weekdayValue)) return null;
   const week = getTeachingWeek(override.targetDate, termConfig(semester));
   if (week === null) return null;
-  const startTime = override.startTime ?? course.startTime;
+  const baseTime = resolveCourseTime(course, periods);
+  const startTime = override.startTime ?? baseTime.startTime;
+  const hasExplicitTime = override.startTime !== null || override.endTime !== null;
   return {
     courseId: course.id,
     semesterId: semester.id,
     date: override.targetDate,
     teachingWeek: week,
     weekday: weekdayValue,
-    startPeriod: override.startPeriod ?? course.startPeriod,
-    endPeriod: override.endPeriod ?? course.endPeriod,
+    startPeriod: hasExplicitTime ? null : (override.startPeriod ?? course.startPeriod),
+    endPeriod: hasExplicitTime ? null : (override.endPeriod ?? course.endPeriod),
     startTime,
-    endTime: override.endTime ?? course.endTime,
+    endTime: override.endTime ?? baseTime.endTime,
     room: override.classroom ?? course.classroom,
     teacher: override.teacher ?? course.teacher,
     status: "MAKEUP",
@@ -167,15 +181,16 @@ export function resolveCourseOccurrences(
   semester: Semester,
   overrides: readonly CourseOverride[] = [],
   range?: OccurrenceDateRange,
+  periods: readonly PeriodTime[] = [],
 ): readonly AcademicCourseOccurrence[] {
   const config = termConfig(semester);
   validateTermConfig(config);
   const resolved = courses.flatMap((course) => {
     const base = course.weeks
       .filter((week) => week <= semester.totalWeeks)
-      .map((week) => resolveBase(course, semester, overrides, week));
+      .map((week) => resolveBase(course, semester, overrides, week, periods));
     const makeup = overrides.flatMap((override) => {
-      const item = resolveMakeup(course, semester, override);
+      const item = resolveMakeup(course, semester, override, periods);
       return item === null ? [] : [item];
     });
     return [...base, ...makeup];

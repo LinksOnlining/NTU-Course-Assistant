@@ -2,6 +2,7 @@ import { TEST_COURSES } from "../fixtures/courses.ts";
 import { invoke } from "@tauri-apps/api/core";
 import {
   loadStoredCourses,
+  loadStoredPeriodTimes,
   loadStoredReminderConfiguration,
   loadStoredWidgetSettings,
   patchStoredWidgetSettings,
@@ -9,6 +10,7 @@ import {
 import type { Course } from "../types/course.ts";
 import type { TermConfig } from "../types/reminder.ts";
 import type { WidgetSettings } from "../types/widget-settings.ts";
+import type { PeriodTime } from "../types/time.ts";
 
 export const DEFAULT_WIDGET_SETTINGS: WidgetSettings = {
   enabled: false,
@@ -22,6 +24,7 @@ export const DEFAULT_WIDGET_SETTINGS: WidgetSettings = {
 
 export interface WidgetData {
   readonly courses: readonly Course[];
+  readonly periods: readonly PeriodTime[] | null;
   readonly termConfig: TermConfig | null;
   readonly settings: WidgetSettings;
 }
@@ -30,8 +33,9 @@ export async function loadWidgetData(): Promise<WidgetData> {
   if (!import.meta.env.DEV || "__TAURI_INTERNALS__" in window) {
     return invoke<WidgetData>("load_widget_data");
   }
-  const [storedCourses, configuration, settings] = await Promise.all([
+  const [storedCourses, periods, configuration, settings] = await Promise.all([
     loadStoredCourses(),
+    loadStoredPeriodTimes(),
     loadStoredReminderConfiguration(),
     loadStoredWidgetSettings(),
   ]);
@@ -39,6 +43,7 @@ export async function loadWidgetData(): Promise<WidgetData> {
     courses: import.meta.env.DEV
       ? [...TEST_COURSES, ...storedCourses.courses]
       : storedCourses.courses,
+    periods,
     termConfig: configuration.termConfig,
     settings,
   };

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { resolveCourseOccurrences } from "../core/course-occurrence.ts";
+import { resolveCourseTime } from "../core/period-time.ts";
 import { getTodayDashboard } from "../core/today-dashboard.ts";
 import { buildCanonicalWidgetViewModel, buildWidgetViewModel } from "../core/widget-view.ts";
 import { getWidgetSnapshot } from "../core/widget-snapshot.ts";
@@ -32,6 +33,7 @@ import type { Exam } from "../types/exam.ts";
 import type { Semester } from "../types/semester.ts";
 import type { TermConfig } from "../types/reminder.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
+import type { PeriodTime } from "../types/time.ts";
 
 function shanghaiNow(): { readonly date: string; readonly time: string } {
   const fields = new Intl.DateTimeFormat("en-CA", {
@@ -54,6 +56,7 @@ function shanghaiNow(): { readonly date: string; readonly time: string } {
 export function WidgetPrototype() {
   const [settings, setSettings] = useState<WidgetSettings>(DEFAULT_WIDGET_SETTINGS);
   const [courses, setCourses] = useState<readonly Course[]>([]);
+  const [periods, setPeriods] = useState<readonly PeriodTime[]>([]);
   const [termConfig, setTermConfig] = useState<TermConfig | null>(null);
   const [semester, setSemester] = useState<Semester | null>(null);
   const [overrides, setOverrides] = useState<readonly CourseOverride[]>([]);
@@ -87,6 +90,7 @@ export function WidgetPrototype() {
         trace("snapshot-returned");
         if (!active) return;
         setCourses(data.courses);
+        setPeriods(data.periods ?? []);
         let semesterItems: readonly Semester[] = [];
         try {
           semesterItems = await loadSemesters();
@@ -234,21 +238,25 @@ export function WidgetPrototype() {
     );
   }
 
+  const effectiveCourses = useMemo(
+    () => courses.map((course) => ({ ...course, ...resolveCourseTime(course, periods) })),
+    [courses, periods],
+  );
   const view = useMemo(
     () =>
       semester
         ? buildCanonicalWidgetViewModel(
             courses,
             semester,
-            resolveCourseOccurrences(courses, semester, overrides),
+            resolveCourseOccurrences(courses, semester, overrides, undefined, periods),
             clock,
           )
-        : buildWidgetViewModel(courses, termConfig, clock),
-    [clock, courses, overrides, semester, termConfig],
+        : buildWidgetViewModel(effectiveCourses, termConfig, clock),
+    [clock, courses, effectiveCourses, overrides, periods, semester, termConfig],
   );
   const snapshot = useMemo(() => {
     if (!semester) return null;
-    const occurrences = resolveCourseOccurrences(courses, semester, overrides);
+    const occurrences = resolveCourseOccurrences(courses, semester, overrides, undefined, periods);
     const dashboard = getTodayDashboard(clock.date, clock.time, occurrences, tasks, exams);
     const mode =
       settings.displayMode === "next"
@@ -257,7 +265,7 @@ export function WidgetPrototype() {
           ? "DEADLINES"
           : "TODAY";
     return getWidgetSnapshot(mode, dashboard);
-  }, [clock, courses, exams, overrides, semester, settings.displayMode, tasks]);
+  }, [clock, courses, exams, overrides, periods, semester, settings.displayMode, tasks]);
 
   return (
     <main className="widget-prototype" aria-label="桌面课程小组件">

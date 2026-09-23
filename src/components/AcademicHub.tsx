@@ -26,12 +26,14 @@ import type { CourseOverride, CourseOverrideKind } from "../types/course-overrid
 import type { Exam } from "../types/exam.ts";
 import type { Semester } from "../types/semester.ts";
 import type { TermConfig } from "../types/reminder.ts";
+import type { PeriodTime } from "../types/time.ts";
 
 type HubTab = "today" | "changes" | "tasks" | "exams" | "semesters";
 type ChangeFilter = "all" | "changed";
 
 interface AcademicHubProps {
   readonly courses: readonly Course[];
+  readonly periods: readonly PeriodTime[];
   readonly termConfig: TermConfig | null;
   readonly onDataChanged?: () => void;
 }
@@ -393,7 +395,7 @@ function useCourseChangePageState({
   };
 }
 
-export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubProps) {
+export function AcademicHub({ courses, periods, termConfig, onDataChanged }: AcademicHubProps) {
   const [tab, setTab] = useState<HubTab>("today");
   const [semesters, setSemesters] = useState<readonly Semester[]>([]);
   const [semester, setSemester] = useState<Semester | null>(null);
@@ -473,8 +475,9 @@ export function AcademicHub({ courses, termConfig, onDataChanged }: AcademicHubP
   }, [semester]);
 
   const occurrences = useMemo(
-    () => (semester ? resolveCourseOccurrences(courses, semester, overrides) : []),
-    [courses, overrides, semester],
+    () =>
+      semester ? resolveCourseOccurrences(courses, semester, overrides, undefined, periods) : [],
+    [courses, overrides, periods, semester],
   );
   const nowDate = getShanghaiDate(Date.now());
   const nowTime = getShanghaiTime(Date.now());

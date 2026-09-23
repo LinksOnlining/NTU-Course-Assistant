@@ -136,6 +136,24 @@ export function periodRangeToTimeRange(
   };
 }
 
+/** Period indexes are the source of truth when present; saved clock times remain a fallback for missing mappings. */
+export function resolveCourseTime(
+  course: TimeRange & {
+    readonly startPeriod: number | null;
+    readonly endPeriod: number | null;
+  },
+  periods: readonly PeriodTime[],
+): TimeRange {
+  if (course.startPeriod === null || course.endPeriod === null) return course;
+  if (periods.length === 0) return course;
+  return (
+    periodRangeToTimeRange(
+      { startPeriod: course.startPeriod, endPeriod: course.endPeriod },
+      periods,
+    ) ?? course
+  );
+}
+
 export function timeRangeToPeriods(
   range: TimeRange,
   periods: readonly PeriodTime[],

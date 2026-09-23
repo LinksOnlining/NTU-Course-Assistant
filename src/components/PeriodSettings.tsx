@@ -625,7 +625,7 @@ export function PeriodSettings({
         <section className="settings-section" aria-labelledby="about-settings-title">
           <div>
             <h3 id="about-settings-title">关于</h3>
-            <p>NTU Course Assistant · Version v1.3.0</p>
+            <p>NTU Course Assistant · Version v{__APP_VERSION__}</p>
           </div>
           <div className="form-actions">
             <button type="button" className="secondary-button" onClick={onCheckUpdates}>

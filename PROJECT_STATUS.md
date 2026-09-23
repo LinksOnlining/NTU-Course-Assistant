@@ -1,7 +1,8 @@
 # 项目状态
 
-- 最后更新：2026-09-22
-- 当前阶段：**v1.3.0 RELEASED**。CourseOccurrence/CourseOverride 统一读取模型、单次停课/调课/换教室/补课与撤销、学习事项、考试、今日学习中心、Widget NEXT/DEADLINES 模式、ACTIVE/ARCHIVED 学期数据和 Academic Hub 统一 UI Shell 均已完成；页面状态与操作状态已隔离，Windows 10 最终安装态人工验收 ALL PASS。
+- 最后更新：2026-09-23
+- 当前阶段：**v1.3.1 RC — 作息时间联动修复，自动验证与生产构建 PASS，等待 Windows 10 人工验收**。v1.3.0 已发布且保持不变；没有创建或移动 v1.3.1 tag，也没有发布 v1.3.1 Release。
+- v1.3.1 修复：根因是 v1.3.0 PDF 导入行已保存 `startPeriod/endPeriod` 与导入时派生的 `startTime/endTime`，但 canonical occurrence resolver 只复制旧钟点、忽略节次索引和当前作息。现改为在解析层以节次索引 + 当前 `PeriodTime[]` 得到有效时间；固定时间课程仍使用保存钟点。主课表、Academic Hub、Widget 和 Reminder 统一刷新；旧 schema 5 行无需 migration 或批量重写。`npm run verify`、Rust checks 与 v1.3.1 x64 production build 均 PASS。Windows 10 安装态人工验收仍待 Ethan 执行。
 - v1.3.0 数据安全：SQLite 从 schema 4 通过非破坏 migration 升至 schema 5，新增 semesters、course_overrides、academic_tasks、exams、reminder_rules、reminder_instances；原有 courses、period_times、app_settings、handled_reminders 保留，未来 schema 仍安全拒绝。
 - v1.3.0 统一数据流：课程表、今日中心、Widget 和提醒均优先消费 `resolveCourseOccurrences` 产生的 canonical occurrence；基础 Course 不被单次变化直接改写。
 - v1.3.0 页面状态边界：Academic Hub 的课程变化页只持有自身的 selected course、expanded occurrence、搜索/筛选、编辑器和 typed operation；离开分区会清理瞬态状态，异步操作以 generation 防止旧结果回写。任务/考试/学期的忙碌状态不再控制课表变化按钮；当前产品已移除 Backup / Restore，因此不存在“备份管理”运行时路由可供跨页复现。
@@ -21,7 +22,7 @@
 - UI 状态：Windows 11 风格的系统字体和轻量视觉层级；页面、课程表、表头和时间轴使用低饱和薄荷、暖灰和米色的渐变层次，避免大面积纯色。左侧节次块分开展示节次、开始和结束时间，30 分钟的第一节也将开始/结束时间按上下两行置于节次下方；课程区移除内部网格和列分隔线，仅保留外框及课程卡片边界。课程卡片使用稳定低饱和色系，45 分钟短课仍显示名称、时间、教室和教师，并按高度/重叠宽度自适应缩小字号。大块空闲按真实比例保留。
 - 窗口配置：默认 1280×800，最小尺寸配置 720×520；单一 `.timetable-scroll` 负责纵横滚动，不存在页面级双滚动条。
 - Phase 2 状态：数据库由 `app_local_data_dir()` 自动创建，schema `user_version=4`；fixture 只在开发模式显示且从未写入数据库。损坏行逐条跳过并提示，不自动修改或删除；未来 schema 被拒绝且原数据不变；busy/write failure 不造成 UI/数据库分叉。`period_times` 在 1→2 migration、`app_settings` 在 2→3 migration、`handled_reminders` 在 3→4 migration 中安全创建。
-- Phase 2.5–2.7 状态：`PeriodTime` 配置与 UI 解耦；作息要求第 1 节起连续编号、严格 HH:mm、节间不重叠且最多 30 节。test-only 作息可在设置中添加、修改和删除最后一节，并持久化到 SQLite；左轴按真实分钟显示节次与时间，时间轴自动按整点扩展，课间和午休不压缩。节次和课程 top 共享分钟计算，但课程区不绘制内部网格；只有精确匹配作息的 Course 才显示节次，修改作息不会改写已有课程时间。
+- Phase 2.5–2.7 状态：`PeriodTime` 配置与 UI 解耦；作息要求第 1 节起连续编号、严格 HH:mm、节间不重叠且最多 30 节。test-only 作息可在设置中添加、修改和删除最后一节，并持久化到 SQLite；左轴按真实分钟显示节次与时间，时间轴自动按整点扩展，课间和午休不压缩。v1.3.1 起，具备节次索引的课程通过 canonical resolver 动态读取作息钟点；作息保存不批量改写课程持久化值，固定钟点课程保持不变。
 - Phase 4：**CANCELLED BY USER**。教务系统导入及其后续调查不再是项目计划。
 - Phase 5.1–5.4：TypeScript 以 `Asia/Shanghai` 生成稳定 occurrence key、UTC epoch 毫秒提醒计划及最小通知展示 payload；启动、数据变化与窗口恢复均会重建计划。Rust 单线程调度器只等待绝对时刻、通过 channel 刷新或取消旧计划、同一时刻批量处理并在当前会话去重；每分钟复核 wall-clock 处理 sleep/time-jump。`handled_reminders` 在通知尝试后跨重启去重，通知或持久化失败都只记录内部错误且不会令 scheduler 崩溃。官方 Tauri 通知适配器在 due 时发送“课程即将开始”，正文显示课程、时间和可选教室；它不读 Course、不重算教学周或课程日期。
 - Phase 6：设置中的“启动设置”默认关闭，读取官方 autostart plugin 的系统实际状态；用户修改后立刻重新读取，失败或状态不一致不会显示伪成功。未增加 SQLite 字段、migration 或后台服务，schema 保持 4。官方 single-instance plugin 会将重复启动请求带回主窗口，避免重复 reminder scheduler。
