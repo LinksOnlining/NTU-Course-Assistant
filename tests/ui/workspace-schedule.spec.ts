@@ -204,6 +204,17 @@ test("Workspace Schedule navigates one day at a time and loads only the selected
   page,
 }) => {
   await seedScheduleRuntime(page);
+  // Dashboard reads the upcoming range before navigating; isolate Schedule's date-specific reads.
+  await page.evaluate(() => {
+    const runtime = window as Window & {
+      __workspaceScheduleTest: {
+        eventLoads: unknown[];
+        blockLoads: unknown[];
+      };
+    };
+    runtime.__workspaceScheduleTest.eventLoads.length = 0;
+    runtime.__workspaceScheduleTest.blockLoads.length = 0;
+  });
   const dateElement = page.getByTestId("workspace-schedule-date");
   await expect(dateElement).toHaveAttribute("datetime", date);
   await page.getByRole("button", { name: "上一天" }).click();
@@ -417,8 +428,10 @@ test("keyboard editing remains available and manual Event save previews conflict
   await expect(conflict).toBeVisible();
   await expect(conflict).toContainText("数据结构");
   await conflict.getByRole("button", { name: "返回调整" }).click();
+  await expect(create.getByRole("button", { name: "保存", exact: true })).toBeFocused();
   await create.getByLabel("开始时间").fill("10:05");
   await create.getByLabel("结束时间").fill("10:30");
+  await expect(create.getByLabel("结束时间")).toHaveValue("10:30");
   await create.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("button", { name: /人工安排/u })).toBeVisible();
 });

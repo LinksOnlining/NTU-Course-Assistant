@@ -347,6 +347,13 @@ export function WorkspaceSchedulePage({
   const [mutationError, setMutationError] = useState("");
   const [conflictPrompt, setConflictPrompt] = useState<ConflictPrompt | null>(null);
   const conflictReturnFocusRef = useRef<HTMLElement | null>(null);
+  const restoreConflictFocusRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (conflictPrompt || !restoreConflictFocusRef.current) return;
+    restoreConflictFocusRef.current = false;
+    conflictReturnFocusRef.current?.focus();
+  }, [conflictPrompt]);
 
   useEffect(() => {
     let active = true;
@@ -529,8 +536,8 @@ export function WorkspaceSchedulePage({
   }
 
   function dismissConflictPrompt() {
+    restoreConflictFocusRef.current = true;
     setConflictPrompt(null);
-    requestAnimationFrame(() => conflictReturnFocusRef.current?.focus());
   }
 
   async function changeTimelineTime(item: TimelineItem, interval: MinuteInterval) {

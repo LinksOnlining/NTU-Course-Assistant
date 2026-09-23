@@ -469,8 +469,6 @@ function timeContext(sources: WorkspaceDashboardSources, nowTime: string) {
         location: null,
         sourceLabel: null,
       };
-    } else if (next) {
-      secondary = itemSection(next, sources.date);
     }
   } else if (next) {
     secondary = itemSection(next, sources.date);
