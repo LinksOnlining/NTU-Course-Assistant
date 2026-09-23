@@ -1,5 +1,9 @@
 export { projectAcademicOccurrencesToTimelineItems } from "./academic-timeline.ts";
 export {
+  projectPlannerEventsToTimelineItems,
+  projectTimeBlocksToTimelineItems,
+} from "./planner-timeline.ts";
+export {
   layoutTimelineItems,
   timeToDayMinute,
   TIMELINE_DAY_MINUTES,

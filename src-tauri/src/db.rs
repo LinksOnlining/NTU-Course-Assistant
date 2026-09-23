@@ -8,10 +8,11 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::models::{
     default_widget_settings, merge_widget_settings, parse_date, parse_time, validate_period_times,
-    validate_reminder_settings, validate_term_config, validate_widget_settings, AcademicTask,
-    AcademicTaskStatus, Course, CourseOverride, CourseOverrideKind, Exam, ExamStatus, PeriodTime,
-    PersonalTask, PersonalTaskPriority, PersonalTaskStatus, ReminderSettings, Semester,
-    SemesterStatus, TermConfig, WidgetSettings, WidgetSettingsPatch,
+    validate_planner_date_range, validate_reminder_settings, validate_term_config,
+    validate_widget_settings, AcademicTask, AcademicTaskStatus, Course, CourseOverride,
+    CourseOverrideKind, Exam, ExamStatus, PeriodTime, PersonalTask, PersonalTaskPriority,
+    PersonalTaskStatus, PlannerEvent, ReminderSettings, Semester, SemesterStatus, TermConfig,
+    TimeBlock, WidgetSettings, WidgetSettingsPatch,
 };
 
 const CURRENT_SCHEMA_VERSION: i64 = 6;
@@ -1147,6 +1148,212 @@ impl CourseDatabase {
             .map_err(StorageError::from)
     }
 
+    pub fn load_planner_events(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<PlannerEvent>, StorageError> {
+        validate_planner_date_range(start_date, end_date).map_err(StorageError::InvalidData)?;
+        let mut statement = self.connection.prepare(
+            "SELECT id, title, description, date, start_time, end_time, location,
+                    buffer_before_minutes, buffer_after_minutes, created_at, updated_at
+             FROM planner_events
+             WHERE date >= ?1 AND date <= ?2
+             ORDER BY date, start_time, id",
+        )?;
+        let mut rows = statement.query(params![start_date, end_date])?;
+        let mut events = Vec::new();
+        while let Some(row) = rows.next()? {
+            events.push(row_to_planner_event(row)?);
+        }
+        Ok(events)
+    }
+
+    pub fn create_planner_event(&self, event: &PlannerEvent) -> Result<PlannerEvent, StorageError> {
+        event.validate().map_err(StorageError::InvalidData)?;
+        self.connection.execute(
+            "INSERT INTO planner_events
+             (id, title, description, date, start_time, end_time, location,
+              buffer_before_minutes, buffer_after_minutes, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                &event.id,
+                &event.title,
+                &event.description,
+                &event.date,
+                &event.start_time,
+                &event.end_time,
+                &event.location,
+                event.buffer_before_minutes,
+                event.buffer_after_minutes,
+                &event.created_at,
+                &event.updated_at,
+            ],
+        )?;
+        self.load_planner_event(&event.id)
+    }
+
+    pub fn update_planner_event(&self, event: &PlannerEvent) -> Result<PlannerEvent, StorageError> {
+        event.validate().map_err(StorageError::InvalidData)?;
+        if self.connection.execute(
+            "UPDATE planner_events
+             SET title=?2, description=?3, date=?4, start_time=?5, end_time=?6,
+                 location=?7, buffer_before_minutes=?8, buffer_after_minutes=?9, updated_at=?10
+             WHERE id=?1",
+            params![
+                &event.id,
+                &event.title,
+                &event.description,
+                &event.date,
+                &event.start_time,
+                &event.end_time,
+                &event.location,
+                event.buffer_before_minutes,
+                event.buffer_after_minutes,
+                &event.updated_at,
+            ],
+        )? == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        self.load_planner_event(&event.id)
+    }
+
+    pub fn delete_planner_event(&self, id: &str) -> Result<(), StorageError> {
+        if id.trim().is_empty()
+            || self
+                .connection
+                .execute("DELETE FROM planner_events WHERE id=?1", [id])?
+                == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        Ok(())
+    }
+
+    fn load_planner_event(&self, id: &str) -> Result<PlannerEvent, StorageError> {
+        self.connection
+            .query_row(
+                "SELECT id, title, description, date, start_time, end_time, location,
+                        buffer_before_minutes, buffer_after_minutes, created_at, updated_at
+                 FROM planner_events WHERE id=?1",
+                [id],
+                row_to_planner_event,
+            )
+            .map_err(StorageError::from)
+    }
+
+    pub fn load_time_blocks(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<TimeBlock>, StorageError> {
+        validate_planner_date_range(start_date, end_date).map_err(StorageError::InvalidData)?;
+        let mut statement = self.connection.prepare(
+            "SELECT id, personal_task_id, date, start_time, end_time,
+                    buffer_before_minutes, buffer_after_minutes, created_at, updated_at
+             FROM time_blocks
+             WHERE date >= ?1 AND date <= ?2
+             ORDER BY date, start_time, id",
+        )?;
+        let mut rows = statement.query(params![start_date, end_date])?;
+        let mut blocks = Vec::new();
+        while let Some(row) = rows.next()? {
+            blocks.push(row_to_time_block(row)?);
+        }
+        Ok(blocks)
+    }
+
+    pub fn load_time_blocks_for_task(
+        &self,
+        personal_task_id: &str,
+    ) -> Result<Vec<TimeBlock>, StorageError> {
+        if personal_task_id.trim().is_empty() || personal_task_id.trim() != personal_task_id {
+            return Err(StorageError::InvalidData("个人任务 ID 无效".into()));
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT id, personal_task_id, date, start_time, end_time,
+                    buffer_before_minutes, buffer_after_minutes, created_at, updated_at
+             FROM time_blocks WHERE personal_task_id=?1 ORDER BY date, start_time, id",
+        )?;
+        let mut rows = statement.query([personal_task_id])?;
+        let mut blocks = Vec::new();
+        while let Some(row) = rows.next()? {
+            blocks.push(row_to_time_block(row)?);
+        }
+        Ok(blocks)
+    }
+
+    pub fn create_time_block(&self, block: &TimeBlock) -> Result<TimeBlock, StorageError> {
+        block.validate().map_err(StorageError::InvalidData)?;
+        self.connection.execute(
+            "INSERT INTO time_blocks
+             (id, personal_task_id, date, start_time, end_time, buffer_before_minutes,
+              buffer_after_minutes, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                &block.id,
+                &block.personal_task_id,
+                &block.date,
+                &block.start_time,
+                &block.end_time,
+                block.buffer_before_minutes,
+                block.buffer_after_minutes,
+                &block.created_at,
+                &block.updated_at,
+            ],
+        )?;
+        self.load_time_block(&block.id)
+    }
+
+    pub fn update_time_block(&self, block: &TimeBlock) -> Result<TimeBlock, StorageError> {
+        block.validate().map_err(StorageError::InvalidData)?;
+        if self.connection.execute(
+            "UPDATE time_blocks
+             SET personal_task_id=?2, date=?3, start_time=?4, end_time=?5,
+                 buffer_before_minutes=?6, buffer_after_minutes=?7, updated_at=?8
+             WHERE id=?1",
+            params![
+                &block.id,
+                &block.personal_task_id,
+                &block.date,
+                &block.start_time,
+                &block.end_time,
+                block.buffer_before_minutes,
+                block.buffer_after_minutes,
+                &block.updated_at,
+            ],
+        )? == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        self.load_time_block(&block.id)
+    }
+
+    pub fn delete_time_block(&self, id: &str) -> Result<(), StorageError> {
+        if id.trim().is_empty()
+            || self
+                .connection
+                .execute("DELETE FROM time_blocks WHERE id=?1", [id])?
+                == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        Ok(())
+    }
+
+    fn load_time_block(&self, id: &str) -> Result<TimeBlock, StorageError> {
+        self.connection
+            .query_row(
+                "SELECT id, personal_task_id, date, start_time, end_time,
+                        buffer_before_minutes, buffer_after_minutes, created_at, updated_at
+                 FROM time_blocks WHERE id=?1",
+                [id],
+                row_to_time_block,
+            )
+            .map_err(StorageError::from)
+    }
+
     pub fn load_exams(&self, semester_id: &str) -> Result<Vec<Exam>, StorageError> {
         let mut statement = self.connection.prepare(
             "SELECT id, semester_id, course_id, title, starts_at, ends_at, location, seat_info,
@@ -1491,6 +1698,36 @@ fn row_to_personal_task(row: &Row<'_>) -> rusqlite::Result<PersonalTask> {
     })
 }
 
+fn row_to_planner_event(row: &Row<'_>) -> rusqlite::Result<PlannerEvent> {
+    Ok(PlannerEvent {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        description: row.get(2)?,
+        date: row.get(3)?,
+        start_time: row.get(4)?,
+        end_time: row.get(5)?,
+        location: row.get(6)?,
+        buffer_before_minutes: row.get(7)?,
+        buffer_after_minutes: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
+    })
+}
+
+fn row_to_time_block(row: &Row<'_>) -> rusqlite::Result<TimeBlock> {
+    Ok(TimeBlock {
+        id: row.get(0)?,
+        personal_task_id: row.get(1)?,
+        date: row.get(2)?,
+        start_time: row.get(3)?,
+        end_time: row.get(4)?,
+        buffer_before_minutes: row.get(5)?,
+        buffer_after_minutes: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+    })
+}
+
 fn row_to_exam(row: &Row<'_>) -> rusqlite::Result<Exam> {
     let status: String = row.get(9)?;
     let status = match status.as_str() {
@@ -1553,6 +1790,36 @@ mod tests {
             created_at: "2026-09-23T08:00:00.000Z".into(),
             updated_at: "2026-09-23T08:00:00.000Z".into(),
             completed_at: None,
+        }
+    }
+
+    fn planner_event(id: &str, date: &str) -> PlannerEvent {
+        PlannerEvent {
+            id: id.into(),
+            title: "个人安排".into(),
+            description: Some("测试说明".into()),
+            date: date.into(),
+            start_time: "10:00".into(),
+            end_time: "11:00".into(),
+            location: Some("图书馆".into()),
+            buffer_before_minutes: 10,
+            buffer_after_minutes: 20,
+            created_at: "2026-09-23T08:00:00.000Z".into(),
+            updated_at: "2026-09-23T08:00:00.000Z".into(),
+        }
+    }
+
+    fn time_block(id: &str, task_id: &str, date: &str) -> TimeBlock {
+        TimeBlock {
+            id: id.into(),
+            personal_task_id: task_id.into(),
+            date: date.into(),
+            start_time: "13:00".into(),
+            end_time: "14:00".into(),
+            buffer_before_minutes: 5,
+            buffer_after_minutes: 15,
+            created_at: "2026-09-23T08:00:00.000Z".into(),
+            updated_at: "2026-09-23T08:00:00.000Z".into(),
         }
     }
 
@@ -1626,25 +1893,168 @@ mod tests {
     }
 
     #[test]
+    fn planner_event_and_time_block_crud_filter_ranges_and_survive_reopen() {
+        let path = temporary_database_path();
+        let mut event = planner_event("event-crud", "2026-09-24");
+        let mut block = time_block("block-crud", "task-crud", "2026-09-24");
+        {
+            let database = CourseDatabase::open(&path).expect("open planner database");
+            let task = personal_task("task-crud");
+            database.create_personal_task(&task).unwrap();
+            assert_eq!(database.create_planner_event(&event).unwrap(), event);
+            assert_eq!(
+                database
+                    .load_planner_events("2026-09-24", "2026-09-24")
+                    .unwrap(),
+                vec![event.clone()]
+            );
+            event.title = "更新后的安排".into();
+            event.date = "2026-09-25".into();
+            event.start_time = "11:00".into();
+            event.end_time = "12:15".into();
+            event.buffer_before_minutes = 30;
+            event.created_at = "forged-created-at".into();
+            event.updated_at = "2026-09-23T09:00:00.000Z".into();
+            let mut expected_event = event.clone();
+            expected_event.created_at = "2026-09-23T08:00:00.000Z".into();
+            assert_eq!(
+                database.update_planner_event(&event).unwrap(),
+                expected_event
+            );
+            event = expected_event;
+            assert_eq!(event.created_at, "2026-09-23T08:00:00.000Z");
+            assert!(database
+                .load_planner_events("2026-09-24", "2026-09-24")
+                .unwrap()
+                .is_empty());
+            assert_eq!(
+                database
+                    .load_planner_events("2026-09-24", "2026-09-25")
+                    .unwrap(),
+                vec![event.clone()]
+            );
+
+            assert_eq!(database.create_time_block(&block).unwrap(), block);
+            assert_eq!(
+                database
+                    .load_time_blocks_for_task(&block.personal_task_id)
+                    .unwrap(),
+                vec![block.clone()]
+            );
+            block.date = "2026-09-26".into();
+            block.start_time = "15:00".into();
+            block.end_time = "16:30".into();
+            block.buffer_after_minutes = 45;
+            block.created_at = "forged-created-at".into();
+            block.updated_at = "2026-09-23T09:30:00.000Z".into();
+            let mut expected_block = block.clone();
+            expected_block.created_at = "2026-09-23T08:00:00.000Z".into();
+            assert_eq!(database.update_time_block(&block).unwrap(), expected_block);
+            block = expected_block;
+            assert!(database
+                .load_time_blocks("2026-09-24", "2026-09-25")
+                .unwrap()
+                .is_empty());
+            assert_eq!(
+                database
+                    .load_time_blocks("2026-09-26", "2026-09-26")
+                    .unwrap(),
+                vec![block.clone()]
+            );
+            assert_eq!(
+                database
+                    .load_time_blocks_for_task(&block.personal_task_id)
+                    .unwrap(),
+                vec![block.clone()]
+            );
+        }
+
+        let database = CourseDatabase::open(&path).expect("reopen planner database");
+        assert_eq!(
+            database
+                .load_planner_events("2026-09-25", "2026-09-25")
+                .unwrap(),
+            vec![event.clone()]
+        );
+        assert_eq!(
+            database
+                .load_time_blocks_for_task(&block.personal_task_id)
+                .unwrap(),
+            vec![block.clone()]
+        );
+        database.delete_planner_event(&event.id).unwrap();
+        database.delete_time_block(&block.id).unwrap();
+        assert!(database
+            .load_planner_events("2026-09-25", "2026-09-25")
+            .unwrap()
+            .is_empty());
+        assert!(database
+            .load_time_blocks_for_task(&block.personal_task_id)
+            .unwrap()
+            .is_empty());
+        assert!(database.delete_planner_event(&event.id).is_err());
+        assert!(database.delete_time_block(&block.id).is_err());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn planner_storage_rejects_invalid_range_and_cross_midnight_records() {
+        let database = database();
+        assert!(database
+            .load_planner_events("2026-09-25", "2026-09-24")
+            .is_err());
+        assert!(database
+            .load_time_blocks("2026-09-25", "2026-09-24")
+            .is_err());
+        let mut event = planner_event("invalid-event", "2026-09-24");
+        event.start_time = "23:00".into();
+        event.end_time = "01:00".into();
+        assert!(database.create_planner_event(&event).is_err());
+        let invalid_block = time_block("orphan-block", "missing-task", "2026-09-24");
+        assert!(database.create_time_block(&invalid_block).is_err());
+        assert!(database
+            .load_planner_events("2026-09-24", "2026-09-24")
+            .unwrap()
+            .is_empty());
+        assert!(database
+            .load_time_blocks("2026-09-24", "2026-09-24")
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
     fn deleting_personal_task_cascades_to_time_blocks() {
         let database = database();
         let task = personal_task("personal-task-cascade");
         database.create_personal_task(&task).unwrap();
         database
-            .connection
-            .execute(
-                "INSERT INTO time_blocks
-                 (id, personal_task_id, date, start_time, end_time, created_at, updated_at)
-                 VALUES ('block-1', ?1, '2026-09-24', '10:00', '11:00', 'now', 'now')",
-                [&task.id],
-            )
+            .create_time_block(&time_block("block-1", &task.id, "2026-09-24"))
             .unwrap();
+        database
+            .create_planner_event(&planner_event("event-1", "2026-09-24"))
+            .unwrap();
+        database
+            .set_personal_task_completed(&task.id, true, "2026-09-23T09:00:00.000Z")
+            .unwrap();
+        assert_eq!(
+            database.load_time_blocks_for_task(&task.id).unwrap().len(),
+            1,
+            "completing a task must not remove its planned time block"
+        );
         database.delete_personal_task(&task.id).unwrap();
         let block_count: i64 = database
             .connection
             .query_row("SELECT COUNT(*) FROM time_blocks", [], |row| row.get(0))
             .unwrap();
         assert_eq!(block_count, 0);
+        assert_eq!(
+            database
+                .load_planner_events("2026-09-24", "2026-09-24")
+                .unwrap()
+                .len(),
+            1,
+            "deleting a task must not affect independent PlannerEvents"
+        );
     }
 
     #[test]

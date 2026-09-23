@@ -321,6 +321,81 @@ pub struct PersonalTask {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PlannerEvent {
+    pub id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub date: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub location: Option<String>,
+    pub buffer_before_minutes: u16,
+    pub buffer_after_minutes: u16,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl PlannerEvent {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        validate_planner_text(
+            &self.id,
+            &self.title,
+            self.description.as_deref(),
+            self.location.as_deref(),
+            &self.created_at,
+            &self.updated_at,
+        )?;
+        validate_planner_interval(
+            &self.date,
+            &self.start_time,
+            &self.end_time,
+            self.buffer_before_minutes,
+            self.buffer_after_minutes,
+        )
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeBlock {
+    pub id: String,
+    pub personal_task_id: String,
+    pub date: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub buffer_before_minutes: u16,
+    pub buffer_after_minutes: u16,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl TimeBlock {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self.personal_task_id.trim().is_empty()
+            || self.personal_task_id.trim() != self.personal_task_id
+        {
+            return Err("时间块必须关联有效的个人任务".into());
+        }
+        validate_planner_text(
+            &self.id,
+            "计划时间",
+            None,
+            None,
+            &self.created_at,
+            &self.updated_at,
+        )?;
+        validate_planner_interval(
+            &self.date,
+            &self.start_time,
+            &self.end_time,
+            self.buffer_before_minutes,
+            self.buffer_after_minutes,
+        )
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Exam {
     pub id: String,
     pub semester_id: String,
@@ -435,6 +510,63 @@ pub(crate) fn parse_date(value: &str) -> Result<(u32, u32, u32), String> {
     Ok((year, month, day))
 }
 
+pub(crate) fn validate_planner_date_range(start: &str, end: &str) -> Result<(), String> {
+    if parse_date(start)? > parse_date(end)? {
+        return Err("结束日期不得早于开始日期".into());
+    }
+    Ok(())
+}
+
+fn validate_planner_text(
+    id: &str,
+    title: &str,
+    description: Option<&str>,
+    location: Option<&str>,
+    created_at: &str,
+    updated_at: &str,
+) -> Result<(), String> {
+    if id.trim().is_empty() || id.trim() != id {
+        return Err("日程 ID 无效".into());
+    }
+    if title.trim().is_empty() || title.chars().count() > 200 {
+        return Err("标题不能为空且最多 200 个字符".into());
+    }
+    if description.is_some_and(|value| value.chars().count() > 5000) {
+        return Err("描述最多 5000 个字符".into());
+    }
+    if location.is_some_and(|value| {
+        value.trim().is_empty() || value.trim() != value || value.chars().count() > 200
+    }) {
+        return Err("地点字段无效".into());
+    }
+    if created_at.trim().is_empty() || updated_at.trim().is_empty() {
+        return Err("日程审计时间无效".into());
+    }
+    Ok(())
+}
+
+fn validate_planner_interval(
+    date: &str,
+    start_time: &str,
+    end_time: &str,
+    buffer_before_minutes: u16,
+    buffer_after_minutes: u16,
+) -> Result<(), String> {
+    parse_date(date)?;
+    let start = parse_time(start_time)?;
+    let end = parse_time(end_time)?;
+    if start == end {
+        return Err("结束时间必须晚于开始时间".into());
+    }
+    if start > end {
+        return Err("当前版本暂不支持跨午夜日程。".into());
+    }
+    if buffer_before_minutes > 240 || buffer_after_minutes > 240 {
+        return Err("缓冲时间必须在 0–240 分钟之间".into());
+    }
+    Ok(())
+}
+
 fn weekday(year: u32, month: u32, day: u32) -> u8 {
     let month_days = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
     let leap = year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
@@ -539,5 +671,74 @@ mod tests {
             ..settings
         })
         .is_err());
+    }
+
+    #[test]
+    fn planner_events_validate_same_day_intervals_buffers_and_local_dates() {
+        let event = PlannerEvent {
+            id: "event-1".into(),
+            title: "个人安排".into(),
+            description: Some("说明".into()),
+            date: "2026-09-24".into(),
+            start_time: "09:00".into(),
+            end_time: "10:00".into(),
+            location: Some("图书馆".into()),
+            buffer_before_minutes: 15,
+            buffer_after_minutes: 20,
+            created_at: "2026-09-23T08:00:00.000Z".into(),
+            updated_at: "2026-09-23T08:00:00.000Z".into(),
+        };
+        assert!(event.validate().is_ok());
+        assert!(PlannerEvent {
+            date: "2026-02-30".into(),
+            ..event.clone()
+        }
+        .validate()
+        .is_err());
+        assert_eq!(
+            PlannerEvent {
+                start_time: "23:00".into(),
+                end_time: "01:00".into(),
+                ..event.clone()
+            }
+            .validate()
+            .unwrap_err(),
+            "当前版本暂不支持跨午夜日程。"
+        );
+        assert!(PlannerEvent {
+            buffer_before_minutes: 241,
+            ..event
+        }
+        .validate()
+        .is_err());
+    }
+
+    #[test]
+    fn time_blocks_require_a_task_and_valid_buffers() {
+        let block = TimeBlock {
+            id: "block-1".into(),
+            personal_task_id: "task-1".into(),
+            date: "2026-09-24".into(),
+            start_time: "13:00".into(),
+            end_time: "14:00".into(),
+            buffer_before_minutes: 0,
+            buffer_after_minutes: 240,
+            created_at: "2026-09-23T08:00:00.000Z".into(),
+            updated_at: "2026-09-23T08:00:00.000Z".into(),
+        };
+        assert!(block.validate().is_ok());
+        assert!(TimeBlock {
+            personal_task_id: " ".into(),
+            ..block.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(TimeBlock {
+            buffer_after_minutes: 241,
+            ..block
+        }
+        .validate()
+        .is_err());
+        assert!(validate_planner_date_range("2026-09-25", "2026-09-24").is_err());
     }
 }

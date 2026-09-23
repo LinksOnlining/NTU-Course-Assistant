@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Planner / Personal Task Domain Contract
 
-状态：Phase 2.0 Domain Contract 已冻结；Phase 2.1 Debug DB 隔离与 schema 5→6 迁移及 Phase 2.2 PersonalTask 实现、验证已完成。后续 Phase 2 实现必须遵守本契约。
+状态：Phase 2.0 Domain Contract 已冻结；Phase 2.1 Debug DB 隔离与 schema 5→6 迁移、Phase 2.2 PersonalTask 与 Phase 2.3 PlannerEvent/TimeBlock 实现及验证已完成。后续 Phase 2 实现必须遵守本契约。
 
 ## 1. 当前实现审计基线
 
@@ -126,6 +126,14 @@ The application validator performs exact Gregorian date and `HH:mm` checks in ad
 - Deadline、逾期分组、自然日期标签、排序及表单校验位于 `src/application/planner/personal-tasks.ts`；Workspace presentation 不直接调用 Tauri 或访问存储。
 - PersonalTask deadline 不生成 TimelineItem；对应保护测试位于 `tests/architecture/planner-application-boundary.test.mjs`。
 - Phase 2.2 自动验证见 `docs/v2-phase-2.2-verification.md`。
+
+### Phase 2.3 PlannerEvent / TimeBlock 实施
+
+- PlannerEvent 与 TimeBlock 已使用 schema 6 的既有表实现 Rust CRUD；可按闭区间日期范围读取，TimeBlock 也可按 PersonalTask ID 读取。没有新增 schema migration。
+- 保存边界验证公历日期、同日 `start < end`、必填关联任务、标题/描述/地点长度及 0–240 分钟 buffers。跨午夜明确拒绝；buffer 不改事实起止时间。
+- TimeBlock 只保存 PersonalTask ID，不复制任务标题。Timeline projection 从当前 PersonalTask 读取标题；任务改名后重新投影即可显示新标题。完成任务保留 TimeBlock，删除任务由既有外键 cascade 删除 TimeBlock；PlannerEvent 独立保留。
+- `PlannerEventEditor` 与 `TimeBlockEditor` 使用 Planner Application draft 校验；Timeline adapters 为两种来源建立稳定 sourceRef，设为可编辑、可拖动、可 resize、占用时间。
+- Phase 2.3 自动验证见 `docs/v2-phase-2.3-verification.md`。
 
 ### Migration safety sequence
 

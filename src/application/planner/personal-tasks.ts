@@ -4,6 +4,7 @@ import type {
   PersonalTaskDraft,
   PersonalTaskPriority,
 } from "../../types/personal-task.ts";
+import { isValidPlannerDate, isValidPlannerTime } from "./date-time.ts";
 
 export interface PersonalTaskRepository {
   loadPersonalTasks(): Promise<readonly PersonalTask[]>;
@@ -22,21 +23,6 @@ const priorities = new Set<PersonalTaskPriority>(["none", "low", "medium", "high
 
 export type PersonalTaskDraftErrors = Partial<Record<keyof PersonalTaskDraft, string>>;
 
-function isValidDate(value: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return year > 0 && month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1]!;
-}
-
-function isValidTime(value: string): boolean {
-  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
-}
-
 export function validatePersonalTaskDraft(draft: PersonalTaskDraft): PersonalTaskDraftErrors {
   const errors: PersonalTaskDraftErrors = {};
   const title = draft.title.trim();
@@ -44,10 +30,10 @@ export function validatePersonalTaskDraft(draft: PersonalTaskDraft): PersonalTas
   else if ([...title].length > 200) errors.title = "标题最多 200 个字符。";
   if ([...draft.description].length > 5000) errors.description = "描述最多 5000 个字符。";
   if (!priorities.has(draft.priority)) errors.priority = "请选择有效的优先级。";
-  if (draft.deadlineDate && !isValidDate(draft.deadlineDate)) {
+  if (draft.deadlineDate && !isValidPlannerDate(draft.deadlineDate)) {
     errors.deadlineDate = "请输入有效的日期。";
   }
-  if (draft.deadlineTime && !isValidTime(draft.deadlineTime)) {
+  if (draft.deadlineTime && !isValidPlannerTime(draft.deadlineTime)) {
     errors.deadlineTime = "请输入有效的时间。";
   }
   if (draft.deadlineTime && !draft.deadlineDate) {

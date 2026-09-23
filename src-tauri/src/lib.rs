@@ -14,8 +14,8 @@ use std::{
 
 use db::CourseDatabase;
 use models::{
-    AcademicTask, Course, CourseOverride, Exam, PeriodTime, PersonalTask, ReminderSettings,
-    Semester, TermConfig, WidgetSettings, WidgetSettingsPatch,
+    AcademicTask, Course, CourseOverride, Exam, PeriodTime, PersonalTask, PlannerEvent,
+    ReminderSettings, Semester, TermConfig, TimeBlock, WidgetSettings, WidgetSettingsPatch,
 };
 use serde::Serialize;
 use tauri::{
@@ -462,6 +462,110 @@ async fn delete_personal_task(state: State<'_, CourseState>, id: String) -> Resu
 }
 
 #[tauri::command]
+async fn load_planner_events(
+    state: State<'_, CourseState>,
+    start_date: String,
+    end_date: String,
+) -> Result<Vec<PlannerEvent>, String> {
+    state
+        .run_in_background("读取个人日程", move |database| {
+            database.load_planner_events(&start_date, &end_date)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn create_planner_event(
+    state: State<'_, CourseState>,
+    event: PlannerEvent,
+) -> Result<PlannerEvent, String> {
+    state
+        .run_in_background("创建个人日程", move |database| {
+            database.create_planner_event(&event)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn update_planner_event(
+    state: State<'_, CourseState>,
+    event: PlannerEvent,
+) -> Result<PlannerEvent, String> {
+    state
+        .run_in_background("更新个人日程", move |database| {
+            database.update_planner_event(&event)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn delete_planner_event(state: State<'_, CourseState>, id: String) -> Result<(), String> {
+    state
+        .run_in_background("删除个人日程", move |database| {
+            database.delete_planner_event(&id)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn load_time_blocks(
+    state: State<'_, CourseState>,
+    start_date: String,
+    end_date: String,
+) -> Result<Vec<TimeBlock>, String> {
+    state
+        .run_in_background("读取任务时间安排", move |database| {
+            database.load_time_blocks(&start_date, &end_date)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn load_time_blocks_for_task(
+    state: State<'_, CourseState>,
+    personal_task_id: String,
+) -> Result<Vec<TimeBlock>, String> {
+    state
+        .run_in_background("读取任务时间安排", move |database| {
+            database.load_time_blocks_for_task(&personal_task_id)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn create_time_block(
+    state: State<'_, CourseState>,
+    block: TimeBlock,
+) -> Result<TimeBlock, String> {
+    state
+        .run_in_background("安排任务时间", move |database| {
+            database.create_time_block(&block)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn update_time_block(
+    state: State<'_, CourseState>,
+    block: TimeBlock,
+) -> Result<TimeBlock, String> {
+    state
+        .run_in_background("更新任务时间安排", move |database| {
+            database.update_time_block(&block)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn delete_time_block(state: State<'_, CourseState>, id: String) -> Result<(), String> {
+    state
+        .run_in_background("删除任务时间安排", move |database| {
+            database.delete_time_block(&id)
+        })
+        .await
+}
+
+#[tauri::command]
 async fn load_exams(
     state: State<'_, CourseState>,
     semester_id: String,
@@ -901,6 +1005,15 @@ pub fn run() {
             update_personal_task,
             set_personal_task_completed,
             delete_personal_task,
+            load_planner_events,
+            create_planner_event,
+            update_planner_event,
+            delete_planner_event,
+            load_time_blocks,
+            load_time_blocks_for_task,
+            create_time_block,
+            update_time_block,
+            delete_time_block,
             load_exams,
             save_exam,
             delete_exam,
