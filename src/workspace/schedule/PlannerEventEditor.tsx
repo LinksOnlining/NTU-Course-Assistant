@@ -9,7 +9,9 @@ interface PlannerEventEditorProps {
   readonly event?: PlannerEvent;
   readonly initialDate: string;
   readonly busy?: boolean;
+  readonly error?: string;
   readonly onSave: (draft: PlannerEventDraft) => Promise<void>;
+  readonly onDelete?: () => Promise<void>;
   readonly onCancel: () => void;
 }
 
@@ -41,7 +43,9 @@ export function PlannerEventEditor({
   event,
   initialDate,
   busy = false,
+  error = "",
   onSave,
+  onDelete,
   onCancel,
 }: PlannerEventEditorProps) {
   const [draft, setDraft] = useState(() => draftFromEvent(event, initialDate));
@@ -75,6 +79,11 @@ export function PlannerEventEditor({
             ×
           </button>
         </header>
+        {error && (
+          <p className="workspace-task-error" role="alert">
+            {error}
+          </p>
+        )}
         <form onSubmit={submit}>
           <label>
             标题
@@ -185,6 +194,18 @@ export function PlannerEventEditor({
             缓冲仅用于时间占用与冲突计算，不会改变日程实际起止时间。
           </p>
           <footer>
+            {event && onDelete && (
+              <button
+                type="button"
+                className="workspace-task-button workspace-task-button--danger"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm("确定删除此日程吗？")) void onDelete();
+                }}
+              >
+                删除
+              </button>
+            )}
             <button
               type="button"
               className="workspace-task-button workspace-task-button--secondary"

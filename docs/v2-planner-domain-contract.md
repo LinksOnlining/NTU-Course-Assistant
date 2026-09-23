@@ -150,7 +150,7 @@ Backup uses SQLite `VACUUM INTO` for a consistent snapshot, including committed 
 
 - Domain validation, sorting, deadline semantics, projections, conflict/free-time logic, and use cases belong in `src/application/planner/` and nearby domain type modules, following existing Application patterns.
 - Tauri persistence bridge follows `src/services/` invoke adapters. Workspace Presentation never issues raw planner invoke/SQL. Rust planner persistence may live in a focused `planner_db.rs`; `db.rs` remains connection, schema migration orchestration and common Academic storage.
-- `workspace/tasks` and `workspace/schedule` are already typed routes but intentionally unsupported in the shell. Phase 2.2 and 2.4 activate them without adding a router dependency.
+- `workspace/tasks` and `workspace/schedule` are typed and active Workspace routes. Phase 2.2 and 2.4 activate them without adding a router dependency.
 - Workspace read composition uses Application boundaries. The Academic adapter continues to return canonical occurrences; Planner code never reproduces course override/time resolution.
 - Empty migrations must not alter course, semester, override, AcademicTask, exam, PeriodTime, reminder, widget, or app-settings rows. Do not change Tauri identifier, production DB path or DB filename.
 

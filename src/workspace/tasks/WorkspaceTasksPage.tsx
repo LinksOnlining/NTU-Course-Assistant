@@ -25,6 +25,7 @@ import "./workspace-tasks.css";
 interface WorkspaceTasksPageProps {
   readonly termConfig: TermConfig | null;
   readonly onNavigate: (route: AppRoute) => void;
+  readonly onScheduleTask: (taskId: string) => void;
 }
 
 type TaskTab = "open" | "completed";
@@ -196,7 +197,11 @@ function TaskEditor({
   );
 }
 
-export function WorkspaceTasksPage({ termConfig, onNavigate }: WorkspaceTasksPageProps) {
+export function WorkspaceTasksPage({
+  termConfig,
+  onNavigate,
+  onScheduleTask,
+}: WorkspaceTasksPageProps) {
   const [personalTasks, setPersonalTasks] = useState<readonly PersonalTask[]>([]);
   const [academicTasks, setAcademicTasks] = useState<readonly AcademicTask[]>([]);
   const [tab, setTab] = useState<TaskTab>("open");
@@ -400,6 +405,9 @@ export function WorkspaceTasksPage({ termConfig, onNavigate }: WorkspaceTasksPag
                 </span>
               </div>
               <div className="workspace-task-row-actions">
+                <button type="button" onClick={() => onScheduleTask(task.id)}>
+                  安排时间
+                </button>
                 <button type="button" onClick={() => setEditor(task)}>
                   编辑
                 </button>

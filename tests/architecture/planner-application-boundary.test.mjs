@@ -28,6 +28,17 @@ test("Workspace Tasks presentation calls Application use cases rather than Tauri
   );
 });
 
+test("Workspace Schedule presentation uses the Application read pipeline", () => {
+  const page = source("src/workspace/schedule/WorkspaceSchedulePage.tsx");
+  assert.match(page, /application\/workspace\/index\.ts/u);
+  assert.match(page, /application\/planner\/planner-schedule\.ts/u);
+  assert.doesNotMatch(page, /services\/|@tauri-apps|\bSELECT\b|\bINSERT\b/u);
+  const application = source("src/application/workspace/workspace-schedule.ts");
+  assert.match(application, /resolveAcademicOccurrences/u);
+  assert.match(application, /loadPlannerEvents/u);
+  assert.match(application, /loadTimeBlocks/u);
+});
+
 test("PersonalTask deadlines remain outside the Timeline source adapter", () => {
   const adapter = source("src/application/timeline/academic-timeline.ts");
   assert.doesNotMatch(adapter, /PersonalTask|personal_tasks|deadlineDate/u);

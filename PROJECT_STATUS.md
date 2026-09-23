@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前阶段：Phase 2.4 — Workspace Schedule。** Phase 2.0 Domain Contract（`a19c4d3`）、Phase 2.1 Debug DB 隔离与 schema 5→6 安全迁移（`132f4be`）、Phase 2.2 PersonalTask CRUD（`c3bc08b`）及 Phase 2.3 PlannerEvent/TimeBlock CRUD 已通过。开发 schema 保持 6。Phase 2.3 验证：`npm run verify` PASS（187 unit、86 architecture、624 UI PASS / 15 skipped；typecheck、lint、Prettier、frontend build PASS）；Rust 53 tests、fmt、clippy PASS。Phase 2.3 提交为 `feat: add planner events and time blocks`。开发分支授权连续执行 Phase 2.0–2.7；不得 push、tag、release、升级产品版本、安装或运行 production EXE，不开始 Phase 3。
+- **当前阶段：Phase 2.5 — Interactive Scheduling。** Phase 2.0–2.4 均已实现并通过自动门禁。Phase 2.4 新增 Workspace Schedule：按日组合 Academic 只读 occurrence、PlannerEvent、TimeBlock；提供日期导航、事件/时间块编辑、PersonalTask“安排时间”入口；不加载历史 Planner 数据。验证记录见 `docs/v2-phase-2.4-verification.md`。完整 `npm run verify` PASS（87 architecture、675 UI PASS；typecheck、unit、lint、Prettier、frontend build 均通过）；Rust 53 tests PASS。开发 schema 保持 6。开发分支授权连续执行 Phase 2.0–2.7；不得 push、tag、release、升级产品版本、安装或运行 production EXE，不开始 Phase 3。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 
 - 当前开发分支：`v2/workspace-rebase`，从稳定 `main` commit `3f2d580d2423bdb19d2753023db6414b5408c546` 创建；`main` 继续代表稳定 1.x 基线。

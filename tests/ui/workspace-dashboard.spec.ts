@@ -82,6 +82,8 @@ async function seedDashboardRuntime(page: Page, currentTime = FIXED_NOW, courseN
           if (command === "load_semesters") return [activeSemester];
           if (command === "load_course_overrides" || command === "load_exams") return [];
           if (command === "load_academic_tasks") return tasks;
+          if (command === "load_personal_tasks") return [];
+          if (command === "load_planner_events" || command === "load_time_blocks") return [];
           if (command === "load_handled_reminder_keys") return [];
           if (
             command === "refresh_reminder_schedule" ||
@@ -330,7 +332,7 @@ test("Diary and schedule routes remain explicit, and returning to Workspace relo
       ).__workspaceDashboardTest.getLoadCoursesCount(),
     );
   let previousLoads = await getLoads();
-  for (const name of ["日记，尚未开放", "收件箱，尚未开放", "AI，尚未开放", "查看完整日程"]) {
+  for (const name of ["日记，尚未开放", "收件箱，尚未开放", "AI，尚未开放"]) {
     await page.getByRole("button", { name: new RegExp(name, "u") }).click();
     await expect(page.getByRole("heading", { name: "该模块尚未开放" })).toBeVisible();
     await page.getByRole("button", { name: "返回工作台" }).click();
@@ -338,6 +340,16 @@ test("Diary and schedule routes remain explicit, and returning to Workspace relo
     await expect.poll(getLoads).toBeGreaterThan(previousLoads);
     previousLoads = await getLoads();
   }
+
+  await page.getByRole("button", { name: /查看完整日程/u }).click();
+  await expect(page.getByTestId("workspace-schedule")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "日程", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "完整日程时间轴" })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "工作台" })
+    .click();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
 
   const mode = page.getByRole("navigation", { name: "产品模式" });
   previousLoads = await getLoads();

@@ -1,5 +1,7 @@
 import type { AcademicTask } from "../../types/academic-task.ts";
 import type { TimelineItem } from "../timeline/types.ts";
+import type { PersonalTask } from "../../types/personal-task.ts";
+import type { PlannerEvent, TimeBlock } from "../../types/planner.ts";
 
 export type WorkspaceTaskDeadlineKind = "overdue" | "today" | "upcoming" | "none" | "invalid";
 
@@ -56,5 +58,14 @@ export interface WorkspaceDashboardSources {
   readonly timelineItems: readonly TimelineItem[];
   readonly tomorrowItems?: readonly TimelineItem[];
   readonly tasks: readonly AcademicTask[];
+  readonly warnings: readonly string[];
+}
+
+export interface WorkspaceScheduleDay {
+  readonly date: string;
+  readonly timelineItems: readonly TimelineItem[];
+  readonly events: readonly PlannerEvent[];
+  readonly timeBlocks: readonly TimeBlock[];
+  readonly tasks: readonly PersonalTask[];
   readonly warnings: readonly string[];
 }

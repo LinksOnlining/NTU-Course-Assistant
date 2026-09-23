@@ -84,6 +84,7 @@ import type { AppRoute } from "./navigation/types.ts";
 import { AppShell } from "./shell/index.ts";
 import { WorkspaceDashboard } from "./workspace/dashboard/WorkspaceDashboard.tsx";
 import { WorkspaceTasksPage } from "./workspace/tasks/WorkspaceTasksPage.tsx";
+import { WorkspaceSchedulePage } from "./workspace/schedule/WorkspaceSchedulePage.tsx";
 
 interface PdfImportResult {
   readonly inserted: number;
@@ -144,11 +145,13 @@ export function App() {
   const [currentRoute, setCurrentRoute] = useState<AppRoute>(
     () => createWorkspaceHomeTarget().route,
   );
+  const [scheduleTaskRequest, setScheduleTaskRequest] = useState<string | null>(null);
   const [lastAcademicRoute, setLastAcademicRoute] = useState<AcademicRoute | null>(null);
   const routeView = getShellRouteView(currentRoute);
   const isScheduleView = routeView === "academic-schedule";
   const isAcademicHubPage = routeView === "academic-hub";
   const isWorkspaceHome = routeView === "workspace-home";
+  const isWorkspaceSchedule = routeView === "workspace-schedule";
   const isWorkspaceTasks = routeView === "workspace-tasks";
   const isUnsupportedRoute = routeView === "unsupported";
   const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
@@ -943,6 +946,16 @@ export function App() {
         <WorkspaceTasksPage
           termConfig={reminderConfiguration.termConfig}
           onNavigate={navigateToRoute}
+          onScheduleTask={(taskId) => {
+            setScheduleTaskRequest(taskId);
+            navigateToRoute({ area: "workspace", page: "schedule" });
+          }}
+        />
+      ) : isWorkspaceSchedule && storageStatus === "ready" ? (
+        <WorkspaceSchedulePage
+          termConfig={reminderConfiguration.termConfig}
+          requestedTaskId={scheduleTaskRequest}
+          onTaskRequestHandled={() => setScheduleTaskRequest(null)}
         />
       ) : isAcademicHubPage ? (
         <AcademicHub

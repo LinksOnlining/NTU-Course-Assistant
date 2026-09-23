@@ -1,0 +1,149 @@
+.workspace-schedule-page {
+  display: flex;
+  width: min(100%, 1440px);
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-self: center;
+  gap: var(--space-3);
+  overflow: hidden;
+  padding: var(--space-4) var(--space-2) var(--space-3);
+}
+
+.workspace-schedule-heading,
+.workspace-schedule-actions {
+  display: flex;
+  align-items: center;
+}
+
+.workspace-schedule-heading {
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.workspace-schedule-heading h2 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: var(--font-size-module);
+}
+
+.workspace-schedule-heading time {
+  color: var(--text-secondary);
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-schedule-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.workspace-schedule-actions > button:not(.workspace-task-button) {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  color: var(--text-button);
+  font: inherit;
+}
+
+.workspace-schedule-card {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--surface-primary);
+  box-shadow: var(--shadow-small);
+}
+
+.workspace-schedule-card > .workspace-card-header h2 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: var(--font-size-body);
+}
+
+.workspace-schedule-card > .workspace-card-header p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-schedule-viewport {
+  margin-top: var(--space-2);
+}
+
+.workspace-schedule-item--plannerEvent,
+.workspace-schedule-item--timeBlock {
+  pointer-events: auto;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace-schedule-item--plannerEvent {
+  border-left-color: var(--accent-primary);
+}
+
+.workspace-schedule-item--timeBlock {
+  border-left-color: var(--current-time);
+}
+
+.workspace-schedule-item--plannerEvent:hover,
+.workspace-schedule-item--timeBlock:hover {
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-small);
+}
+
+.workspace-schedule-item--plannerEvent:focus-visible,
+.workspace-schedule-item--timeBlock:focus-visible,
+.workspace-schedule-actions button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.workspace-schedule-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-card);
+  color: var(--text-secondary);
+}
+
+.workspace-schedule-state p {
+  margin: 0;
+}
+
+.workspace-schedule-state button {
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  color: var(--text-button);
+}
+
+@media (max-width: 760px) {
+  .workspace-schedule-page {
+    padding-top: var(--space-2);
+  }
+  .workspace-schedule-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .workspace-schedule-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

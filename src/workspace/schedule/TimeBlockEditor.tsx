@@ -12,7 +12,9 @@ interface TimeBlockEditorProps {
   readonly initialDate: string;
   readonly initialTaskId?: string;
   readonly busy?: boolean;
+  readonly error?: string;
   readonly onSave: (draft: TimeBlockDraft) => Promise<void>;
+  readonly onDelete?: () => Promise<void>;
   readonly onCancel: () => void;
 }
 
@@ -46,7 +48,9 @@ export function TimeBlockEditor({
   initialDate,
   initialTaskId,
   busy = false,
+  error = "",
   onSave,
+  onDelete,
   onCancel,
 }: TimeBlockEditorProps) {
   const [draft, setDraft] = useState(() => draftFromBlock(block, initialDate, initialTaskId));
@@ -80,6 +84,11 @@ export function TimeBlockEditor({
             ×
           </button>
         </header>
+        {error && (
+          <p className="workspace-task-error" role="alert">
+            {error}
+          </p>
+        )}
         <form onSubmit={submit}>
           <label>
             关联任务
@@ -174,6 +183,18 @@ export function TimeBlockEditor({
           )}
           <p className="workspace-task-hint">时间块没有独立标题，会使用所关联任务的名称。</p>
           <footer>
+            {block && onDelete && (
+              <button
+                type="button"
+                className="workspace-task-button workspace-task-button--danger"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm("确定删除此任务时间安排吗？")) void onDelete();
+                }}
+              >
+                删除安排
+              </button>
+            )}
             <button
               type="button"
               className="workspace-task-button workspace-task-button--secondary"

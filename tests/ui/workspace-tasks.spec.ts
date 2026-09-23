@@ -61,6 +61,7 @@ async function seedTasksRuntime(page: Page) {
           if (command === "load_course_overrides" || command === "load_exams") return [];
           if (command === "load_academic_tasks") return academicTasks;
           if (command === "load_personal_tasks") return [...personalTasks];
+          if (command === "load_planner_events" || command === "load_time_blocks") return [];
           if (command === "create_personal_task") {
             personalTasks.push(args?.task);
             return args?.task;
@@ -170,4 +171,16 @@ test("Task editor rejects a time without a date and AcademicTask remains read-on
   await expect(page.locator(".workspace-task-row").filter({ hasText: "时间需要日期" })).toHaveCount(
     0,
   );
+});
+
+test("PersonalTask can open its schedule editor from Workspace Tasks", async ({ page }) => {
+  await seedTasksRuntime(page);
+  await page.getByRole("button", { name: "新建任务" }).click();
+  await page.getByLabel("标题").fill("准备报告");
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  const row = page.locator(".workspace-task-row").filter({ hasText: "准备报告" });
+  await row.getByRole("button", { name: "安排时间" }).click();
+  await expect(page.getByTestId("workspace-schedule")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "安排任务时间" })).toBeVisible();
+  await expect(page.getByLabel("关联任务")).toHaveValue(/.+/u);
 });
