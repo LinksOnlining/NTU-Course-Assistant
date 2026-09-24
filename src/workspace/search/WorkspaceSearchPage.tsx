@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { loadWorkspaceSearchData, searchWorkspace } from "../../application/workspace/search.ts";
+import {
+  loadWorkspaceSearchIndex,
+  searchWorkspaceIndex,
+  workspaceSearchUnavailableMessage,
+} from "../../application/workspace/search.ts";
 import { createWorkspaceHomeTarget } from "../../navigation/navigation.ts";
 import type { NavigationTarget } from "../../navigation/types.ts";
-import type { WorkspaceSearchData } from "../../application/workspace/search.ts";
+import type { WorkspaceSearchIndexLoad } from "../../application/workspace/search.ts";
 import "./workspace-search.css";
 
 interface WorkspaceSearchPageProps {
@@ -11,29 +15,32 @@ interface WorkspaceSearchPageProps {
 
 export function WorkspaceSearchPage({ onNavigate }: WorkspaceSearchPageProps) {
   const [query, setQuery] = useState("");
-  const [data, setData] = useState<WorkspaceSearchData | null>(null);
+  const [index, setIndex] = useState<WorkspaceSearchIndexLoad | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [retryCount, setRetryCount] = useState(0);
   const loadStarted = useRef(false);
   const normalizedQuery = query.trim();
-  const results = useMemo(() => (data ? searchWorkspace(query, data) : []), [data, query]);
+  const results = useMemo(
+    () => (index ? searchWorkspaceIndex(query, index.records) : []),
+    [index, query],
+  );
 
   useEffect(() => {
-    if (!normalizedQuery || data || loadStarted.current) return;
+    if (!normalizedQuery || index || loadStarted.current) return;
     loadStarted.current = true;
     setLoading(true);
     setError("");
-    void loadWorkspaceSearchData()
+    void loadWorkspaceSearchIndex()
       .then((loaded) => {
-        setData(loaded);
+        setIndex(loaded);
       })
       .catch(() => {
         loadStarted.current = false;
         setError("无法读取本地搜索内容，请稍后重试。");
       })
       .finally(() => setLoading(false));
-  }, [data, normalizedQuery, retryCount]);
+  }, [index, normalizedQuery, retryCount]);
 
   function retrySearch() {
     loadStarted.current = false;
@@ -97,11 +104,23 @@ export function WorkspaceSearchPage({ onNavigate }: WorkspaceSearchPageProps) {
           </button>
         </div>
       ) : results.length === 0 ? (
-        <p className="workspace-search-state" role="status">
-          没有找到相关内容。
-        </p>
+        <>
+          {index?.unavailableProviderIds.length ? (
+            <p className="workspace-search-state" role="status">
+              {workspaceSearchUnavailableMessage(index.unavailableProviderIds)}
+            </p>
+          ) : null}
+          <p className="workspace-search-state" role="status">
+            没有找到相关内容。
+          </p>
+        </>
       ) : (
         <div className="workspace-search-results">
+          {index?.unavailableProviderIds.length ? (
+            <p className="workspace-search-state" role="status">
+              {workspaceSearchUnavailableMessage(index.unavailableProviderIds)}
+            </p>
+          ) : null}
           <p className="workspace-search-count" role="status">
             找到 {results.length} 条{results.length === 50 ? "（最多显示 50 条）" : ""}
           </p>

@@ -27,6 +27,11 @@ export interface PlannerScheduleRepository {
 export type PlannerEventDraftErrors = Partial<Record<keyof PlannerEventDraft, string>>;
 export type TimeBlockDraftErrors = Partial<Record<keyof TimeBlockDraft, string>>;
 
+/** 本机搜索所需的 Planner Application API，不将 Repository 引用暴露给 Search Core。 */
+export function loadPlannerEventsForSearch(): Promise<readonly PlannerEvent[]> {
+  return plannerStorage.loadAllPlannerEventsForSearch();
+}
+
 function validateInterval(
   date: string,
   startTime: string,

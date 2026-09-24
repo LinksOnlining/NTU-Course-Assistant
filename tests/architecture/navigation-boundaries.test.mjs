@@ -20,15 +20,20 @@ test("navigation types are plain declarations without runtime or platform import
   assert.doesNotMatch(source, /React|@tauri-apps|storage|components|sqlite/i);
 });
 
-test("navigation helpers depend only on their type-only local contract", () => {
+test("navigation helpers use typed contracts and the immutable route registry only", () => {
   const source = readFileSync(helpersPath, "utf8");
   const { program, errors } = parseSync(helpersPath, source);
   assert.deepEqual(errors, []);
 
   const imports = program.body.filter((node) => node.type === "ImportDeclaration");
-  assert.equal(imports.length, 1);
-  assert.equal(imports[0].source.value, "./types.ts");
-  assert.equal(imports[0].importKind, "type");
+  assert.deepEqual(
+    imports.map((item) => [item.source.value, item.importKind]),
+    [
+      ["./types.ts", "type"],
+      ["../modules/contracts.ts", "type"],
+      ["../modules/registry.ts", "value"],
+    ],
+  );
   assert.doesNotMatch(
     source,
     /React|@tauri-apps|course-storage|academic-storage|components|sqlite/i,

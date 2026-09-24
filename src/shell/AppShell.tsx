@@ -1,13 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import {
-  createAcademicScheduleTarget,
-  createWorkspaceSearchTarget,
-  getShellRouteView,
-  routeForAcademicHubTab,
-  routeForProductMode,
-} from "../navigation/navigation.ts";
+import { getShellRouteView, routeForProductMode } from "../navigation/navigation.ts";
 import type { AcademicRoute, ProductMode } from "../navigation/navigation.ts";
 import type { AppRoute } from "../navigation/types.ts";
+import { workplaceModuleRegistry } from "../modules/registry.ts";
 import {
   formatHeaderDate,
   localDateKey,
@@ -28,14 +23,20 @@ interface AppShellProps {
   readonly children: ReactNode;
 }
 
-const ACADEMIC_LINKS = [
-  { label: "周课表", route: createAcademicScheduleTarget().route },
-  { label: "课程变化", route: routeForAcademicHubTab("changes") },
-  { label: "考试", route: routeForAcademicHubTab("exams") },
-  { label: "学期管理", route: routeForAcademicHubTab("semesters") },
-  // 临时保留现有 AcademicTask 界面；统一工作台任务完成后移除此入口。
-  { label: "学业事项", route: routeForAcademicHubTab("tasks") },
-] as const;
+const PRODUCT_MODES = workplaceModuleRegistry.navigation.filter(
+  (entry) => entry.placement === "product-mode" && isNavigationAvailable(entry),
+);
+const HEADER_ACTIONS = workplaceModuleRegistry.navigation.filter(
+  (entry) => entry.placement === "header-action" && isNavigationAvailable(entry),
+);
+const ACADEMIC_LINKS = workplaceModuleRegistry.navigation.filter(
+  (entry) => entry.placement === "academic-subnav" && isNavigationAvailable(entry),
+);
+
+function isNavigationAvailable(entry: (typeof workplaceModuleRegistry.navigation)[number]) {
+  const state = workplaceModuleRegistry.getModuleState(entry.moduleId);
+  return entry.available && state?.available && state.enabled;
+}
 
 function ShellHeader({
   route,
@@ -80,41 +81,36 @@ function ShellHeader({
         </time>
         {weatherSlot ? <div className="shell-weather-slot">{weatherSlot}</div> : null}
         <nav className="shell-mode-switch" aria-label="产品模式">
-          {(
-            [
-              ["workspace", "工作台"],
-              ["academic", "课表"],
-            ] as const
-          ).map(([mode, label]) => (
+          {PRODUCT_MODES.map(({ id, label, route, productMode }) => (
             <button
-              key={mode}
+              key={id}
               type="button"
-              aria-current={activeMode === mode ? "page" : undefined}
-              onClick={() => onNavigate(routeForProductMode(mode, lastAcademicRoute))}
+              aria-current={activeMode === productMode ? "page" : undefined}
+              onClick={() =>
+                onNavigate(
+                  productMode === "academic"
+                    ? routeForProductMode("academic", lastAcademicRoute)
+                    : route,
+                )
+              }
             >
               {label}
             </button>
           ))}
         </nav>
-        <button
-          type="button"
-          className="shell-search-button"
-          aria-label="搜索本机内容"
-          title="搜索本机内容"
-          onClick={() => onNavigate(createWorkspaceSearchTarget().route)}
-        >
-          搜索
-        </button>
-        <button
-          type="button"
-          className="shell-settings-button"
-          aria-label="设置"
-          title="设置"
-          disabled={settingsDisabled}
-          onClick={onOpenSettings}
-        >
-          设置
-        </button>
+        {HEADER_ACTIONS.map(({ id, label, accessibilityLabel, route, action }) => (
+          <button
+            key={id}
+            type="button"
+            className={action === "open-settings" ? "shell-settings-button" : "shell-search-button"}
+            aria-label={accessibilityLabel ?? label}
+            title={label}
+            disabled={action === "open-settings" && settingsDisabled}
+            onClick={() => (action === "open-settings" ? onOpenSettings() : onNavigate(route))}
+          >
+            {label}
+          </button>
+        ))}
       </div>
     </header>
   );
@@ -149,9 +145,9 @@ export function AppShell({
             {routeView === "academic-schedule" && contextActions}
           </div>
           <nav className="academic-subnav" aria-label="课表二级导航">
-            {ACADEMIC_LINKS.map(({ label, route: target }) => (
+            {ACADEMIC_LINKS.map(({ id, label, route: target }) => (
               <button
-                key={label}
+                key={id}
                 type="button"
                 aria-current={
                   route.area === "academic" && route.page === target.page ? "page" : undefined

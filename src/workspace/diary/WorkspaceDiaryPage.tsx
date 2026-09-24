@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { localDateKey } from "../../application/workspace/index.ts";
-import type { AppRoute } from "../../navigation/types.ts";
-import type { DiaryEntry } from "../../types/diary.ts";
 import {
   loadDiaryContentDates,
   loadDiaryEntry,
   saveDiaryEntry,
-} from "../../services/diary-storage.ts";
+} from "../../application/diary/diary.ts";
+import type { AppRoute } from "../../navigation/types.ts";
+import type { DiaryEntry } from "../../types/diary.ts";
 import { DiaryAutosave, type DiarySaveState } from "./diary-autosave.ts";
 import "./workspace-diary.css";
 

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildWorkspaceContext } from "../../src/application/workspace/workspace-context.ts";
+import {
+  collectWorkspaceContextFragments,
+  workspaceContextProviders,
+} from "../../src/application/workspace/context-provider-registry.ts";
 import { buildWorkspaceDashboardViewModel } from "../../src/application/workspace/workspace-dashboard.ts";
 
 const date = "2026-09-23";
@@ -234,4 +238,61 @@ test("Dashboard overview and module status are projected from WorkspaceContext",
   assert.equal(model.hasDiaryToday, model.context.hasDiaryToday);
   assert.equal(model.pendingInboxCount, model.context.pendingInboxCount);
   assert.equal(model.todaySummaryText, "1 项安排 · 2 个待办");
+});
+
+test("Routine suggestion is contributed through its registered Context provider", () => {
+  const result = context({
+    localTime: "18:00",
+    routines: [
+      {
+        id: "run",
+        title: "跑步",
+        targetDurationMinutes: 40,
+        weekdaysMask: 1 << 2,
+        preferredStartTime: "18:00",
+        preferredEndTime: "21:00",
+        enabled: true,
+        lastScheduledDate: null,
+        createdAt: "2026-09-01T00:00:00.000Z",
+        updatedAt: "2026-09-01T00:00:00.000Z",
+      },
+    ],
+  });
+
+  assert.deepEqual(result.routineSuggestion, {
+    routineId: "run",
+    title: "跑步",
+    targetDate: date,
+    startTime: "18:00",
+    endTime: "18:40",
+    targetDurationMinutes: 40,
+  });
+});
+
+test("Weather Context provider failure is isolated from Diary and Inbox contributions", () => {
+  const providers = [
+    ...workspaceContextProviders.filter((provider) => provider.moduleId !== "weather"),
+    {
+      id: "weather.context",
+      moduleId: "weather",
+      order: 30,
+      provide(input) {
+        assert.deepEqual(Object.keys(input), ["weatherSnapshot"]);
+        throw new Error("weather context failure");
+      },
+    },
+  ];
+  const fragments = collectWorkspaceContextFragments(
+    {
+      "diary.context": { hasDiaryToday: true },
+      "inbox.context": { pendingInboxCount: 2 },
+      "weather.context": { weatherSnapshot: null },
+      "routine.context": { today: date, now: "09:30", routines: [], timelineItems: [] },
+    },
+    providers,
+  );
+
+  assert.equal(fragments.hasDiaryToday, true);
+  assert.equal(fragments.pendingInboxCount, 2);
+  assert.equal(fragments.weatherSummary, undefined);
 });

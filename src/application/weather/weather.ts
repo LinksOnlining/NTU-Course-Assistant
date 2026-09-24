@@ -1,4 +1,11 @@
 import type { TemperatureUnit, WeatherLocation, WeatherSnapshot } from "../../types/weather.ts";
+import { createOpenMeteoProvider } from "../../services/weather-provider.ts";
+import type { WeatherProvider } from "../../types/weather.ts";
+
+/** Weather Application boundary owns the production provider selection. */
+export function createWorkspaceWeatherProvider(): WeatherProvider {
+  return createOpenMeteoProvider();
+}
 
 export const WEATHER_FRESH_FOR_MS = 30 * 60 * 1000;
 export const WEATHER_STALE_FOR_MS = 24 * 60 * 60 * 1000;

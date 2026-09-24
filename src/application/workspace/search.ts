@@ -1,263 +1,24 @@
-import { loadAcademicSearchData, type AcademicSearchData } from "../academic/index.ts";
-import { loadPersonalTasks } from "../planner/personal-tasks.ts";
-import { loadAllPlannerEventsForSearch } from "../../services/planner-storage.ts";
-import { loadDiaryEntriesForSearch } from "../../services/diary-storage.ts";
-import { loadInboxItems } from "../../services/inbox-storage.ts";
-import {
-  createAcademicTaskTarget,
-  createCourseTarget,
-  createDiaryEntryTarget,
-  createExamTarget,
-  createInboxItemTarget,
-  createPlannerEventTarget,
-  createPersonalTaskTarget,
-} from "../../navigation/navigation.ts";
-import type { NavigationTarget } from "../../navigation/types.ts";
-import type { DiaryEntry } from "../../types/diary.ts";
-import type { InboxItem } from "../../types/inbox.ts";
-import type { PersonalTask } from "../../types/personal-task.ts";
-import type { PlannerEvent } from "../../types/planner.ts";
+import { searchSnippet } from "../../modules/search-record.ts";
+import { workspaceSearchProviders } from "./search-providers.ts";
+import type { WorkspaceSearchItem, WorkspaceSearchRecord } from "../../modules/search-contract.ts";
+import type { SearchProvider } from "../../modules/search-provider-registry.ts";
 
-export type WorkspaceSearchCategory =
-  "course" | "academicTask" | "personalTask" | "plannerEvent" | "exam" | "diaryEntry" | "inboxItem";
+export type {
+  WorkspaceSearchCategory,
+  WorkspaceSearchItem,
+  WorkspaceSearchRecord,
+} from "../../modules/search-contract.ts";
 
-export interface WorkspaceSearchItem {
-  readonly id: string;
-  readonly category: WorkspaceSearchCategory;
-  readonly categoryLabel: string;
-  readonly title: string;
-  readonly summary: string;
-  readonly target: NavigationTarget;
-}
-
-interface SearchRecord extends WorkspaceSearchItem {
-  readonly updatedAt: string;
-  readonly activeRank: number;
-  readonly sourceRank: number;
-  readonly titleText: string;
-  readonly metadataText: string;
-  readonly bodyText: string;
-}
-
-export interface WorkspaceSearchData {
-  readonly academic: AcademicSearchData;
-  readonly personalTasks: readonly PersonalTask[];
-  readonly plannerEvents: readonly PlannerEvent[];
-  readonly diaryEntries: readonly DiaryEntry[];
-  readonly inboxItems: readonly InboxItem[];
-}
-
-export interface WorkspaceSearchReader {
-  loadAcademic(): Promise<AcademicSearchData>;
-  loadPersonalTasks(): Promise<readonly PersonalTask[]>;
-  loadPlannerEvents(): Promise<readonly PlannerEvent[]>;
-  loadDiaryEntries(): Promise<readonly DiaryEntry[]>;
-  loadInboxItems(): Promise<readonly InboxItem[]>;
-}
-
-const defaultReader: WorkspaceSearchReader = {
-  loadAcademic: loadAcademicSearchData,
-  loadPersonalTasks,
-  loadPlannerEvents: loadAllPlannerEventsForSearch,
-  loadDiaryEntries: loadDiaryEntriesForSearch,
-  loadInboxItems,
-};
-
-export async function loadWorkspaceSearchData(
-  reader: WorkspaceSearchReader = defaultReader,
-): Promise<WorkspaceSearchData> {
-  const [academic, personalTasks, plannerEvents, diaryEntries, inboxItems] = await Promise.all([
-    reader.loadAcademic(),
-    reader.loadPersonalTasks(),
-    reader.loadPlannerEvents(),
-    reader.loadDiaryEntries(),
-    reader.loadInboxItems(),
-  ]);
-  return { academic, personalTasks, plannerEvents, diaryEntries, inboxItems };
+export interface WorkspaceSearchIndexLoad {
+  readonly records: readonly WorkspaceSearchRecord[];
+  readonly unavailableProviderIds: readonly string[];
 }
 
 function normalize(value: string): string {
   return value.normalize("NFKC").trim().toLocaleLowerCase("zh-CN").replace(/\s+/gu, " ");
 }
 
-function snippet(value: string, maximum = 100): string {
-  const compact = value.replace(/\s+/gu, " ").trim();
-  const characters = [...compact];
-  return characters.length <= maximum ? compact : `${characters.slice(0, maximum).join("")}…`;
-}
-
-function datePart(value: string): string {
-  return value.slice(0, 10);
-}
-
-function item(
-  value: Omit<SearchRecord, "titleText" | "metadataText" | "bodyText"> & {
-    readonly metadata?: string;
-    readonly body?: string;
-    readonly sourceRank: number;
-  },
-): SearchRecord {
-  return {
-    ...value,
-    titleText: value.title,
-    metadataText: value.metadata ?? "",
-    bodyText: value.body ?? "",
-  };
-}
-
-function createIndex(data: WorkspaceSearchData): readonly SearchRecord[] {
-  const courseNames = new Map(
-    data.academic.schedule.courses.map((course) => [course.id, course.name]),
-  );
-  const results: SearchRecord[] = [];
-  let sourceRank = 0;
-
-  for (const course of data.academic.schedule.courses) {
-    results.push(
-      item({
-        id: course.id,
-        category: "course",
-        categoryLabel: "课程",
-        title: course.name,
-        summary: [course.teacher, course.classroom].filter(Boolean).join(" · "),
-        target: createCourseTarget(course.id),
-        updatedAt: "",
-        activeRank: 0,
-        sourceRank: sourceRank++,
-        metadata: [course.teacher, course.classroom, `周${course.weekday}`]
-          .filter(Boolean)
-          .join(" "),
-      }),
-    );
-  }
-
-  for (const task of data.academic.tasks) {
-    results.push(
-      item({
-        id: task.id,
-        category: "academicTask",
-        categoryLabel: "学业事项",
-        title: task.title,
-        summary: [courseNames.get(task.courseId ?? ""), datePart(task.dueAt)]
-          .filter(Boolean)
-          .join(" · "),
-        target: createAcademicTaskTarget(task.id),
-        updatedAt: task.updatedAt,
-        activeRank: task.status === "TODO" ? 0 : 1,
-        sourceRank: sourceRank++,
-        metadata: [courseNames.get(task.courseId ?? ""), task.type, task.dueAt]
-          .filter(Boolean)
-          .join(" "),
-        body: task.note ?? "",
-      }),
-    );
-  }
-
-  for (const task of data.personalTasks) {
-    results.push(
-      item({
-        id: task.id,
-        category: "personalTask",
-        categoryLabel: "个人任务",
-        title: task.title,
-        summary: task.deadlineDate ? `截止 ${task.deadlineDate}` : "个人任务",
-        target: createPersonalTaskTarget(task.id),
-        updatedAt: task.updatedAt,
-        activeRank: task.status === "open" ? 0 : 1,
-        sourceRank: sourceRank++,
-        metadata: [task.priority, task.deadlineDate, task.deadlineTime].filter(Boolean).join(" "),
-        body: task.description ?? "",
-      }),
-    );
-  }
-
-  for (const event of data.plannerEvents) {
-    results.push(
-      item({
-        id: event.id,
-        category: "plannerEvent",
-        categoryLabel: "日程",
-        title: event.title,
-        summary: [event.date, `${event.startTime}–${event.endTime}`, event.location]
-          .filter(Boolean)
-          .join(" · "),
-        target: createPlannerEventTarget(event.id, event.date),
-        updatedAt: event.updatedAt,
-        activeRank: 0,
-        sourceRank: sourceRank++,
-        metadata: [event.date, event.startTime, event.endTime, event.location]
-          .filter(Boolean)
-          .join(" "),
-        body: event.description ?? "",
-      }),
-    );
-  }
-
-  for (const exam of data.academic.exams) {
-    results.push(
-      item({
-        id: exam.id,
-        category: "exam",
-        categoryLabel: "考试",
-        title: exam.title,
-        summary: [datePart(exam.startsAt), exam.location].filter(Boolean).join(" · "),
-        target: createExamTarget(exam.id),
-        updatedAt: exam.updatedAt,
-        activeRank: exam.status === "SCHEDULED" ? 0 : 1,
-        sourceRank: sourceRank++,
-        metadata: [
-          courseNames.get(exam.courseId ?? ""),
-          exam.startsAt,
-          exam.location,
-          exam.seatInfo,
-        ]
-          .filter(Boolean)
-          .join(" "),
-        body: exam.note ?? "",
-      }),
-    );
-  }
-
-  for (const entry of data.diaryEntries) {
-    results.push(
-      item({
-        id: entry.id,
-        category: "diaryEntry",
-        categoryLabel: "日记",
-        title: `日记 · ${entry.entryDate}`,
-        summary: snippet(entry.body),
-        target: createDiaryEntryTarget(entry.id, entry.entryDate),
-        updatedAt: entry.updatedAt,
-        activeRank: 0,
-        sourceRank: sourceRank++,
-        metadata: entry.entryDate,
-        body: entry.body,
-      }),
-    );
-  }
-
-  for (const entry of data.inboxItems) {
-    results.push(
-      item({
-        id: entry.id,
-        category: "inboxItem",
-        categoryLabel: "收件箱",
-        title: snippet(entry.rawText, 60) || "收件箱内容",
-        summary: entry.status === "pending" ? "待整理" : "本地收集",
-        target: createInboxItemTarget(entry.id),
-        updatedAt: entry.updatedAt,
-        activeRank: entry.status === "dismissed" || entry.status === "confirmed" ? 1 : 0,
-        sourceRank: sourceRank++,
-        metadata: [entry.status, entry.createdAt].join(" "),
-        body: entry.rawText,
-      }),
-    );
-  }
-
-  return results;
-}
-
-function matchRank(query: string, entry: SearchRecord): number | null {
+function matchRank(query: string, entry: WorkspaceSearchRecord): number | null {
   const title = normalize(entry.titleText);
   if (title === query) return 0;
   if (title.startsWith(query)) return 1;
@@ -267,19 +28,22 @@ function matchRank(query: string, entry: SearchRecord): number | null {
   return null;
 }
 
-export function searchWorkspace(
+function limitResults(maximumResults: number): number {
+  return Number.isFinite(maximumResults)
+    ? Math.max(0, Math.min(50, Math.floor(maximumResults)))
+    : 50;
+}
+
+export function searchWorkspaceIndex(
   query: string,
-  data: WorkspaceSearchData,
+  index: readonly WorkspaceSearchRecord[],
   maximumResults = 50,
 ): readonly WorkspaceSearchItem[] {
   const normalizedQuery = normalize(query);
   if (!normalizedQuery) return [];
-  const limit = Number.isFinite(maximumResults)
-    ? Math.max(0, Math.min(50, Math.floor(maximumResults)))
-    : 50;
-  return createIndex(data)
+  return index
     .map((entry) => ({ entry, rank: matchRank(normalizedQuery, entry) }))
-    .filter((match): match is { entry: SearchRecord; rank: number } => match.rank !== null)
+    .filter((match): match is { entry: WorkspaceSearchRecord; rank: number } => match.rank !== null)
     .sort(
       (left, right) =>
         left.rank - right.rank ||
@@ -288,13 +52,60 @@ export function searchWorkspace(
         left.entry.sourceRank - right.entry.sourceRank ||
         left.entry.id.localeCompare(right.entry.id),
     )
-    .slice(0, limit)
+    .slice(0, limitResults(maximumResults))
     .map(({ entry, rank }) => ({
       id: entry.id,
       category: entry.category,
       categoryLabel: entry.categoryLabel,
       title: entry.title,
-      summary: rank === 4 ? snippet(entry.bodyText) : entry.summary || snippet(entry.bodyText),
+      summary:
+        rank === 4 ? searchSnippet(entry.bodyText) : entry.summary || searchSnippet(entry.bodyText),
       target: entry.target,
     }));
 }
+
+/** 单个模块读取失败只使它自己的内容不可搜索。 */
+export async function loadWorkspaceSearchIndex(
+  providers: readonly SearchProvider[] = workspaceSearchProviders,
+): Promise<WorkspaceSearchIndexLoad> {
+  const outcomes = await Promise.all(
+    providers.map(async (provider) => {
+      try {
+        return { provider, records: await provider.loadIndex(), failed: false };
+      } catch {
+        return { provider, records: [] as readonly WorkspaceSearchRecord[], failed: true };
+      }
+    }),
+  );
+  return {
+    records: outcomes.flatMap(({ records }) => records),
+    unavailableProviderIds: outcomes
+      .filter(({ failed }) => failed)
+      .map(({ provider }) => provider.id),
+  };
+}
+
+/** 纯索引查询别名，供调用方和测试使用；不负责读取模块数据。 */
+export function searchWorkspace(
+  query: string,
+  records: readonly WorkspaceSearchRecord[],
+  maximumResults = 50,
+): readonly WorkspaceSearchItem[] {
+  return searchWorkspaceIndex(query, records, maximumResults);
+}
+
+export function workspaceSearchUnavailableMessage(ids: readonly string[]): string {
+  if (ids.length === 0) return "";
+  const providerLabels = new Map([
+    ["academic.search", "课程与学业事项"],
+    ["planner.search", "个人任务与日程"],
+    ["diary.search", "日记"],
+    ["inbox.search", "收件箱"],
+  ]);
+  const names = ids.map((id) => providerLabels.get(id)).filter(Boolean);
+  return names.length
+    ? `${names.join("、")}暂时无法搜索；其他模块仍可使用。`
+    : "部分内容暂时无法搜索；其他模块仍可使用。";
+}
+
+export type { SearchProvider };

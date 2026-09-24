@@ -1,0 +1,126 @@
+import type { ComponentType } from "react";
+import type { AppRoute, NavigationTarget } from "../navigation/types.ts";
+
+/** 稳定机器 ID；内置模块通过声明合并扩展，显示名称和用户偏好不能替代 ID。 */
+export interface ModuleIdMap {
+  readonly workspace: "workspace";
+  readonly academic: "academic";
+  readonly planner: "planner";
+  readonly diary: "diary";
+  readonly inbox: "inbox";
+  readonly weather: "weather";
+  readonly routine: "routine";
+  readonly search: "search";
+  readonly settings: "settings";
+  readonly ai: "ai";
+}
+
+export type ModuleId = ModuleIdMap[keyof ModuleIdMap];
+
+export type ShellRouteView =
+  | "workspace-home"
+  | "workspace-schedule"
+  | "workspace-tasks"
+  | "workspace-diary"
+  | "workspace-inbox"
+  | "workspace-search"
+  | "academic-schedule"
+  | "academic-hub"
+  | "unsupported";
+
+export interface ModuleMetadata {
+  readonly name: string;
+  readonly description: string;
+}
+
+export interface RouteContribution {
+  readonly id: string;
+  readonly moduleId: ModuleId;
+  readonly route: AppRoute;
+  readonly label: string;
+  readonly order: number;
+  readonly shellView: ShellRouteView;
+  readonly available: boolean;
+  /** 新模块可提供通用 renderer；既有 Academic/Workspace 页面继续由宿主组合。 */
+  readonly render?: ComponentType<ModuleRouteProps>;
+}
+
+export interface ModuleRouteProps {
+  readonly onNavigate: (target: NavigationTarget) => void;
+  readonly target: NavigationTarget | null;
+}
+
+export type NavigationPlacement = "product-mode" | "academic-subnav" | "header-action";
+
+export interface NavigationContribution {
+  readonly id: string;
+  readonly moduleId: ModuleId;
+  readonly placement: NavigationPlacement;
+  readonly label: string;
+  readonly accessibilityLabel?: string;
+  readonly route: AppRoute;
+  readonly order: number;
+  readonly available: boolean;
+  readonly productMode?: "workspace" | "academic";
+  readonly action?: "open-settings";
+}
+
+export type SettingsSection = "工作台" | "课表" | "通用";
+
+export interface SettingsContribution {
+  readonly id: string;
+  readonly moduleId: ModuleId;
+  readonly section: SettingsSection;
+  readonly pageId: string;
+  readonly label: string;
+  readonly order: number;
+  readonly available: boolean;
+  /** 新模块可由自身页面组件渲染；既有设置页继续沿用当前宿主 UI。 */
+  readonly render?: ComponentType;
+}
+
+/** 扩展声明由 Application 层绑定到同 ID 的本机 provider 实现。 */
+export interface CapabilityContribution {
+  readonly id: string;
+  readonly moduleId: ModuleId;
+  readonly order: number;
+}
+
+export interface PermissionDefinition {
+  /** 稳定格式为 module.action，例如 diary.read。 */
+  readonly id: string;
+  readonly moduleId: ModuleId;
+  readonly action: string;
+  readonly label: string;
+  readonly description: string;
+}
+
+/** 仅描述未来 AI 工具及所需权限；本阶段没有执行器或工具运行时。 */
+export interface AIToolContribution {
+  readonly id: string;
+  readonly moduleId: ModuleId;
+  readonly order: number;
+  readonly description: string;
+  readonly permissionIds: readonly string[];
+}
+
+export interface WorkplaceModule {
+  readonly id: ModuleId;
+  readonly metadata: ModuleMetadata;
+  readonly order: number;
+  readonly available: boolean;
+  readonly enabledByDefault: boolean;
+  readonly routes?: readonly RouteContribution[];
+  readonly navigation?: readonly NavigationContribution[];
+  readonly settings?: readonly SettingsContribution[];
+  readonly searchProviders?: readonly CapabilityContribution[];
+  readonly contextProviders?: readonly CapabilityContribution[];
+  readonly permissions?: readonly PermissionDefinition[];
+  readonly aiTools?: readonly AIToolContribution[];
+}
+
+export interface ModuleState {
+  readonly registered: true;
+  readonly available: boolean;
+  readonly enabled: boolean;
+}

@@ -17,6 +17,7 @@ import type { SaveOperationState } from "../types/save-operation.ts";
 import type { PeriodTime } from "../types/time.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
 import type { ThemePreference } from "../theme/types.ts";
+import { workplaceModuleRegistry } from "../modules/registry.ts";
 import type { WorkspaceWeatherController } from "../workspace/weather/use-workspace-weather.ts";
 import { WeatherSettingsPanel } from "../workspace/weather/WeatherSettingsPanel.tsx";
 import { RoutineSettingsPanel } from "../workspace/routine/RoutineSettingsPanel.tsx";
@@ -42,26 +43,28 @@ interface PeriodSettingsProps {
   readonly onCancel: () => void;
 }
 
-type SettingsPage =
-  | "首页"
-  | "时间轴"
-  | "每日寄语"
-  | "天气"
-  | "日常习惯"
-  | "作息"
-  | "显示"
-  | "提醒"
-  | "Widget"
-  | "导入与数据"
-  | "外观"
-  | "数据与备份"
-  | "隐私"
-  | "关于";
-const SETTINGS_GROUPS = [
-  { title: "工作台", pages: ["首页", "时间轴", "每日寄语", "天气", "日常习惯"] },
-  { title: "课表", pages: ["作息", "显示", "提醒", "Widget", "导入与数据"] },
-  { title: "通用", pages: ["外观", "数据与备份", "隐私", "关于"] },
-] as const;
+// Page ids are registry-defined so a compiled internal module can add a page.
+type SettingsPage = string;
+const SETTINGS_GROUPS = (["工作台", "课表", "通用"] as const).map((title) => ({
+  title,
+  pages: workplaceModuleRegistry.settings
+    .filter(
+      (setting) =>
+        setting.available &&
+        workplaceModuleRegistry.getModuleState(setting.moduleId)?.available &&
+        setting.section === title,
+    )
+    .map((setting) => setting.pageId),
+}));
+
+function isRegisteredSettingsPage(pageId: string): boolean {
+  return workplaceModuleRegistry.settings.some(
+    (setting) =>
+      setting.available &&
+      workplaceModuleRegistry.getModuleState(setting.moduleId)?.available &&
+      setting.pageId === pageId,
+  );
+}
 
 function isSaveOperationBusy(state: SaveOperationState): boolean {
   return state.kind === "validating" || state.kind === "saving";
@@ -84,6 +87,12 @@ export function PeriodSettings({
   onCancel,
 }: PeriodSettingsProps) {
   const [page, setPage] = useState<SettingsPage>(initialDomain === "workspace" ? "首页" : "作息");
+  const RegisteredSettingsPage = workplaceModuleRegistry.settings.find(
+    (setting) =>
+      setting.available &&
+      workplaceModuleRegistry.getModuleState(setting.moduleId)?.available &&
+      setting.pageId === page,
+  )?.render;
   const [draft, setDraft] = useState<PeriodTime[]>(() => periods.map((period) => ({ ...period })));
   const draftRef = useRef(draft);
   const [timeDrafts, setTimeDrafts] = useState<Record<string, string>>(() =>
@@ -389,7 +398,9 @@ export function PeriodSettings({
                     key={entry}
                     type="button"
                     aria-current={page === entry ? "page" : undefined}
-                    onClick={() => setPage(entry)}
+                    onClick={() => {
+                      if (isRegisteredSettingsPage(entry)) setPage(entry);
+                    }}
                   >
                     {entry}
                   </button>
@@ -789,6 +800,7 @@ export function PeriodSettings({
                 </section>
               </>
             )}
+            {RegisteredSettingsPage && <RegisteredSettingsPage />}
             {error && (
               <p className="form-error" role="alert">
                 {error}

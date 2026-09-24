@@ -1,17 +1,10 @@
 import type { AcademicHubTab, AppRoute, LocalDate, NavigationTarget } from "./types.ts";
+import type { ShellRouteView } from "../modules/contracts.ts";
+import { workplaceModuleRegistry } from "../modules/registry.ts";
 
 export type AcademicRoute = Extract<AppRoute, { area: "academic" }>;
 export type ProductMode = "workspace" | "academic";
-export type ShellRouteView =
-  | "workspace-home"
-  | "workspace-schedule"
-  | "workspace-tasks"
-  | "workspace-diary"
-  | "workspace-inbox"
-  | "workspace-search"
-  | "academic-schedule"
-  | "academic-hub"
-  | "unsupported";
+export type { ShellRouteView } from "../modules/contracts.ts";
 
 export function createWorkspaceHomeTarget(): NavigationTarget {
   return { route: { area: "workspace", page: "home" } };
@@ -73,17 +66,18 @@ export function routeForProductMode(
 }
 
 export function getShellRouteView(route: AppRoute): ShellRouteView {
-  if (route.area === "workspace") {
-    if (route.page === "home") return "workspace-home";
-    if (route.page === "schedule") return "workspace-schedule";
-    if (route.page === "tasks") return "workspace-tasks";
-    if (route.page === "diary") return "workspace-diary";
-    if (route.page === "inbox") return "workspace-inbox";
-    if (route.page === "search") return "workspace-search";
-    return "unsupported";
-  }
-  if (route.area === "settings") return "unsupported";
-  return route.page === "schedule" ? "academic-schedule" : "academic-hub";
+  const contribution = availableRouteContribution(route);
+  return contribution?.shellView ?? "unsupported";
+}
+
+export function getRouteRenderer(route: AppRoute) {
+  return availableRouteContribution(route)?.render;
+}
+
+function availableRouteContribution(route: AppRoute) {
+  const contribution = workplaceModuleRegistry.getRoute(route);
+  const state = contribution && workplaceModuleRegistry.getModuleState(contribution.moduleId);
+  return contribution?.available && state?.available && state.enabled ? contribution : undefined;
 }
 
 export function createAcademicTaskTarget(id: string): NavigationTarget {

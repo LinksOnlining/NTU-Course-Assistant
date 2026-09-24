@@ -22,5 +22,12 @@ test("WorkspaceContext exposes summaries and status, never Diary/Inbox body or t
 test("WorkspaceContext is a pure projection without storage, Tauri, or network access", () => {
   const projection = contextSource.split("export function buildWorkspaceContext(")[1] ?? "";
   assert.doesNotMatch(projection, /fetch\s*\(|invoke\s*\(|localStorage|sqlite|readFile/u);
-  assert.match(projection, /weatherSummary\(input\.weatherSnapshot\)/u);
+  assert.match(projection, /collectWorkspaceContextFragments\(/u);
+});
+
+test("Context extension inputs contain only Diary/Inbox summaries, never personal content", () => {
+  const providers = readFileSync(`${root}context-provider-registry.ts`, "utf8");
+  assert.match(providers, /hasDiaryToday: boolean/u);
+  assert.match(providers, /pendingInboxCount: number/u);
+  assert.doesNotMatch(providers, /DiaryEntry|InboxItem|rawText|diaryBody|inboxRaw/u);
 });

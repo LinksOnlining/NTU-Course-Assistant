@@ -203,4 +203,8 @@ Phase 3.4 新增 `buildWorkspaceContext` 纯投影：消费调用方显式提供
 
 Phase 3.5 启用 Routine 设置与 Dashboard 日常习惯建议，复用 schema 7 的 `routines` 表。候选以启用状态、ISO 星期、当日 `last_scheduled_date`、目标时长和可选偏好窗口筛选；只建议一条，使用现有 buffer-aware 空闲区间并选最早可容纳时长的起点。建议不是持久化安排；用户确认 PlannerEvent 编辑器后，事件创建与 `last_scheduled_date` 更新在同一个事务提交。Routine 不生成 Task/TimeBlock，删除 Routine 保留既有 PlannerEvent。记录见 `docs/v2-phase-3-5-verification.md`。
 
-Phase 3.6 启用 `workspace/search` 本机统一搜索，覆盖 Course、AcademicTask、PersonalTask、PlannerEvent、Exam、Diary、Inbox；TimeBlock 不重复呈现。搜索不建表、不留历史、不联网，空查询不加载全库；非空查询经 Academic application boundary 与本地 Planner/Diary/Inbox readers 获取数据，以确定性本地排序并使用 typed NavigationTarget/ObjectRef 定位目标。Diary/Inbox 正文仅参与本机匹配，结果只暴露短摘要，不上传或写入日志。验证记录见 `docs/v2-phase-3-6-verification.md`。
+Phase 3.6 启用 `workspace/search` 本机统一搜索，覆盖 Course、AcademicTask、PersonalTask、PlannerEvent、Exam、Diary、Inbox；TimeBlock 不重复呈现。搜索不建表、不留历史、不联网，空查询不加载全库；非空查询通过模块 Application SearchProvider 读取数据，由 Search Core 确定性排序并使用 typed NavigationTarget/ObjectRef 定位目标。Diary/Inbox 正文仅参与本机匹配，结果只暴露短摘要，不上传或写入日志。验证记录见 `docs/v2-phase-3-6-verification.md`。
+
+## 7.40 Phase 3.M Module Extension Architecture
+
+内部模块采用源码编译期 `WorkplaceModuleRegistry`：稳定 Module ID 声明模块 metadata、typed Route、Navigation、Settings、Search/Context provider 与 Permission/AITool 元数据。注册只负责验证、能力发现和稳定排序，不访问业务数据或 SQLite；启动后不可变，且区分 registered、available、enabled。Shell / 设置消费统一 registration；Search Core 通过各模块公开 Application API 的 provider 聚合结果并隔离失败；Context provider 按 ID 只获得自己的结构化输入（Diary boolean、Inbox count、Weather-only snapshot、Routine suggestion inputs）。Permission 与未来 AI Tool 目前仅为元数据契约，不实现权限界面、AI 或执行器。数据库迁移仍由中央基础设施负责；不开放任意 Dashboard / Timeline contributions。运行时第三方插件系统 NOT IMPLEMENTED BY DESIGN。详见 `docs/v2-module-extension-contract.md`。

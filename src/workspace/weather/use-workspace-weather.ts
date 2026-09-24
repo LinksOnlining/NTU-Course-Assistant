@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { classifyWeatherCache, weatherLocationKey } from "../../application/weather/weather.ts";
-import { createOpenMeteoProvider } from "../../services/weather-provider.ts";
+import {
+  classifyWeatherCache,
+  createWorkspaceWeatherProvider,
+  weatherLocationKey,
+} from "../../application/weather/weather.ts";
 import {
   DEFAULT_WEATHER_SETTINGS,
   loadWeatherCache,
@@ -8,7 +11,7 @@ import {
   removeWeatherCache,
   saveWeatherCache,
   saveWeatherSettings,
-} from "../../services/weather-storage.ts";
+} from "../../application/weather/weather-storage.ts";
 import type {
   TemperatureUnit,
   WeatherLocation,
@@ -32,7 +35,7 @@ export interface WorkspaceWeatherController {
   readonly refresh: () => Promise<void>;
 }
 
-const DEFAULT_PROVIDER = createOpenMeteoProvider();
+const DEFAULT_PROVIDER = createWorkspaceWeatherProvider();
 const SERVICE_ERROR = "天气服务暂时无法访问。请检查网络后重试。";
 
 function viewForCache(

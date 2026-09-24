@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  loadWorkspaceSearchData,
+  loadWorkspaceSearchIndex,
   searchWorkspace,
+  searchWorkspaceIndex,
 } from "../../src/application/workspace/search.ts";
+import { buildAcademicSearchRecords } from "../../src/application/academic/search-provider.ts";
+import { buildDiarySearchRecords } from "../../src/application/diary/search-provider.ts";
+import { buildInboxSearchRecords } from "../../src/application/inbox/search-provider.ts";
+import { buildPlannerSearchRecords } from "../../src/application/planner/search-provider.ts";
 
 function course(id, name, overrides = {}) {
   return {
@@ -36,6 +41,18 @@ function searchData(overrides = {}) {
   };
 }
 
+function buildRecords(data) {
+  return [
+    ...buildAcademicSearchRecords(data.academic),
+    ...buildPlannerSearchRecords({
+      personalTasks: data.personalTasks,
+      plannerEvents: data.plannerEvents,
+    }),
+    ...buildDiarySearchRecords(data.diaryEntries),
+    ...buildInboxSearchRecords(data.inboxItems),
+  ];
+}
+
 test("本机搜索使用 Unicode NFKC 与不区分大小写，并按标题匹配强度排序", () => {
   const data = searchData({
     academic: {
@@ -55,9 +72,10 @@ test("本机搜索使用 Unicode NFKC 与不区分大小写，并按标题匹配
   });
 
   assert.deepEqual(
-    searchWorkspace("REPORT", data).map((item) => item.id),
+    searchWorkspace("REPORT", buildRecords(data)).map((item) => item.id),
     ["exact", "prefix", "contains", "metadata"],
   );
+  assert.equal(searchWorkspace("Report   Writing", buildRecords(data))[0]?.id, "prefix");
 });
 
 test("搜索覆盖七类本地内容并返回对应稳定 ObjectRef 与真实页面", () => {
@@ -155,7 +173,7 @@ test("搜索覆盖七类本地内容并返回对应稳定 ObjectRef 与真实页
     ],
   });
 
-  const results = searchWorkspace("needle", data);
+  const results = searchWorkspace("needle", buildRecords(data));
   assert.deepEqual(results.map((item) => item.category).sort(), [
     "academicTask",
     "course",
@@ -196,45 +214,51 @@ test("空查询不显示结果，结果上限为 50 且相同数据排序稳定"
       exams: [],
     },
   });
-  assert.deepEqual(searchWorkspace("   ", data), []);
-  const first = searchWorkspace("同名", data);
-  const second = searchWorkspace("同名", data);
+  const records = buildRecords(data);
+  assert.deepEqual(searchWorkspace("   ", records), []);
+  const first = searchWorkspace("同名", records);
+  const second = searchWorkspace("同名", records);
   assert.equal(first.length, 50);
   assert.deepEqual(
     first.map((item) => item.id),
     second.map((item) => item.id),
   );
-  assert.equal(searchWorkspace("同名", data, Number.NaN).length, 50);
+  assert.equal(searchWorkspace("同名", records, Number.NaN).length, 50);
 });
 
-test("搜索数据通过可替换的本地读取器收集，读取失败保持失败", async () => {
-  const calls = [];
-  const emptyAcademic = searchData().academic;
-  const reader = Object.fromEntries(
-    [
-      ["loadAcademic", emptyAcademic],
-      ["loadPersonalTasks", []],
-      ["loadPlannerEvents", []],
-      ["loadDiaryEntries", []],
-      ["loadInboxItems", []],
-    ].map(([name, result]) => [
-      name,
-      async () => {
-        calls.push(name);
-        return result;
+test("单个 SearchProvider 读取失败时隔离该模块，其余 provider 仍返回结果", async () => {
+  const record = {
+    id: "diary-1",
+    category: "diaryEntry",
+    categoryLabel: "日记",
+    title: "needle entry",
+    summary: "本机匹配摘要",
+    target: {
+      route: { area: "workspace", page: "diary" },
+      object: { type: "diaryEntry", id: "diary-1" },
+    },
+    updatedAt: "2026-09-24T00:00:00.000Z",
+    activeRank: 0,
+    sourceRank: 60_000,
+    titleText: "needle entry",
+    metadataText: "2026-09-24",
+    bodyText: "private local body",
+  };
+  const loaded = await loadWorkspaceSearchIndex([
+    {
+      id: "academic.search",
+      moduleId: "academic",
+      order: 10,
+      loadIndex: async () => {
+        throw new Error("unavailable");
       },
-    ]),
-  );
-  const loaded = await loadWorkspaceSearchData(reader);
-  assert.equal(calls.length, 5);
-  assert.equal(loaded.academic, emptyAcademic);
-  await assert.rejects(
-    loadWorkspaceSearchData({
-      ...reader,
-      loadDiaryEntries: async () => {
-        throw new Error("offline");
-      },
-    }),
-    /offline/u,
+    },
+    { id: "diary.search", moduleId: "diary", order: 30, loadIndex: async () => [record] },
+  ]);
+
+  assert.deepEqual(loaded.unavailableProviderIds, ["academic.search"]);
+  assert.deepEqual(
+    searchWorkspaceIndex("needle", loaded.records).map((result) => result.id),
+    ["diary-1"],
   );
 });

@@ -79,7 +79,11 @@ import {
 } from "./theme/index.ts";
 import type { ThemePreference } from "./theme/index.ts";
 import type { RoutineSuggestion } from "./types/routine.ts";
-import { createWorkspaceHomeTarget, getShellRouteView } from "./navigation/navigation.ts";
+import {
+  createWorkspaceHomeTarget,
+  getRouteRenderer,
+  getShellRouteView,
+} from "./navigation/navigation.ts";
 import type { AcademicRoute } from "./navigation/navigation.ts";
 import type { AppRoute } from "./navigation/types.ts";
 import type { NavigationTarget } from "./navigation/types.ts";
@@ -170,6 +174,7 @@ export function App() {
   const isWorkspaceInbox = routeView === "workspace-inbox";
   const isWorkspaceSearch = routeView === "workspace-search";
   const isUnsupportedRoute = routeView === "unsupported";
+  const RegisteredRouteRenderer = getRouteRenderer(currentRoute);
   const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
   const [dayCount, setDayCount] = useState<5 | 7>(7);
   const [scrollRequest, setScrollRequest] = useState(0);
@@ -978,7 +983,12 @@ export function App() {
           </button>
         </section>
       )}
-      {isWorkspaceHome ? (
+      {RegisteredRouteRenderer ? (
+        <RegisteredRouteRenderer
+          onNavigate={(target) => navigateToRoute(target.route, target)}
+          target={navigationTarget}
+        />
+      ) : isWorkspaceHome ? (
         <WorkspaceDashboard
           ready={storageStatus === "ready"}
           storageError={storageStatus === "error" ? storageMessage : ""}

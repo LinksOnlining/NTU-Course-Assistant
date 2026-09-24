@@ -14,7 +14,7 @@ import {
 import { effectiveOccupancy } from "../timeline/planner-interactions.ts";
 import { loadPersonalTasks } from "../planner/personal-tasks.ts";
 import { loadPlannerEvents, loadTimeBlocks } from "../planner/planner-schedule.ts";
-import { loadRoutines, suggestRoutine } from "../planner/routines.ts";
+import { loadRoutines } from "../planner/routines.ts";
 import { hasDiaryEntry } from "../../services/diary-storage.ts";
 import { countPendingInboxItems } from "../../services/inbox-storage.ts";
 import { buildWorkspaceContext } from "./workspace-context.ts";
@@ -479,6 +479,7 @@ export function buildWorkspaceDashboardViewModel(
     weatherSnapshot,
     hasDiaryToday: sources.hasDiaryToday ?? false,
     pendingInboxCount: sources.pendingInboxCount ?? 0,
+    routines: sources.routines ?? [],
   });
   return {
     context,
@@ -487,12 +488,7 @@ export function buildWorkspaceDashboardViewModel(
     todayItemCount: context.todayItemCount,
     nextItem: context.currentItem ?? context.nextItem,
     ...timeContext(context),
-    routineSuggestion: suggestRoutine({
-      today: sources.date,
-      now: nowTime,
-      routines: sources.routines ?? [],
-      timelineItems: sources.futureItems ?? sources.timelineItems,
-    }),
+    routineSuggestion: context.routineSuggestion,
     taskSummary: buildTaskSummary(
       sources.tasks,
       sources.personalTasks ?? [],

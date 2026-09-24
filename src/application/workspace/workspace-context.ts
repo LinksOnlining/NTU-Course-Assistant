@@ -3,7 +3,9 @@ import type { TimelineItem } from "../timeline/types.ts";
 import type { AcademicTask } from "../../types/academic-task.ts";
 import type { PersonalTask } from "../../types/personal-task.ts";
 import type { WeatherSnapshot } from "../../types/weather.ts";
-import { formatTemperature, weatherCodeLabel } from "../weather/weather.ts";
+import type { Routine, RoutineSuggestion } from "../../types/routine.ts";
+import { collectWorkspaceContextFragments } from "./context-provider-registry.ts";
+import type { WorkspaceContextWeatherSummary } from "./context-provider-registry.ts";
 
 export interface WorkspaceContextTimeSlot {
   readonly date: string;
@@ -12,11 +14,7 @@ export interface WorkspaceContextTimeSlot {
   readonly durationMinutes: number;
 }
 
-export interface WorkspaceWeatherSummary {
-  readonly location: string;
-  readonly condition: string;
-  readonly temperature: string;
-}
+export type WorkspaceWeatherSummary = WorkspaceContextWeatherSummary;
 
 export interface WorkspaceContext {
   readonly date: string;
@@ -32,6 +30,7 @@ export interface WorkspaceContext {
   readonly weatherSummary: WorkspaceWeatherSummary | null;
   readonly hasDiaryToday: boolean;
   readonly pendingInboxCount: number;
+  readonly routineSuggestion: RoutineSuggestion | null;
 }
 
 export interface WorkspaceContextInput {
@@ -44,6 +43,7 @@ export interface WorkspaceContextInput {
   readonly weatherSnapshot: WeatherSnapshot | null;
   readonly hasDiaryToday: boolean;
   readonly pendingInboxCount: number;
+  readonly routines?: readonly Routine[];
 }
 
 function minuteOfDay(value: string): number {
@@ -109,15 +109,6 @@ function taskDeadlineCounts(input: WorkspaceContextInput): {
   return { openTaskCount, overdueTaskCount, todayTaskCount };
 }
 
-function weatherSummary(snapshot: WeatherSnapshot | null): WorkspaceWeatherSummary | null {
-  if (!snapshot) return null;
-  return {
-    location: snapshot.location.displayName,
-    condition: weatherCodeLabel(snapshot.current.weatherCode),
-    temperature: formatTemperature(snapshot.current.temperatureCelsius, "celsius"),
-  };
-}
-
 function nextFreeSlot(input: WorkspaceContextInput, now: number): WorkspaceContextTimeSlot | null {
   const timeline = input.futureItems ?? input.timelineItems;
   const dates = [
@@ -167,6 +158,17 @@ export function buildWorkspaceContext(input: WorkspaceContextInput): WorkspaceCo
     }) ?? null;
   const freeSlot = nextFreeSlot(input, now);
   const taskCounts = taskDeadlineCounts(input);
+  const moduleContext = collectWorkspaceContextFragments({
+    "diary.context": { hasDiaryToday: input.hasDiaryToday },
+    "inbox.context": { pendingInboxCount: input.pendingInboxCount },
+    "weather.context": { weatherSnapshot: input.weatherSnapshot },
+    "routine.context": {
+      today: input.date,
+      now: input.localTime,
+      routines: input.routines ?? [],
+      timelineItems: input.futureItems ?? input.timelineItems,
+    },
+  });
 
   return {
     date: input.date,
@@ -177,10 +179,9 @@ export function buildWorkspaceContext(input: WorkspaceContextInput): WorkspaceCo
     todayItemCount: todayItems.length,
     remainingItemCount: todayItems.filter((item) => minuteOfDay(item.endTime) > now).length,
     ...taskCounts,
-    weatherSummary: weatherSummary(input.weatherSnapshot),
-    hasDiaryToday: input.hasDiaryToday,
-    pendingInboxCount: Number.isFinite(input.pendingInboxCount)
-      ? Math.max(0, Math.floor(input.pendingInboxCount))
-      : 0,
+    weatherSummary: moduleContext.weatherSummary ?? null,
+    hasDiaryToday: moduleContext.hasDiaryToday ?? false,
+    pendingInboxCount: moduleContext.pendingInboxCount ?? 0,
+    routineSuggestion: moduleContext.routineSuggestion ?? null,
   };
 }
