@@ -1,13 +1,13 @@
 # Links Workplace v2.0 — Phase 3 综合验收
 
-日期：2026-09-24；结果：**Phase 3.0–3.7 PASS；Phase 3 Overall = COMPLETE**；授权：Ethan 已授权自动综合验收，本结论不代表 v2 Release Ready。
+日期：2026-09-24；结果：**Phase 3.0–3.7 与 Phase 3.M PASS；Phase 3 Overall = COMPLETE**；授权：Ethan 已授权自动综合验收，本结论不代表 v2 Release Ready。
 
 ## 基线与范围
 
 - 分支：`v2/workspace-rebase`。
 - Phase 3 起点：`6bf9a54`（Phase 2 verification close）；起始 schema：6。
-- Phase 3 实现 HEAD：`b356fc4`（`feat: add local workspace search`）；最终收尾文档由本文件与 `PROJECT_STATUS.md` 的独立文档提交收口。
-- 阶段提交：3.0 `11fa394`；3.1 `25ca7a8`；3.2 `4ec08b5`；3.3 `c108353`；3.4 `64e0838`；3.5 `32dad97`；3.6 `b356fc4`；3.7 为本次文档收尾提交。
+- Phase 3.0–3.7 基线实现 HEAD：`b356fc4`（`feat: add local workspace search`）；Phase 3.M 模块扩展架构提交：`f527f36`（`feat: add workplace module extension architecture`）。
+- 阶段提交：3.0 `11fa394`；3.1 `25ca7a8`；3.2 `4ec08b5`；3.3 `c108353`；3.4 `64e0838`；3.5 `32dad97`；3.6 `b356fc4`；3.7 初次收尾文档已在基线中；3.M `f527f36`。
 - `git diff --stat 6bf9a54..b356fc4`：78 个文件，新增 9,304 行、删除 207 行；变更归属隐私契约、单次数据库迁移、Diary、Inbox、Weather、Context、Routine、Search、Dashboard / Settings、测试及阶段文档。
 - 未实现 Phase 4 AI；未改 Academic 核心语义、Phase 2 Planner 合同、产品技术身份或 1.3.1 版本；未新增依赖。
 - README / CHANGELOG 未改动；v2 尚未发布。
@@ -21,6 +21,14 @@
 - **Routine**：只生成至多一条空闲时间建议；打开或取消不写入。只有用户保存 PlannerEvent 后才原子更新日常习惯安排日期；不自动创建 Task / TimeBlock。
 - **Search**：本机统一搜索课程、学业事项、个人任务、日程、考试、Diary、Inbox 七类；空查询不加载数据、不保存查询历史；排序稳定且结果上限 50。Diary / Inbox 正文仅本机匹配并生成短片段，不发送网络、不写日志；使用类型化导航对象，不提供全局快捷键或远程索引。
 - **Dashboard / Settings**：真实 Diary / Inbox 状态、Weather available/cache/unavailable、最多一个 Routine 建议；AI 保持明确未开放。原课表设置边界保持。
+
+## Module Extension Architecture（Phase 3.M）
+
+- 以 `src/modules/` 的源码编译期 `WorkplaceModuleRegistry` 注册内置模块；模块以稳定 ID 声明 typed Route、Navigation、Settings、Search/Context provider、Permission 与未来 AI Tool 元数据。Registry 只校验、绑定、排序和冻结静态声明，不访问数据库或持有业务状态。
+- Shell、Navigation、Settings、Search 与 Context 改为读取相应 contribution/provider；Search Core 不直接访问模块 repository，Context provider 仅收到本 provider 所需的结构化输入。可选 provider 独立失败隔离。
+- 对重复 ID/路由、错误归属、无效权限引用、provider 声明与实现不匹配进行 fail-fast 校验；模块状态区分 registered / available / enabled。TypeScript declaration merging fixture 验证增加模块时可保留精确路由与对象定位类型。
+- Runtime 第三方插件、AI 执行器、权限 UI、任意 Dashboard/Timeline 扩展仍未实现，且明确 **NOT IMPLEMENTED BY DESIGN**。契约详见 `docs/v2-module-extension-contract.md`。
+- Phase 3.M 修改 37 个文件；无依赖、schema、Rust 业务、产品身份或公开版本号变更。无真实用户 DB 操作。
 
 ## 数据库与迁移
 
@@ -37,8 +45,8 @@
 
 | 检查                      |                                        结果 |
 | ------------------------- | ------------------------------------------: |
-| Unit                      |                                    234 PASS |
-| Architecture              |                                    106 PASS |
+| Unit                      |                                    244 PASS |
+| Architecture              |                                    114 PASS |
 | UI                        | 786 PASS / 15 conditional skipped；0 failed |
 | TypeScript typecheck      |                                        PASS |
 | Lint                      |                                        PASS |
@@ -70,16 +78,16 @@
 
 ## Production Build 与产物
 
-- 命令：`npm run tauri build`；**PASS**。因仓库内既有 Release EXE 正被进程占用，构建使用仓库外隔离 `CARGO_TARGET_DIR`，没有结束或覆盖该进程。
-- 构建目录：`C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3-target-20260924043718\release`。以下 SHA-256 均为本次实际文件计算值；签名文件为 436 bytes。
+- 命令：`npm run tauri build`；**PASS**。使用仓库外隔离 `CARGO_TARGET_DIR`，没有结束或覆盖既有进程，也没有运行 EXE 或安装安装包。
+- Phase 3.M 对应构建目录：`C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3m-target-20260924163804\release`。以下 SHA-256 均为实际文件计算值；签名文件为 436 bytes。
 
 | 产物           | 完整路径                                                                                                                                          | 大小（bytes） | SHA-256                                                            |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------: | ------------------------------------------------------------------ |
-| EXE            | `C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3-target-20260924043718\release\ntu-course-assistant.exe`                                 |    67,390,976 | `0182A49DCB312966817E3EA8818BBA3B522B397B8BB7AAE9F4369DF90E63A572` |
-| NSIS           | `C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3-target-20260924043718\release\bundle\nsis\NTU Course Assistant_1.3.1_x64-setup.exe`     |    52,259,090 | `09151B74C1D5A7E8A110B01AC6C060319FAD354E6A361DFB6BF4E6F529BC0594` |
-| NSIS signature | `C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3-target-20260924043718\release\bundle\nsis\NTU Course Assistant_1.3.1_x64-setup.exe.sig` |           436 | `C91C4A518A23AA7829372F6F0A804F4BFF081FE28A9FB0C106D4498EE3D3B8CE` |
-| MSI            | `C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3-target-20260924043718\release\bundle\msi\NTU Course Assistant_1.3.1_x64_en-US.msi`      |    54,169,600 | `9F157EC770790B43263E66BEF06F8C21F9AD450A00227BB936891D79DB9BD75C` |
-| MSI signature  | `C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3-target-20260924043718\release\bundle\msi\NTU Course Assistant_1.3.1_x64_en-US.msi.sig`  |           436 | `444528FF471C67FED8154D9BF0B518B6E1749E8B048F334CA0FCF0428D4E70DE` |
+| EXE            | `C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3m-target-20260924163804\release\ntu-course-assistant.exe`                                 |    67,395,072 | `673DCE9F8660AEFD6850F325F13B296BFC9A93E4BCA1D8F44461CF1ED07E4ACC` |
+| NSIS           | `C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3m-target-20260924163804\release\bundle\nsis\NTU Course Assistant_1.3.1_x64-setup.exe`     |    52,235,586 | `754DA4356F072BFBD29D80681EE9C0099A3215AACC7851CF92784FD722E10497` |
+| NSIS signature | `C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3m-target-20260924163804\release\bundle\nsis\NTU Course Assistant_1.3.1_x64-setup.exe.sig` |           436 | `99AC5803262BC26571DF1192A7515DF14E5EFC99235D911888CB4ADD37D523D3` |
+| MSI            | `C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3m-target-20260924163804\release\bundle\msi\NTU Course Assistant_1.3.1_x64_en-US.msi`      |    54,173,696 | `812E4B73524BD8AC0BD363673CFB17B101F5ED66671BAA7DA044CB639B949E85` |
+| MSI signature  | `C:\Users\LinYu\AppData\Local\Temp\links-workplace-phase3m-target-20260924163804\release\bundle\msi\NTU Course Assistant_1.3.1_x64_en-US.msi.sig`  |           436 | `B1F2CFF100DB681E99DB58FF4EFF0BD99B2358ADE9761DAFFD46B4C607AC8CCA` |
 
 - 不提交以上 binaries。Production EXE **未运行**；NSIS / MSI **未安装**；真实安装态兼容性 **NOT VERIFIED**；Updater E2E **NOT EXECUTED**。未创建 tag、未 push、未发布 Release。
 
@@ -88,4 +96,4 @@
 - Diary 是每日纯文本，不含 Markdown / 标签 / PKM；Inbox 只接收文本，解析器是小型确定性本地规则；不支持模糊时间自动推断。
 - Weather 依赖 Open-Meteo 服务可用性与其当前条款；设备地理定位未实现。Routine 是软建议，不支持 RRULE / 自动重复任务。Search 仅限本机。AI 未实现。
 - 系统级品牌迁移、Installer compatibility、Updater E2E 尚未验证。Phase 3 COMPLETE 不等于 Release Ready。
-- 下一步：等待 Ethan / ChatGPT 审核 Phase 3 总结并规划 Phase 4；本轮到此停止，不自动进入 Phase 4。
+- Phase 3.M 与 Phase 3.7 最终门禁完成；下一步：等待 Ethan / ChatGPT 审核 Phase 3 总结并规划 Phase 4；本轮到此停止，不自动进入 Phase 4。

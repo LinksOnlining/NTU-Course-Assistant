@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3.0–3.7 PASS；Phase 3 Overall = COMPLETE（自动验收由 Ethan 授权）。** 综合门禁与 Production Build 记录见 `docs/v2-phase-3-verification.md`；各阶段功能和隐私边界分别见 Phase 3.0–3.6 文档。Schema 为 7，且只有一次 `6→7` 生产迁移。Debug 路径 `<app_local_data_dir>/dev-v2/courses.sqlite3`，Release 路径 `<app_local_data_dir>/courses.sqlite3`。版本仍为 1.3.1；未运行 Production EXE、未安装 Installer、未访问真实用户 DB。Installer compatibility 与 Updater E2E 未验证。Phase 3 完成不代表 v2 Release Ready；下一步仅等待 Ethan / ChatGPT 审核 Phase 3 总结并规划 Phase 4，当前不得自动进入 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
+- **当前状态：Phase 3.0–3.7 与 Phase 3.M PASS；Phase 3 Overall = COMPLETE（自动验收由 Ethan 授权）。** Phase 3.M 编译期内部模块扩展架构已由 `f527f36 feat: add workplace module extension architecture` 完成；最终门禁：244 unit、114 architecture、786 UI PASS / 15 条件跳过，Rust 65 tests、fmt、clippy 与当前 HEAD production build 均 PASS。综合记录见 `docs/v2-phase-3-verification.md`。Schema 为 7，且只有一次 `6→7` 生产迁移。Debug 路径 `<app_local_data_dir>/dev-v2/courses.sqlite3`，Release 路径 `<app_local_data_dir>/courses.sqlite3`。版本仍为 1.3.1；未运行 Production EXE、未安装 Installer、未访问真实用户 DB。Installer compatibility 与 Updater E2E 未验证。Phase 3 完成不代表 v2 Release Ready；下一步仅等待 Ethan / ChatGPT 审核 Phase 3 总结并规划 Phase 4，当前不得自动进入 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 为唯一外网能力且默认关闭、仅使用用户主动选择的城市；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 
