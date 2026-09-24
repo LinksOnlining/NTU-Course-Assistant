@@ -14,7 +14,7 @@ use std::{
 
 use db::CourseDatabase;
 use models::{
-    AcademicTask, Course, CourseOverride, Exam, PeriodTime, PersonalTask, PlannerEvent,
+    AcademicTask, Course, CourseOverride, DiaryEntry, Exam, PeriodTime, PersonalTask, PlannerEvent,
     ReminderSettings, Semester, TermConfig, TimeBlock, WidgetSettings, WidgetSettingsPatch,
 };
 use serde::Serialize;
@@ -457,6 +457,48 @@ async fn delete_personal_task(state: State<'_, CourseState>, id: String) -> Resu
     state
         .run_in_background("删除个人任务", move |database| {
             database.delete_personal_task(&id)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn load_diary_entry(
+    state: State<'_, CourseState>,
+    date: String,
+) -> Result<Option<DiaryEntry>, String> {
+    state
+        .run_in_background("读取日记", move |database| {
+            database.load_diary_entry(&date)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn save_diary_entry(
+    state: State<'_, CourseState>,
+    entry: DiaryEntry,
+) -> Result<DiaryEntry, String> {
+    state
+        .run_in_background("保存日记", move |database| {
+            database.save_diary_entry(&entry)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn load_diary_content_dates(state: State<'_, CourseState>) -> Result<Vec<String>, String> {
+    state
+        .run_in_background("读取日记日期", |database| {
+            database.load_diary_content_dates()
+        })
+        .await
+}
+
+#[tauri::command]
+async fn has_diary_entry(state: State<'_, CourseState>, date: String) -> Result<bool, String> {
+    state
+        .run_in_background("检查日记状态", move |database| {
+            database.has_diary_entry(&date)
         })
         .await
 }
@@ -1005,6 +1047,10 @@ pub fn run() {
             update_personal_task,
             set_personal_task_completed,
             delete_personal_task,
+            load_diary_entry,
+            save_diary_entry,
+            load_diary_content_dates,
+            has_diary_entry,
             load_planner_events,
             create_planner_event,
             update_planner_event,

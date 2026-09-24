@@ -51,6 +51,7 @@ export interface WorkspaceDashboardViewModel {
     readonly inbox: WorkspaceModuleAvailability;
     readonly ai: WorkspaceModuleAvailability;
   };
+  readonly hasDiaryToday: boolean;
   readonly warnings: readonly string[];
 }
 
@@ -60,6 +61,7 @@ export interface WorkspaceDashboardSources {
   readonly futureItems?: readonly TimelineItem[];
   readonly tasks: readonly AcademicTask[];
   readonly personalTasks?: readonly PersonalTask[];
+  readonly hasDiaryToday?: boolean;
   readonly warnings: readonly string[];
 }
 

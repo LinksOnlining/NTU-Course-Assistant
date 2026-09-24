@@ -325,6 +325,28 @@ function UnavailableCard({
   );
 }
 
+function DiaryCard({
+  hasEntry,
+  onNavigate,
+}: {
+  readonly hasEntry: boolean;
+  readonly onNavigate: (route: AppRoute) => void;
+}) {
+  const status = hasEntry ? "今天已记录" : "今天还没有记录";
+  return (
+    <button
+      type="button"
+      className="workspace-dashboard-card workspace-module-card"
+      onClick={() => onNavigate({ area: "workspace", page: "diary" })}
+      aria-label={`日记，${status}`}
+    >
+      <span className="workspace-module-title">日记</span>
+      <span className="workspace-module-status">{status}</span>
+      <span className="workspace-module-description">打开今天的本地日记</span>
+    </button>
+  );
+}
+
 export function WorkspaceDashboard({
   ready,
   storageError,
@@ -389,12 +411,7 @@ export function WorkspaceDashboard({
         <aside className="workspace-dashboard-rail" aria-label="工作台摘要">
           <TaskCard model={model} onNavigate={onNavigate} />
           <div className="workspace-module-pair">
-            <UnavailableCard
-              title="日记"
-              description="日记模块将在后续阶段开放"
-              route={{ area: "workspace", page: "diary" }}
-              onNavigate={onNavigate}
-            />
+            <DiaryCard hasEntry={model.hasDiaryToday} onNavigate={onNavigate} />
             <UnavailableCard
               title="收件箱"
               description="收件箱将在后续阶段开放"

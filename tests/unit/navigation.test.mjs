@@ -101,13 +101,13 @@ test("product mode remembers the last Academic page and defaults to the schedule
   assert.deepEqual(routeForProductMode("academic", changes), changes);
 });
 
-test("only implemented routes are classified as page content; future routes stay unsupported", () => {
+test("implemented workspace routes resolve to page content; future routes stay unsupported", () => {
   assert.equal(getShellRouteView({ area: "workspace", page: "home" }), "workspace-home");
   assert.equal(getShellRouteView({ area: "workspace", page: "schedule" }), "workspace-schedule");
   assert.equal(getShellRouteView({ area: "workspace", page: "tasks" }), "workspace-tasks");
   assert.equal(getShellRouteView({ area: "academic", page: "schedule" }), "academic-schedule");
   assert.equal(getShellRouteView({ area: "academic", page: "exams" }), "academic-hub");
   assert.equal(getShellRouteView({ area: "academic", page: "tasks-legacy" }), "academic-hub");
-  assert.equal(getShellRouteView({ area: "workspace", page: "diary" }), "unsupported");
+  assert.equal(getShellRouteView({ area: "workspace", page: "diary" }), "workspace-diary");
   assert.equal(getShellRouteView({ area: "settings", page: "main" }), "unsupported");
 });

@@ -11,10 +11,11 @@ async function seedDashboardRuntime(
     readonly timeBlocks?: readonly unknown[];
     readonly personalTasks?: readonly unknown[];
   } = {},
+  diaryFixture: { readonly hasEntry?: boolean; readonly failSave?: boolean } = {},
 ) {
   await page.clock.install({ time: currentTime });
   await page.addInitScript(
-    ({ name, plannerFixture }) => {
+    ({ name, plannerFixture, diaryFixture }) => {
       const course = {
         id: "dashboard-course",
         name,
@@ -61,11 +62,23 @@ async function seedDashboardRuntime(
         ...task,
       }));
       let personalTasks = [...(plannerFixture.personalTasks ?? [])];
+      const today = new Date().toISOString().slice(0, 10);
+      const diaryEntries = new Map<string, Record<string, string>>();
+      if (diaryFixture.hasEntry) {
+        diaryEntries.set(today, {
+          id: "diary-fixture",
+          entryDate: today,
+          body: "private diary fixture body",
+          createdAt: "2026-09-23T01:00:00.000Z",
+          updatedAt: "2026-09-23T01:00:00.000Z",
+        });
+      }
+      let failDiarySave = diaryFixture.failSave ?? false;
       let loadCoursesCount = 0;
       Object.defineProperty(window, "__TAURI_INTERNALS__", {
         configurable: true,
         value: {
-          invoke: async (command: string, args?: { task?: Record<string, unknown> }) => {
+          invoke: async (command: string, args?: Record<string, unknown>) => {
             if (command === "load_courses") {
               loadCoursesCount += 1;
               return { courses: [course], warnings: [] };
@@ -95,8 +108,27 @@ async function seedDashboardRuntime(
             if (command === "load_academic_tasks") return tasks;
             if (command === "load_personal_tasks") return [...personalTasks];
             if (command === "create_personal_task" && args?.task) {
-              personalTasks = [...personalTasks, args.task];
-              return args.task;
+              const task = args.task as Record<string, unknown>;
+              personalTasks = [...personalTasks, task];
+              return task;
+            }
+            if (command === "load_diary_entry") return diaryEntries.get(String(args?.date)) ?? null;
+            if (command === "load_diary_content_dates")
+              return [...diaryEntries.keys()].sort().reverse();
+            if (command === "has_diary_entry") {
+              return Boolean(diaryEntries.get(String(args?.date))?.body.trim());
+            }
+            if (command === "save_diary_entry" && args?.entry) {
+              if (failDiarySave) throw new Error("save failed");
+              const incoming = args.entry as Record<string, string>;
+              const current = diaryEntries.get(incoming.entryDate);
+              const saved = {
+                ...incoming,
+                id: current?.id ?? incoming.id,
+                createdAt: current?.createdAt ?? incoming.createdAt,
+              };
+              diaryEntries.set(incoming.entryDate, saved);
+              return saved;
             }
             if (command === "load_planner_events") return plannerFixture.events ?? [];
             if (command === "load_time_blocks") return plannerFixture.timeBlocks ?? [];
@@ -117,10 +149,14 @@ async function seedDashboardRuntime(
       Object.assign(window, {
         __workspaceDashboardTest: {
           getLoadCoursesCount: () => loadCoursesCount,
+          getDiaryBody: (date: string) => diaryEntries.get(date)?.body ?? null,
+          setDiarySaveFailure: (value: boolean) => {
+            failDiarySave = value;
+          },
         },
       });
     },
-    { name: courseName, plannerFixture },
+    { name: courseName, plannerFixture, diaryFixture },
   );
   await page.goto("/");
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
@@ -134,7 +170,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
   await expect(
     page.getByTestId("timeline-item").getByText("数学基础", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: /日记，尚未开放/u })).toBeVisible();
+  await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
   await expect(page.getByRole("button", { name: /收件箱，尚未开放/u })).toBeVisible();
   await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
   await expect(page.getByText("已完成事项", { exact: true })).toHaveCount(0);
@@ -234,11 +270,88 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
       await expect(page.getByRole("button", { name: /课表/u })).toBeVisible();
       await expect(page.getByRole("button", { name: "设置" })).toBeVisible();
       await expect(page.getByRole("button", { name: /任务/u })).toBeVisible();
-      await expect(page.getByRole("button", { name: /日记，尚未开放/u })).toBeVisible();
+      await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
       await expect(page.getByRole("button", { name: /收件箱，尚未开放/u })).toBeVisible();
       await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
     }
   }
+});
+
+test("Diary dashboard status is private and the Diary route saves plain text", async ({ page }) => {
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, { hasEntry: true });
+  const diaryCard = page.getByRole("button", { name: /日记，今天已记录/u });
+  await expect(diaryCard).toBeVisible();
+  await expect(page.getByText("private diary fixture body", { exact: true })).toHaveCount(0);
+  await diaryCard.click();
+  const editor = page.getByRole("textbox", { name: /日记正文/u });
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveValue("private diary fixture body");
+  const surface = page.locator(".workspace-diary-editor");
+  const lightSurface = await surface.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+  const darkSurface = await surface.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  expect(darkSurface).not.toBe(lightSurface);
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+  await editor.fill("本地日记自动保存内容");
+  await page.getByRole("button", { name: /工作台.*日记/u }).click();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
+  await expect(page.getByRole("button", { name: /日记，今天已记录/u })).toBeVisible();
+  await expect(page.getByText("本地日记自动保存内容", { exact: true })).toHaveCount(0);
+  const savedBody = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __workspaceDashboardTest: { getDiaryBody: (date: string) => string | null };
+      }
+    ).__workspaceDashboardTest.getDiaryBody("2026-09-23"),
+  );
+  expect(savedBody).toBe("本地日记自动保存内容");
+});
+
+test("Diary save failure keeps the draft visible and can be retried", async ({ page }) => {
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, { failSave: true });
+  await page.getByRole("button", { name: /日记，今天还没有记录/u }).click();
+  const editor = page.getByRole("textbox", { name: /日记正文/u });
+  await editor.fill("保留在编辑器中的草稿");
+  await page.getByRole("button", { name: /工作台.*日记/u }).click();
+  await expect(page.getByRole("alert")).toContainText("保存失败");
+  await expect(editor).toHaveValue("保留在编辑器中的草稿");
+  await page.evaluate(() =>
+    (
+      window as unknown as {
+        __workspaceDashboardTest: { setDiarySaveFailure: (value: boolean) => void };
+      }
+    ).__workspaceDashboardTest.setDiarySaveFailure(false),
+  );
+  await page.getByRole("button", { name: "重试保存" }).click();
+  await expect(page.getByRole("status")).toContainText("已保存");
+  await page.getByRole("button", { name: /工作台.*日记/u }).click();
+  await expect(page.getByRole("button", { name: /日记，今天已记录/u })).toBeVisible();
+});
+
+test("Diary date switch flushes pending text and remains usable at compact height", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 720, height: 520 });
+  await seedDashboardRuntime(page);
+  await page.getByRole("button", { name: /日记，今天还没有记录/u }).click();
+  const editor = page.getByRole("textbox", { name: /日记正文/u });
+  await expect(editor).toBeVisible();
+  await editor.fill("前一天切换前保存");
+  await page.getByRole("button", { name: "前一天" }).click();
+  await expect(page.getByRole("textbox", { name: /2026-09-22 日记正文/u })).toBeVisible();
+  const savedBody = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __workspaceDashboardTest: { getDiaryBody: (date: string) => string | null };
+      }
+    ).__workspaceDashboardTest.getDiaryBody("2026-09-23"),
+  );
+  expect(savedBody).toBe("前一天切换前保存");
+  await expect(page.getByRole("heading", { name: "日记" })).toBeVisible();
 });
 
 test("00:00 and 24:00 labels stay inside the timeline without shifting minute geometry", async ({
@@ -350,7 +463,7 @@ test("Diary and schedule routes remain explicit, and returning to Workspace relo
       ).__workspaceDashboardTest.getLoadCoursesCount(),
     );
   let previousLoads = await getLoads();
-  for (const name of ["日记，尚未开放", "收件箱，尚未开放", "AI，尚未开放"]) {
+  for (const name of ["收件箱，尚未开放", "AI，尚未开放"]) {
     await page.getByRole("button", { name: new RegExp(name, "u") }).click();
     await expect(page.getByRole("heading", { name: "该模块尚未开放" })).toBeVisible();
     await page.getByRole("button", { name: "返回工作台" }).click();
@@ -385,7 +498,7 @@ test("Dashboard cards remain visible in both light and dark themes", async ({ pa
   const visibleModules = async () => {
     await expect(page.getByRole("heading", { name: "今日日程" })).toBeVisible();
     await expect(page.getByRole("button", { name: /任务/u })).toBeVisible();
-    await expect(page.getByRole("button", { name: /日记，尚未开放/u })).toBeVisible();
+    await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
     await expect(page.getByRole("button", { name: /收件箱，尚未开放/u })).toBeVisible();
     await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
   };

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CourseForm } from "./components/CourseForm.tsx";
 import { AcademicHub } from "./components/AcademicHub.tsx";
 import { PdfImportPreview } from "./components/PdfImportPreview.tsx";
@@ -85,6 +85,7 @@ import { AppShell } from "./shell/index.ts";
 import { WorkspaceDashboard } from "./workspace/dashboard/WorkspaceDashboard.tsx";
 import { WorkspaceTasksPage } from "./workspace/tasks/WorkspaceTasksPage.tsx";
 import { WorkspaceSchedulePage } from "./workspace/schedule/WorkspaceSchedulePage.tsx";
+import { WorkspaceDiaryPage } from "./workspace/diary/WorkspaceDiaryPage.tsx";
 
 interface PdfImportResult {
   readonly inserted: number;
@@ -145,6 +146,7 @@ export function App() {
   const [currentRoute, setCurrentRoute] = useState<AppRoute>(
     () => createWorkspaceHomeTarget().route,
   );
+  const diaryFlushRef = useRef<(() => Promise<boolean>) | null>(null);
   const [scheduleTaskRequest, setScheduleTaskRequest] = useState<string | null>(null);
   const [lastAcademicRoute, setLastAcademicRoute] = useState<AcademicRoute | null>(null);
   const routeView = getShellRouteView(currentRoute);
@@ -153,6 +155,7 @@ export function App() {
   const isWorkspaceHome = routeView === "workspace-home";
   const isWorkspaceSchedule = routeView === "workspace-schedule";
   const isWorkspaceTasks = routeView === "workspace-tasks";
+  const isWorkspaceDiary = routeView === "workspace-diary";
   const isUnsupportedRoute = routeView === "unsupported";
   const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
   const [dayCount, setDayCount] = useState<5 | 7>(7);
@@ -176,9 +179,30 @@ export function App() {
   const reminderRefreshGeneration = useRef(0);
 
   function navigateToRoute(route: AppRoute) {
-    if (route.area === "academic") setLastAcademicRoute(route);
-    setCurrentRoute(route);
+    const completeNavigation = () => {
+      if (route.area === "academic") setLastAcademicRoute(route);
+      setCurrentRoute(route);
+    };
+    if (
+      currentRoute.area === "workspace" &&
+      currentRoute.page === "diary" &&
+      !(route.area === "workspace" && route.page === "diary") &&
+      diaryFlushRef.current
+    ) {
+      void diaryFlushRef.current().then((saved) => {
+        if (saved) completeNavigation();
+      });
+      return;
+    }
+    completeNavigation();
   }
+
+  const registerDiaryFlush = useCallback((flush: () => Promise<boolean>) => {
+    diaryFlushRef.current = flush;
+    return () => {
+      if (diaryFlushRef.current === flush) diaryFlushRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
@@ -951,6 +975,8 @@ export function App() {
             navigateToRoute({ area: "workspace", page: "schedule" });
           }}
         />
+      ) : isWorkspaceDiary && storageStatus === "ready" ? (
+        <WorkspaceDiaryPage onNavigate={navigateToRoute} registerFlush={registerDiaryFlush} />
       ) : isWorkspaceSchedule && storageStatus === "ready" ? (
         <WorkspaceSchedulePage
           termConfig={reminderConfiguration.termConfig}

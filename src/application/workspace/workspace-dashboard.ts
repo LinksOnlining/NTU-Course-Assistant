@@ -14,6 +14,7 @@ import {
 import { computeFreeTimeIntervals, effectiveOccupancy } from "../timeline/planner-interactions.ts";
 import { loadPersonalTasks } from "../planner/personal-tasks.ts";
 import { loadPlannerEvents, loadTimeBlocks } from "../planner/planner-schedule.ts";
+import { hasDiaryEntry } from "../../services/diary-storage.ts";
 import type { AcademicTask } from "../../types/academic-task.ts";
 import type { Semester } from "../../types/semester.ts";
 import type { PersonalTask } from "../../types/personal-task.ts";
@@ -34,6 +35,7 @@ export interface WorkspaceDashboardReader {
   loadPlannerEvents?(startDate: string, endDate: string): ReturnType<typeof loadPlannerEvents>;
   loadTimeBlocks?(startDate: string, endDate: string): ReturnType<typeof loadTimeBlocks>;
   loadPersonalTasks?(): ReturnType<typeof loadPersonalTasks>;
+  hasDiaryEntry?(date: string): Promise<boolean>;
 }
 
 const defaultReader: WorkspaceDashboardReader = {
@@ -42,6 +44,7 @@ const defaultReader: WorkspaceDashboardReader = {
   loadPlannerEvents,
   loadTimeBlocks,
   loadPersonalTasks,
+  hasDiaryEntry,
 };
 
 export function localDateKey(date: Date): string {
@@ -87,12 +90,13 @@ export async function loadWorkspaceDashboardSources(
     fallbackSemesterId: termConfig ? LEGACY_SEMESTER_ID : undefined,
   };
   const rangeEnd = dateAfter(date, 7);
-  const [schedule, hub, events, blocks, personalTasks] = await Promise.all([
+  const [schedule, hub, events, blocks, personalTasks, hasDiaryToday] = await Promise.all([
     reader.loadScheduleData(),
     reader.loadHubData(options),
     reader.loadPlannerEvents?.(date, rangeEnd) ?? Promise.resolve([]),
     reader.loadTimeBlocks?.(date, rangeEnd) ?? Promise.resolve([]),
     reader.loadPersonalTasks?.() ?? Promise.resolve([]),
+    reader.hasDiaryEntry?.(date) ?? Promise.resolve(false),
   ]);
   const activeSemester =
     hub.semesters.find((semester) => semester.status === "ACTIVE") ??
@@ -129,6 +133,7 @@ export async function loadWorkspaceDashboardSources(
     futureItems,
     tasks: hub.tasks,
     personalTasks,
+    hasDiaryToday,
     warnings: schedule.warnings,
   };
 }
@@ -517,10 +522,11 @@ export function buildWorkspaceDashboardViewModel(
       nowTime,
     ),
     moduleAvailability: {
-      diary: "unavailable",
+      diary: "available",
       inbox: "unavailable",
       ai: "unavailable",
     },
+    hasDiaryToday: sources.hasDiaryToday ?? false,
     warnings: sources.warnings,
   };
 }

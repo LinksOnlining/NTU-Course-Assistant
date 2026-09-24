@@ -1,0 +1,216 @@
+.workspace-diary-page {
+  display: flex;
+  width: min(100%, 1120px);
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-self: center;
+  gap: var(--space-4);
+  overflow: auto;
+  padding: var(--space-4) var(--space-2) var(--space-6);
+}
+
+.workspace-diary-heading,
+.workspace-diary-status,
+.workspace-diary-date-actions,
+.workspace-diary-editor-heading {
+  display: flex;
+  align-items: center;
+}
+
+.workspace-diary-heading,
+.workspace-diary-editor-heading {
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.workspace-diary-heading h2,
+.workspace-diary-heading p,
+.workspace-diary-editor-heading h3,
+.workspace-diary-dates h3,
+.workspace-diary-dates h4 {
+  margin: 0;
+}
+
+.workspace-diary-heading h2,
+.workspace-diary-editor-heading h3,
+.workspace-diary-dates h3 {
+  color: var(--text-heading);
+}
+
+.workspace-diary-heading p,
+.workspace-diary-editor-heading span,
+.workspace-diary-empty-dates,
+.workspace-diary-loading {
+  color: var(--text-secondary);
+}
+
+.workspace-diary-heading p {
+  margin-top: var(--space-1);
+}
+
+.workspace-diary-breadcrumb {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.workspace-diary-status {
+  flex: 0 0 auto;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+}
+
+.workspace-diary-status button,
+.workspace-diary-date-actions button,
+.workspace-diary-dates li button,
+.workspace-diary-load-error button {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  color: var(--text-button);
+  font: inherit;
+}
+
+.workspace-diary-layout {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(190px, 0.28fr) minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.workspace-diary-dates,
+.workspace-diary-editor {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  background: var(--surface-elevated);
+}
+
+.workspace-diary-dates {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow: auto;
+  padding: var(--space-3);
+}
+
+.workspace-diary-date-actions {
+  gap: var(--space-1);
+}
+
+.workspace-diary-date-actions button {
+  min-width: 38px;
+  padding: 0 var(--space-2);
+}
+
+.workspace-diary-dates h4 {
+  margin-top: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-diary-dates ul {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-diary-dates li button {
+  width: 100%;
+  text-align: left;
+}
+
+.workspace-diary-dates li button[aria-current="date"] {
+  border-color: var(--accent-border);
+  background: var(--surface-selected);
+  color: var(--text-heading);
+}
+
+.workspace-diary-empty-dates {
+  margin: 0;
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-diary-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.workspace-diary-editor textarea {
+  width: 100%;
+  min-height: 280px;
+  flex: 1 1 auto;
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-flat);
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.workspace-diary-editor textarea:focus-visible,
+.workspace-diary-page button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.workspace-diary-editor textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.workspace-diary-load-error {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  color: var(--text-secondary);
+}
+
+.workspace-diary-load-error p,
+.workspace-diary-loading {
+  margin: 0;
+}
+
+.workspace-diary-page button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 760px) {
+  .workspace-diary-page {
+    gap: var(--space-2);
+    padding-top: var(--space-2);
+  }
+
+  .workspace-diary-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-diary-dates {
+    max-height: 170px;
+  }
+
+  .workspace-diary-dates ul {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+
+  .workspace-diary-editor textarea {
+    min-height: 240px;
+  }
+}

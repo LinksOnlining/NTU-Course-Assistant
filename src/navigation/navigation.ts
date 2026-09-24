@@ -6,6 +6,7 @@ export type ShellRouteView =
   | "workspace-home"
   | "workspace-schedule"
   | "workspace-tasks"
+  | "workspace-diary"
   | "academic-schedule"
   | "academic-hub"
   | "unsupported";
@@ -39,6 +40,7 @@ export function getShellRouteView(route: AppRoute): ShellRouteView {
     if (route.page === "home") return "workspace-home";
     if (route.page === "schedule") return "workspace-schedule";
     if (route.page === "tasks") return "workspace-tasks";
+    if (route.page === "diary") return "workspace-diary";
     return "unsupported";
   }
   if (route.area === "settings") return "unsupported";

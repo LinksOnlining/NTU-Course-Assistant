@@ -18,6 +18,17 @@ pub struct ReminderSettings {
     pub advance_minutes: u16,
 }
 
+/// Diary text is intentionally not `Debug` so accidental diagnostic formatting cannot expose it.
+#[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiaryEntry {
+    pub id: String,
+    pub entry_date: String,
+    pub body: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WidgetSettings {

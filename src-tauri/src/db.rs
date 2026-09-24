@@ -10,12 +10,13 @@ use crate::models::{
     default_widget_settings, merge_widget_settings, parse_date, parse_time, validate_period_times,
     validate_planner_date_range, validate_reminder_settings, validate_term_config,
     validate_widget_settings, AcademicTask, AcademicTaskStatus, Course, CourseOverride,
-    CourseOverrideKind, Exam, ExamStatus, PeriodTime, PersonalTask, PersonalTaskPriority,
-    PersonalTaskStatus, PlannerEvent, ReminderSettings, Semester, SemesterStatus, TermConfig,
-    TimeBlock, WidgetSettings, WidgetSettingsPatch,
+    CourseOverrideKind, DiaryEntry, Exam, ExamStatus, PeriodTime, PersonalTask,
+    PersonalTaskPriority, PersonalTaskStatus, PlannerEvent, ReminderSettings, Semester,
+    SemesterStatus, TermConfig, TimeBlock, WidgetSettings, WidgetSettingsPatch,
 };
 
-const CURRENT_SCHEMA_VERSION: i64 = 6;
+const SCHEMA_SIX_VERSION: i64 = 6;
+const CURRENT_SCHEMA_VERSION: i64 = 7;
 const HANDLED_REMINDER_RETENTION_MILLISECONDS: i64 = 400 * 24 * 60 * 60 * 1_000;
 
 #[derive(Debug)]
@@ -213,7 +214,7 @@ fn migrate_schema_five_to_six_with_hook(
         CREATE INDEX time_blocks_task_date
             ON time_blocks(personal_task_id, date, start_time);",
     )?;
-    transaction.pragma_update(None, "user_version", 6)?;
+    transaction.pragma_update(None, "user_version", SCHEMA_SIX_VERSION)?;
     before_validation()?;
     validate_schema_six(&transaction)?;
     transaction.commit()?;
@@ -278,8 +279,125 @@ fn validate_schema_six(connection: &Connection) -> Result<(), StorageError> {
     }
 
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version != CURRENT_SCHEMA_VERSION {
+    if version != SCHEMA_SIX_VERSION {
         return Err(StorageError::InvalidData("schema 6 版本校验失败。".into()));
+    }
+    validate_integrity(connection)
+}
+
+fn migrate_schema_six_to_seven(connection: &mut Connection) -> Result<(), StorageError> {
+    migrate_schema_six_to_seven_with_hook(connection, || Ok(()))
+}
+
+fn migrate_schema_six_to_seven_with_hook(
+    connection: &mut Connection,
+    before_validation: impl FnOnce() -> Result<(), StorageError>,
+) -> Result<(), StorageError> {
+    let transaction = connection.transaction()?;
+    transaction.execute_batch(
+        "CREATE TABLE diary_entries (
+            id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) BETWEEN 1 AND 128),
+            entry_date TEXT NOT NULL UNIQUE CHECK(length(entry_date) = 10),
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL CHECK(length(created_at) > 0),
+            updated_at TEXT NOT NULL CHECK(length(updated_at) > 0)
+        );
+
+        CREATE TABLE inbox_items (
+            id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) BETWEEN 1 AND 128),
+            raw_text TEXT NOT NULL CHECK(length(trim(raw_text)) > 0),
+            status TEXT NOT NULL CHECK(status IN ('pending', 'needs_review', 'ready', 'confirmed', 'dismissed')),
+            parse_kind TEXT NULL CHECK(parse_kind IS NULL OR parse_kind IN ('task', 'event', 'unknown')),
+            parse_payload_json TEXT NULL,
+            parser_version TEXT NULL,
+            confirmed_target_type TEXT NULL CHECK(confirmed_target_type IS NULL OR confirmed_target_type IN ('personalTask', 'plannerEvent')),
+            confirmed_target_id TEXT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            CHECK((confirmed_target_type IS NULL) = (confirmed_target_id IS NULL)),
+            CHECK(status != 'confirmed' OR confirmed_target_type IS NOT NULL)
+        );
+
+        CREATE TABLE routines (
+            id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) BETWEEN 1 AND 128),
+            title TEXT NOT NULL CHECK(length(trim(title)) BETWEEN 1 AND 200),
+            target_duration_minutes INTEGER NOT NULL CHECK(target_duration_minutes BETWEEN 5 AND 720),
+            weekdays_mask INTEGER NOT NULL CHECK(weekdays_mask BETWEEN 1 AND 127),
+            preferred_start_time TEXT NULL CHECK(preferred_start_time IS NULL OR length(preferred_start_time) = 5),
+            preferred_end_time TEXT NULL CHECK(preferred_end_time IS NULL OR length(preferred_end_time) = 5),
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+            last_scheduled_date TEXT NULL CHECK(last_scheduled_date IS NULL OR length(last_scheduled_date) = 10),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            CHECK((preferred_start_time IS NULL AND preferred_end_time IS NULL) OR
+                  (preferred_start_time IS NOT NULL AND preferred_end_time IS NOT NULL AND preferred_start_time < preferred_end_time)),
+            CHECK(preferred_start_time IS NULL OR
+                  (preferred_start_time GLOB '[0-2][0-9]:[0-5][0-9]' AND
+                   CAST(substr(preferred_start_time, 1, 2) AS INTEGER) < 24)),
+            CHECK(preferred_end_time IS NULL OR
+                  (preferred_end_time GLOB '[0-2][0-9]:[0-5][0-9]' AND
+                   CAST(substr(preferred_end_time, 1, 2) AS INTEGER) < 24))
+        );
+
+        CREATE INDEX inbox_items_status_created_at ON inbox_items(status, created_at);
+        CREATE INDEX routines_enabled ON routines(enabled);
+        PRAGMA user_version = 7;",
+    )?;
+    before_validation()?;
+    validate_schema_seven(&transaction)?;
+    transaction.commit()?;
+    Ok(())
+}
+
+fn validate_schema_seven(connection: &Connection) -> Result<(), StorageError> {
+    const REQUIRED_TABLES: &[&str] = &["diary_entries", "inbox_items", "routines"];
+    const REQUIRED_INDEXES: &[&str] = &["inbox_items_status_created_at", "routines_enabled"];
+    for (kind, name) in REQUIRED_TABLES
+        .iter()
+        .map(|name| ("table", *name))
+        .chain(REQUIRED_INDEXES.iter().map(|name| ("index", *name)))
+    {
+        let exists: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = ?1 AND name = ?2)",
+            params![kind, name],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Err(StorageError::InvalidData(format!(
+                "schema 7 缺少必需的 {kind}: {name}"
+            )));
+        }
+    }
+    for query in [
+        "SELECT id, entry_date, body, created_at, updated_at FROM diary_entries LIMIT 0",
+        "SELECT id, raw_text, status, parse_kind, parse_payload_json, parser_version,
+                confirmed_target_type, confirmed_target_id, created_at, updated_at
+         FROM inbox_items LIMIT 0",
+        "SELECT id, title, target_duration_minutes, weekdays_mask, preferred_start_time,
+                preferred_end_time, enabled, last_scheduled_date, created_at, updated_at
+         FROM routines LIMIT 0",
+    ] {
+        connection.prepare(query)?;
+    }
+
+    let unique_date_index: bool = connection.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM pragma_index_list('diary_entries') AS indexes
+            JOIN pragma_index_info(indexes.name) AS columns
+            WHERE indexes.\"unique\" = 1 AND columns.name = 'entry_date'
+        )",
+        [],
+        |row| row.get(0),
+    )?;
+    if !unique_date_index {
+        return Err(StorageError::InvalidData(
+            "schema 7 日记日期唯一约束校验失败。".into(),
+        ));
+    }
+
+    let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version != CURRENT_SCHEMA_VERSION {
+        return Err(StorageError::InvalidData("schema 7 版本校验失败。".into()));
     }
     validate_integrity(connection)
 }
@@ -506,6 +624,12 @@ impl CourseDatabase {
             .pragma_query_value(None, "user_version", |row| row.get(0))?;
         if version < 6 {
             migrate_schema_five_to_six(&mut self.connection)?;
+        }
+        let version: i64 = self
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version < CURRENT_SCHEMA_VERSION {
+            migrate_schema_six_to_seven(&mut self.connection)?;
         }
         Ok(())
     }
@@ -1056,6 +1180,69 @@ impl CourseDatabase {
         Ok(tasks)
     }
 
+    pub fn load_diary_entry(&self, date: &str) -> Result<Option<DiaryEntry>, StorageError> {
+        parse_date(date).map_err(StorageError::InvalidData)?;
+        self.connection
+            .query_row(
+                "SELECT id, entry_date, body, created_at, updated_at
+                 FROM diary_entries WHERE entry_date = ?1",
+                [date],
+                row_to_diary_entry,
+            )
+            .optional()
+            .map_err(StorageError::from)
+    }
+
+    pub fn save_diary_entry(&self, entry: &DiaryEntry) -> Result<DiaryEntry, StorageError> {
+        validate_diary_entry(entry)?;
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute(
+            "INSERT INTO diary_entries (id, entry_date, body, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(entry_date) DO UPDATE SET
+               body = excluded.body,
+               updated_at = excluded.updated_at",
+            params![
+                &entry.id,
+                &entry.entry_date,
+                &entry.body,
+                &entry.created_at,
+                &entry.updated_at,
+            ],
+        )?;
+        transaction.commit()?;
+        self.load_diary_entry(&entry.entry_date)?
+            .ok_or(StorageError::NotFound)
+    }
+
+    pub fn load_diary_content_dates(&self) -> Result<Vec<String>, StorageError> {
+        let mut statement = self.connection.prepare(
+            "SELECT entry_date FROM diary_entries
+             WHERE length(trim(body)) > 0
+             ORDER BY entry_date DESC LIMIT 14",
+        )?;
+        let mut rows = statement.query([])?;
+        let mut dates = Vec::new();
+        while let Some(row) = rows.next()? {
+            dates.push(row.get(0)?);
+        }
+        Ok(dates)
+    }
+
+    pub fn has_diary_entry(&self, date: &str) -> Result<bool, StorageError> {
+        parse_date(date).map_err(StorageError::InvalidData)?;
+        self.connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM diary_entries
+                    WHERE entry_date = ?1 AND length(trim(body)) > 0
+                 )",
+                [date],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::from)
+    }
+
     pub fn create_personal_task(&self, task: &PersonalTask) -> Result<PersonalTask, StorageError> {
         validate_personal_task(task)?;
         self.connection.execute(
@@ -1508,6 +1695,17 @@ fn validate_personal_task(value: &PersonalTask) -> Result<(), StorageError> {
     Ok(())
 }
 
+fn validate_diary_entry(value: &DiaryEntry) -> Result<(), StorageError> {
+    if value.id.trim().is_empty() || value.id.len() > 128 {
+        return Err(StorageError::InvalidData("日记记录标识无效".into()));
+    }
+    parse_date(&value.entry_date).map_err(StorageError::InvalidData)?;
+    if value.created_at.trim().is_empty() || value.updated_at.trim().is_empty() {
+        return Err(StorageError::InvalidData("日记保存时间无效".into()));
+    }
+    Ok(())
+}
+
 fn validate_exam(value: &Exam) -> Result<(), StorageError> {
     if value.id.trim().is_empty()
         || value.semester_id.trim().is_empty()
@@ -1587,6 +1785,16 @@ fn row_to_course(row: &Row<'_>) -> Result<Course, StorageError> {
         start_period: row.get(7)?,
         end_period: row.get(8)?,
         weeks: serde_json::from_str(&weeks_json)?,
+    })
+}
+
+fn row_to_diary_entry(row: &Row<'_>) -> rusqlite::Result<DiaryEntry> {
+    Ok(DiaryEntry {
+        id: row.get(0)?,
+        entry_date: row.get(1)?,
+        body: row.get(2)?,
+        created_at: row.get(3)?,
+        updated_at: row.get(4)?,
     })
 }
 
@@ -2158,9 +2366,44 @@ mod tests {
                  DROP TABLE time_blocks;
                  DROP TABLE planner_events;
                  DROP TABLE personal_tasks;
+                 DROP TABLE routines;
+                 DROP TABLE inbox_items;
+                 DROP TABLE diary_entries;
                  PRAGMA user_version = 5;",
             )
             .expect("seed schema five data and downgrade synthetic database");
+    }
+
+    fn create_populated_schema_six_database(path: &Path) {
+        create_populated_schema_five_database(path);
+        {
+            let database = CourseDatabase::open(path).expect("prepare schema six fixture");
+            let task = personal_task("migration-task");
+            database
+                .create_personal_task(&task)
+                .expect("seed personal task");
+            database
+                .create_planner_event(&planner_event("migration-event", "2026-09-24"))
+                .expect("seed planner event");
+            database
+                .create_time_block(&time_block("migration-block", &task.id, "2026-09-24"))
+                .expect("seed time block");
+        }
+        if let Some(parent) = path.parent() {
+            let backup_directory = parent.join("backups");
+            if backup_directory.exists() {
+                fs::remove_dir_all(backup_directory).expect("remove intermediate fixture backup");
+            }
+        }
+        let connection = Connection::open(path).expect("open schema six fixture");
+        connection
+            .execute_batch(
+                "DROP TABLE routines;
+                 DROP TABLE inbox_items;
+                 DROP TABLE diary_entries;
+                 PRAGMA user_version = 6;",
+            )
+            .expect("mark fixture as schema six");
     }
 
     fn migration_backups(root: &Path) -> Vec<PathBuf> {
@@ -2251,7 +2494,7 @@ mod tests {
                 .expect("insert legacy course");
         }
         let migrated = CourseDatabase::open(&path).expect("migrate schema four database");
-        assert_eq!(migrated.schema_version().expect("schema version"), 6);
+        assert_eq!(migrated.schema_version().expect("schema version"), 7);
         assert_eq!(
             migrated.load_courses().expect("load legacy course").courses,
             vec![expected]
@@ -2273,7 +2516,7 @@ mod tests {
     #[test]
     fn empty_database_runs_versioned_migration() {
         let database = database();
-        assert_eq!(database.schema_version().expect("schema version"), 6);
+        assert_eq!(database.schema_version().expect("schema version"), 7);
         let table_count: i64 = database
             .connection
             .query_row(
@@ -2295,19 +2538,276 @@ mod tests {
     }
 
     #[test]
-    fn fresh_database_starts_at_schema_six_without_a_migration_backup() {
+    fn fresh_database_starts_at_schema_seven_without_a_migration_backup() {
         let root = isolated_database_root();
         let path = root.join("courses.sqlite3");
         {
             let database = CourseDatabase::open(&path).expect("create fresh database");
-            assert_eq!(database.schema_version().expect("schema version"), 6);
+            assert_eq!(database.schema_version().expect("schema version"), 7);
         }
         {
-            let database = CourseDatabase::open(&path).expect("reopen schema six database");
-            assert_eq!(database.schema_version().expect("schema version"), 6);
+            let database = CourseDatabase::open(&path).expect("reopen schema seven database");
+            assert_eq!(database.schema_version().expect("schema version"), 7);
         }
         assert!(migration_backups(&root).is_empty());
         fs::remove_dir_all(root).expect("remove fresh database fixture");
+    }
+
+    #[test]
+    fn schema_six_migration_preserves_phase_two_data_and_verified_source_backup() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        create_populated_schema_six_database(&path);
+
+        let migrated = CourseDatabase::open(&path).expect("migrate schema six database");
+        assert_eq!(migrated.schema_version().expect("schema version"), 7);
+        validate_schema_seven(&migrated.connection).expect("schema seven integrity");
+        assert_eq!(
+            migrated.load_courses().expect("courses").courses,
+            vec![course()]
+        );
+        assert_eq!(
+            migrated
+                .load_personal_tasks()
+                .expect("personal tasks")
+                .len(),
+            1
+        );
+        assert_eq!(
+            migrated
+                .load_planner_events("2026-09-24", "2026-09-24")
+                .expect("events")
+                .len(),
+            1
+        );
+        assert_eq!(
+            migrated
+                .load_time_blocks("2026-09-24", "2026-09-24")
+                .expect("time blocks")
+                .len(),
+            1
+        );
+        assert!(migrated
+            .load_diary_entry("2026-09-24")
+            .expect("new diary table")
+            .is_none());
+        for table in [
+            "semesters",
+            "course_overrides",
+            "academic_tasks",
+            "exams",
+            "reminder_rules",
+            "reminder_instances",
+        ] {
+            let count: i64 = migrated
+                .connection
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .expect("count preserved Academic table");
+            assert_eq!(count, 1, "{table} data should be preserved");
+        }
+
+        let backups = migration_backups(&root);
+        assert_eq!(backups.len(), 1);
+        assert!(backups[0]
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("courses-v6-to-v7-"));
+        let backup = Connection::open(&backups[0]).expect("open schema six backup");
+        assert_eq!(
+            backup
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                .expect("backup version"),
+            6
+        );
+        validate_schema_six(&backup).expect("verified schema six backup");
+        assert_eq!(
+            backup
+                .query_row("SELECT count(*) FROM time_blocks", [], |row| row
+                    .get::<_, i64>(0))
+                .expect("backup time block"),
+            1
+        );
+        drop(backup);
+        drop(migrated);
+        fs::remove_dir_all(root).expect("remove schema six migration fixture");
+    }
+
+    #[test]
+    fn schema_seven_migration_rolls_back_tables_and_version_after_failure() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        create_populated_schema_six_database(&path);
+        let mut connection = Connection::open(&path).expect("open rollback fixture");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")
+            .expect("configure rollback connection");
+        create_validated_migration_backup(&connection, &root, 6).expect("create source backup");
+
+        let error = migrate_schema_six_to_seven_with_hook(&mut connection, || {
+            Err(StorageError::InvalidData("注入迁移失败".into()))
+        })
+        .expect_err("injected failure must abort migration");
+        assert!(matches!(error, StorageError::InvalidData(_)));
+        assert_eq!(
+            connection
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                .expect("rollback version"),
+            6
+        );
+        for table in ["diary_entries", "inbox_items", "routines"] {
+            let count: i64 = connection
+                .query_row(
+                    "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .expect("check absent table");
+            assert_eq!(count, 0, "{table} must be rolled back");
+        }
+        for table in ["personal_tasks", "planner_events", "time_blocks"] {
+            let count: i64 = connection
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .expect("preserved Phase 2 rows");
+            assert_eq!(count, 1, "{table} data must be preserved");
+        }
+        validate_schema_six(&connection).expect("source schema remains valid");
+        let backup =
+            Connection::open(migration_backups(&root).remove(0)).expect("reopen source backup");
+        validate_schema_six(&backup).expect("source backup remains valid");
+        drop(backup);
+        drop(connection);
+        fs::remove_dir_all(root).expect("remove rollback fixture");
+    }
+
+    #[test]
+    fn diary_entries_upsert_by_date_and_survive_reopen_without_logging_text() {
+        let path = temporary_database_path();
+        remove_database_files(&path);
+        let first = diary_entry(
+            "diary-a",
+            "2026-09-24",
+            "private first text",
+            "2026-09-24T01:00:00Z",
+        );
+        {
+            let database = CourseDatabase::open(&path).expect("create diary database");
+            assert!(database.save_diary_entry(&first).expect("save diary entry") == first);
+            assert!(database
+                .has_diary_entry("2026-09-24")
+                .expect("check diary status"));
+            let mut updated = diary_entry(
+                "diary-b",
+                "2026-09-24",
+                "private updated text",
+                "2026-09-24T02:00:00Z",
+            );
+            updated.created_at = "2026-09-24T02:00:00Z".into();
+            let saved = database
+                .save_diary_entry(&updated)
+                .expect("upsert existing date");
+            assert_eq!(saved.id, first.id);
+            assert_eq!(saved.created_at, first.created_at);
+            assert_eq!(saved.body, updated.body);
+            assert_eq!(
+                database.load_diary_content_dates().expect("content dates"),
+                vec!["2026-09-24"]
+            );
+        }
+        let reopened = CourseDatabase::open(&path).expect("reopen diary database");
+        let loaded = reopened
+            .load_diary_entry("2026-09-24")
+            .expect("load diary entry")
+            .expect("entry exists");
+        assert_eq!(loaded.body, "private updated text");
+        assert!(!reopened
+            .has_diary_entry("2026-09-25")
+            .expect("empty date status"));
+        assert!(reopened.load_diary_entry("2026-02-30").is_err());
+        reopened
+            .save_diary_entry(&diary_entry(
+                "diary-empty",
+                "2026-09-25",
+                "   ",
+                "2026-09-25T01:00:00Z",
+            ))
+            .expect("save blank entry without exposing it as recorded");
+        assert!(!reopened
+            .has_diary_entry("2026-09-25")
+            .expect("blank status"));
+        assert_eq!(
+            reopened.load_diary_content_dates().expect("content dates"),
+            vec!["2026-09-24"]
+        );
+        drop(reopened);
+        remove_database_files(&path);
+    }
+
+    #[test]
+    fn schema_seven_enforces_personal_context_constraints() {
+        let database = database();
+        let entry = diary_entry("unique-date", "2026-09-24", "local body", "now");
+        database
+            .save_diary_entry(&entry)
+            .expect("insert unique date");
+        assert!(database
+            .connection
+            .execute(
+                "INSERT INTO diary_entries (id, entry_date, body, created_at, updated_at)
+                 VALUES ('duplicate-date', '2026-09-24', 'another', 'now', 'now')",
+                [],
+            )
+            .is_err());
+        assert!(database
+            .connection
+            .execute(
+                "INSERT INTO inbox_items (id, raw_text, status, created_at, updated_at)
+                 VALUES ('invalid-inbox', '  ', 'pending', 'now', 'now')",
+                [],
+            )
+            .is_err());
+        assert!(database
+            .connection
+            .execute(
+                "INSERT INTO inbox_items (id, raw_text, status, created_at, updated_at)
+                 VALUES ('invalid-status', 'capture', 'unknown-status', 'now', 'now')",
+                [],
+            )
+            .is_err());
+        for (id, duration, weekdays, start, end) in [
+            ("short", 4, 1, None, None),
+            ("no-weekday", 30, 0, None, None),
+            ("half-window", 30, 1, Some("09:00"), None),
+            ("invalid-clock", 30, 1, Some("99:00"), Some("99:30")),
+        ] {
+            assert!(
+                database
+                    .connection
+                    .execute(
+                        "INSERT INTO routines
+                     (id, title, target_duration_minutes, weekdays_mask, preferred_start_time,
+                      preferred_end_time, enabled, created_at, updated_at)
+                     VALUES (?1, 'Routine', ?2, ?3, ?4, ?5, 1, 'now', 'now')",
+                        params![id, duration, weekdays, start, end],
+                    )
+                    .is_err(),
+                "invalid routine case {id} should fail"
+            );
+        }
+    }
+
+    fn diary_entry(id: &str, date: &str, body: &str, timestamp: &str) -> DiaryEntry {
+        DiaryEntry {
+            id: id.into(),
+            entry_date: date.into(),
+            body: body.into(),
+            created_at: timestamp.into(),
+            updated_at: timestamp.into(),
+        }
     }
 
     #[test]
@@ -2317,7 +2817,7 @@ mod tests {
         create_populated_schema_five_database(&path);
 
         let migrated = CourseDatabase::open(&path).expect("migrate populated schema five");
-        assert_eq!(migrated.schema_version().expect("schema version"), 6);
+        assert_eq!(migrated.schema_version().expect("schema version"), 7);
         assert_eq!(
             migrated.load_courses().expect("courses").courses,
             vec![course()]
@@ -2366,14 +2866,14 @@ mod tests {
                 .expect("read preserved record identity");
             assert_eq!(value, expected, "{table} record identity is preserved");
         }
-        validate_schema_six(&migrated.connection).expect("schema six integrity");
+        validate_schema_seven(&migrated.connection).expect("schema seven integrity");
         assert_eq!(migration_backups(&root).len(), 1);
         let backup_path = migration_backups(&root).remove(0);
         assert!(backup_path
             .file_name()
             .unwrap()
             .to_string_lossy()
-            .starts_with("courses-v5-to-v6-"));
+            .starts_with("courses-v5-to-v7-"));
         let backup = Connection::open(&backup_path).expect("open verified backup");
         assert_eq!(
             backup
@@ -2392,8 +2892,8 @@ mod tests {
         drop(backup);
         drop(migrated);
 
-        let reopened = CourseDatabase::open(&path).expect("reopen schema six without migration");
-        assert_eq!(reopened.schema_version().expect("reopened schema"), 6);
+        let reopened = CourseDatabase::open(&path).expect("reopen schema seven without migration");
+        assert_eq!(reopened.schema_version().expect("reopened schema"), 7);
         assert_eq!(migration_backups(&root).len(), 1);
         drop(reopened);
         fs::remove_dir_all(root).expect("remove migration fixture");
@@ -2885,7 +3385,7 @@ mod tests {
         let mut expected = course();
         {
             let database = CourseDatabase::open(&path).expect("create database file");
-            assert_eq!(database.schema_version().expect("new schema version"), 6);
+            assert_eq!(database.schema_version().expect("new schema version"), 7);
             assert!(database
                 .load_courses()
                 .expect("new database is empty")
@@ -2936,13 +3436,13 @@ mod tests {
             .execute_batch(
                 "CREATE TABLE sentinel(value TEXT NOT NULL);
                  INSERT INTO sentinel VALUES ('keep-me');
-                 PRAGMA user_version = 7;",
+                 PRAGMA user_version = 8;",
             )
             .expect("create future database");
         drop(connection);
         assert!(matches!(
             CourseDatabase::open(&path),
-            Err(StorageError::UnsupportedSchema(7))
+            Err(StorageError::UnsupportedSchema(8))
         ));
         let unchanged = Connection::open(&path).expect("reopen future database");
         let version: i64 = unchanged
@@ -2954,7 +3454,7 @@ mod tests {
         let value: String = unchanged
             .query_row("SELECT value FROM sentinel", [], |row| row.get(0))
             .expect("future data remains");
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
         assert_eq!(journal_mode, "delete");
         assert_eq!(value, "keep-me");
         drop(unchanged);
@@ -3072,7 +3572,7 @@ mod tests {
             .expect("create schema one database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema one");
-        assert_eq!(database.schema_version().expect("migrated version"), 6);
+        assert_eq!(database.schema_version().expect("migrated version"), 7);
         assert_eq!(
             database
                 .load_courses()
@@ -3114,7 +3614,7 @@ mod tests {
             .expect("create schema two database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema two");
-        assert_eq!(database.schema_version().expect("schema version"), 6);
+        assert_eq!(database.schema_version().expect("schema version"), 7);
         assert_eq!(database.load_courses().expect("courses").courses.len(), 1);
         assert_eq!(
             database
@@ -3159,7 +3659,7 @@ mod tests {
             .expect("create schema three database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema three");
-        assert_eq!(database.schema_version().expect("schema version"), 6);
+        assert_eq!(database.schema_version().expect("schema version"), 7);
         assert_eq!(database.load_courses().expect("courses").courses.len(), 1);
         assert_eq!(
             database
@@ -3252,7 +3752,7 @@ mod tests {
                 .term_config,
             before.term_config
         );
-        assert_eq!(database.schema_version().expect("schema version"), 6);
+        assert_eq!(database.schema_version().expect("schema version"), 7);
     }
 
     #[test]

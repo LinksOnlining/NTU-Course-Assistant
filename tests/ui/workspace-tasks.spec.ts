@@ -97,6 +97,7 @@ async function seedTasksRuntime(page: Page) {
             return;
           }
           if (command === "plugin:event|listen") return 1;
+          if (command === "has_diary_entry") return false;
           if (command === "plugin:updater|check") return null;
           throw new Error("未预期的任务页面命令：" + command);
         },

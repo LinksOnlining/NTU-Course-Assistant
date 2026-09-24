@@ -192,3 +192,5 @@ Phase 1.6.2 将 Time Context 固定为由 Workspace application 层纯投影生�
 ## 7.39 Phase 3 Personal Context / Privacy Contract
 
 Phase 3 的有效隐私与领域事实以 `docs/v2-personal-context-privacy-contract.md` 为准。Diary、Inbox raw 与 Local Search 保持本地；Context 是纯确定性投影且不得包含私人正文；Weather 是唯一允许主动访问网络的模块，默认关闭，地点由用户主动选择；Routine 仅生成建议并需用户明确确认后才创建 PlannerEvent。Phase 3 只新增一条 schema 6→7 生产迁移，包含 Diary、Inbox、Routine 三表；Weather cache、Context 与 Search 不建表。不得实现 AI、schema 8、全局快捷捕获或云搜索。
+
+Phase 3.1 已落地 schema 6→7：事务迁移创建 `diary_entries`、`inbox_items`、`routines` 及所需索引；仅使用隔离临时数据库验证 schema 6 备份、数据保留、校验、失败回滚和 fresh schema 7，不访问真实用户 DB。Diary 正文只通过专用 Rust repository/本地 service 读写；Workspace Dashboard 只读取当天是否有非空日记的布尔值。`workspace/diary` 使用纯文本编辑器、日期导航、近期日期提示与有序防抖自动保存；错误保留草稿并可重试。记录见 `docs/v2-phase-3-1-verification.md`。

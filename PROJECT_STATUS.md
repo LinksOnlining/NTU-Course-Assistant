@@ -4,8 +4,8 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3.0 PASS；Phase 3.1 待执行。** Phase 3.0 完成当前隐私/领域审计、Personal Context Privacy Contract 与 schema 7 proposal；没有运行时功能或 schema bump。`npm run verify` PASS：200 unit、89 architecture、705 UI PASS / 15 条件跳过。Phase 2.0–2.7 保持 COMPLETE（记录见 `docs/v2-phase-2-verification.md`）；Phase 3 总授权为连续执行 3.0–3.7。当前 schema 仍为 6、产品版本仍为 1.3.1；Production EXE 未运行、Installer 未安装、真实用户 DB 未访问。后续 3.1 只允许一条 schema 6→7 迁移；不得开始 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
-- Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 为唯一外网能力且默认关闭、仅使用用户主动选择的城市；Routine 只建议并需用户确认。Phase 3.0 文档提交后工作区 clean。
+- **当前状态：Phase 3.0 PASS；Phase 3.1 PASS；Phase 3.2 下一步。** 本阶段实际生产迁移仅 schema `6→7`；Debug 路径保持 `<app_local_data_dir>/dev-v2/courses.sqlite3`，Release 路径保持 `<app_local_data_dir>/courses.sqlite3`。Phase 3.1 已提供本地 Diary 存储、自动保存/重试、日期导航和 Dashboard 私密状态；详细记录见 `docs/v2-phase-3-1-verification.md`。全量 `npm run verify` PASS：204 unit、93 architecture、732 UI PASS / 15 条件跳过；Rust 58 tests、fmt、clippy PASS。版本仍为 1.3.1；未运行 Production EXE、未安装 Installer、未访问真实用户 DB。Phase 3 连续授权仍为 3.0–3.7；不得开始 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
+- Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 为唯一外网能力且默认关闭、仅使用用户主动选择的城市；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 
 - 当前开发分支：`v2/workspace-rebase`，从稳定 `main` commit `3f2d580d2423bdb19d2753023db6414b5408c546` 创建；`main` 继续代表稳定 1.x 基线。
