@@ -3,12 +3,40 @@ export interface WeatherLocation {
   readonly latitude: number;
   readonly longitude: number;
   readonly timezone: string | null;
+  /** Provider-reported parent areas; no street address or house number is kept. */
+  readonly country?: string;
+  readonly admin1?: string;
+  readonly admin2?: string;
+  readonly admin3?: string;
+  readonly admin4?: string;
+  readonly precision?: WeatherLocationPrecision;
+  readonly source?: "manual" | "device";
 }
+
+export type WeatherLocationPrecision =
+  "locality" | "district" | "city" | "region" | "coordinatesOnly" | "unknown";
 
 export interface WeatherProvider {
   searchLocation(query: string, signal?: WeatherRequestSignal): Promise<readonly WeatherLocation[]>;
   fetchForecast(location: WeatherLocation, signal?: WeatherRequestSignal): Promise<WeatherSnapshot>;
 }
+
+export interface ReverseGeocodingProvider {
+  reverseGeocode(
+    latitude: number,
+    longitude: number,
+    signal?: WeatherRequestSignal,
+  ): Promise<WeatherLocation | null>;
+}
+
+export type WorkspaceWeatherProvider = WeatherProvider & ReverseGeocodingProvider;
+
+export type WeatherLocationRequestState =
+  | { readonly kind: "idle" }
+  | { readonly kind: "locating" }
+  | { readonly kind: "resolving" }
+  | { readonly kind: "error"; readonly message: string }
+  | { readonly kind: "notice"; readonly message: string };
 
 export interface WeatherRequestSignal {
   readonly aborted: boolean;

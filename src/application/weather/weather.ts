@@ -1,10 +1,50 @@
-import type { TemperatureUnit, WeatherLocation, WeatherSnapshot } from "../../types/weather.ts";
+import type {
+  TemperatureUnit,
+  WeatherLocation,
+  WeatherLocationPrecision,
+  WeatherSnapshot,
+  WorkspaceWeatherProvider,
+} from "../../types/weather.ts";
 import { createOpenMeteoProvider } from "../../services/weather-provider.ts";
-import type { WeatherProvider } from "../../types/weather.ts";
+import { createPhotonReverseGeocodingProvider } from "../../services/reverse-geocoding-provider.ts";
 
 /** Weather Application boundary owns the production provider selection. */
-export function createWorkspaceWeatherProvider(): WeatherProvider {
-  return createOpenMeteoProvider();
+export function createWorkspaceWeatherProvider(): WorkspaceWeatherProvider {
+  return { ...createOpenMeteoProvider(), ...createPhotonReverseGeocodingProvider() };
+}
+
+export function weatherLocationHierarchy(location: WeatherLocation): string[] {
+  return [
+    location.displayName,
+    location.admin4,
+    location.admin3,
+    location.admin2,
+    location.admin1,
+    location.country,
+  ].filter((part, index, parts): part is string => Boolean(part) && parts.indexOf(part) === index);
+}
+
+export function weatherLocationPrecisionLabel(
+  precision: WeatherLocationPrecision | undefined,
+): string {
+  switch (precision ?? "unknown") {
+    case "locality":
+      return "街镇/片区级";
+    case "district":
+      return "区县级";
+    case "city":
+      return "城市级";
+    case "region":
+      return "省/州级";
+    case "coordinatesOnly":
+      return "地点名称暂不可解析";
+    case "unknown":
+      return "精度信息未提供";
+  }
+}
+
+export function weatherLocationSourceLabel(source: WeatherLocation["source"]): string {
+  return source === "device" ? "当前位置" : "手动选择";
 }
 
 export const WEATHER_FRESH_FOR_MS = 30 * 60 * 1000;

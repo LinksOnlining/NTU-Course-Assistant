@@ -4,7 +4,7 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
   align-self: center;
   padding: var(--space-5) clamp(var(--space-3), 4vw, var(--space-8));
   overflow: auto;
@@ -20,7 +20,7 @@
 .workspace-search-header h2 {
   margin: var(--space-1) 0;
   color: var(--text-heading);
-  font-size: clamp(22px, 2.4vw, 30px);
+  font-size: clamp(21px, 2.2vw, 28px);
 }
 
 .workspace-search-header p {
@@ -29,20 +29,18 @@
 }
 
 .workspace-search-eyebrow {
-  color: var(--text-accent-muted) !important;
+  color: var(--text-muted) !important;
   font-size: var(--font-size-secondary);
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  font-weight: 550;
 }
 
-.workspace-search-back,
-.workspace-search-field > button {
+.workspace-search-back {
   min-height: 38px;
   padding: 0 var(--space-3);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-control);
-  background: var(--surface-primary);
-  color: var(--text-button);
+  background: transparent;
+  color: var(--text-secondary);
   font: inherit;
 }
 
@@ -59,8 +57,30 @@
 }
 
 .workspace-search-field:focus-within {
-  outline: 3px solid var(--focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+
+.workspace-search-clear {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 23px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.workspace-search-clear:hover {
+  background: var(--surface-hover);
+  color: var(--text-heading);
 }
 
 .workspace-search-icon {
@@ -79,10 +99,16 @@
   color: var(--text-primary);
   font: inherit;
   font-size: 17px;
+  user-select: text;
 }
 
 .workspace-search-field input::placeholder {
   color: var(--text-muted);
+}
+
+.workspace-search-field input::-webkit-search-cancel-button {
+  display: none;
+  appearance: none;
 }
 
 .workspace-search-state {
@@ -137,10 +163,15 @@
   color: var(--text-primary);
   font: inherit;
   text-align: left;
+  user-select: text;
   transition:
     border-color var(--motion-standard) ease,
     background-color var(--motion-standard) ease,
     transform var(--motion-standard) ease;
+}
+
+.workspace-search-result * {
+  user-select: text;
 }
 
 .workspace-search-result:hover {
@@ -151,7 +182,7 @@
 
 .workspace-search-result:focus-visible,
 .workspace-search-back:focus-visible,
-.workspace-search-field > button:focus-visible {
+.workspace-search-clear:focus-visible {
   outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }

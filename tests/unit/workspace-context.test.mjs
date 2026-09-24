@@ -125,10 +125,16 @@ test("context counts open, overdue, and today's tasks without counting completed
 test("context exposes safe weather summary and only Diary/Inbox status", () => {
   const weatherSnapshot = {
     location: {
-      displayName: "南通 · 江苏 · 中国",
-      latitude: 31.98,
-      longitude: 120.89,
+      displayName: "观音山街道",
+      latitude: 31.223,
+      longitude: 120.897,
       timezone: "Asia/Shanghai",
+      admin1: "江苏省",
+      admin2: "南通市",
+      admin3: "崇川区",
+      admin4: "观音山街道",
+      source: "device",
+      precision: "locality",
     },
     fetchedAt: "2026-09-23T08:00:00Z",
     timezone: "Asia/Shanghai",
@@ -150,7 +156,7 @@ test("context exposes safe weather summary and only Diary/Inbox status", () => {
     personalTasks: [personalTask("private title", null, null)],
   });
   assert.deepEqual(result.weatherSummary, {
-    location: "南通 · 江苏 · 中国",
+    location: "观音山街道",
     condition: "局部多云",
     temperature: "22°C",
   });
@@ -158,7 +164,10 @@ test("context exposes safe weather summary and only Diary/Inbox status", () => {
   assert.equal(result.pendingInboxCount, 2);
   assert.equal(context({ weatherSnapshot: null }).weatherSummary, null);
   const json = JSON.stringify(result);
-  assert.doesNotMatch(json, /private task description|must not leak|diaryBody|inboxRaw/u);
+  assert.doesNotMatch(
+    json,
+    /private task description|must not leak|diaryBody|inboxRaw|31\.223|120\.897|江苏省|南通市|崇川区/u,
+  );
 });
 
 test("a new local date and time deterministically refresh current-item selection", () => {
@@ -237,7 +246,7 @@ test("Dashboard overview and module status are projected from WorkspaceContext",
   assert.equal(model.todayItemCount, model.context.todayItemCount);
   assert.equal(model.hasDiaryToday, model.context.hasDiaryToday);
   assert.equal(model.pendingInboxCount, model.context.pendingInboxCount);
-  assert.equal(model.todaySummaryText, "1 项安排 · 2 个待办");
+  assert.equal(model.todaySummaryText, "1 项安排 · 1 个待办");
 });
 
 test("Routine suggestion is contributed through its registered Context provider", () => {

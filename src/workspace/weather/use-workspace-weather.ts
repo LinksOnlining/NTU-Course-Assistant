@@ -19,17 +19,20 @@ import type {
   WeatherSettings,
   WeatherSnapshot,
   WeatherViewState,
-  WeatherProvider,
+  WeatherLocationRequestState,
+  WorkspaceWeatherProvider,
 } from "../../types/weather.ts";
 
 export interface WorkspaceWeatherController {
   readonly settings: WeatherSettings;
   readonly viewState: WeatherViewState;
   readonly searchState: WeatherSearchState;
+  readonly locationRequestState: WeatherLocationRequestState;
   readonly isRefreshing: boolean;
   readonly storageWarning: string;
   readonly searchLocation: (query: string) => Promise<void>;
   readonly selectLocation: (location: WeatherLocation) => void;
+  readonly useCurrentLocation: () => Promise<void>;
   readonly setEnabled: (enabled: boolean) => void;
   readonly setTemperatureUnit: (unit: TemperatureUnit) => void;
   readonly refresh: () => Promise<void>;
@@ -37,6 +40,35 @@ export interface WorkspaceWeatherController {
 
 const DEFAULT_PROVIDER = createWorkspaceWeatherProvider();
 const SERVICE_ERROR = "天气服务暂时无法访问。请检查网络后重试。";
+const LOCATION_ERROR = "无法获取当前位置。请检查定位权限，或手动搜索地点。";
+
+function readCurrentPosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      reject(new Error("location-unavailable"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 12_000,
+    });
+  });
+}
+
+function roundedWeatherCoordinate(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function geolocationErrorMessage(error: unknown): string {
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? (error as { code?: unknown }).code
+      : null;
+  if (code === 1) return "定位权限未获准。你仍可手动搜索地点。";
+  if (code === 3) return "定位超时。请重试，或手动搜索地点。";
+  return LOCATION_ERROR;
+}
 
 function viewForCache(
   cache: WeatherSnapshot | null,
@@ -58,18 +90,22 @@ function initialViewState(settings: WeatherSettings): WeatherViewState {
 }
 
 export function useWorkspaceWeather(
-  provider: WeatherProvider = DEFAULT_PROVIDER,
+  provider: WorkspaceWeatherProvider = DEFAULT_PROVIDER,
 ): WorkspaceWeatherController {
   const [settings, setSettings] = useState(loadWeatherSettings);
   const [viewState, setViewState] = useState<WeatherViewState>(() =>
     initialViewState(loadWeatherSettings()),
   );
   const [searchState, setSearchState] = useState<WeatherSearchState>({ kind: "idle" });
+  const [locationRequestState, setLocationRequestState] = useState<WeatherLocationRequestState>({
+    kind: "idle",
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [storageWarning, setStorageWarning] = useState("");
   const refreshController = useRef<AbortController | null>(null);
   const searchController = useRef<AbortController | null>(null);
   const refreshGeneration = useRef(0);
+  const locationGeneration = useRef(0);
   const location = settings.location;
   const locationKey = location
     ? `${weatherLocationKey(location)}|${location.displayName}|${location.timezone ?? ""}`
@@ -166,25 +202,98 @@ export function useWorkspaceWeather(
 
   const selectLocation = useCallback(
     (nextLocation: WeatherLocation) => {
+      locationGeneration.current += 1;
       refreshController.current?.abort();
       refreshGeneration.current += 1;
       removeWeatherCache();
-      persistSettings({ ...settings, location: nextLocation });
+      persistSettings({
+        ...settings,
+        location: { ...nextLocation, source: nextLocation.source ?? "manual" },
+      });
       setSearchState({ kind: "idle" });
+      setLocationRequestState({ kind: "idle" });
       setIsRefreshing(false);
       setViewState({ kind: "loading" });
     },
     [persistSettings, settings],
   );
 
+  const useCurrentLocation = useCallback(async () => {
+    if (!settings.enabled) return;
+    const generation = ++locationGeneration.current;
+    setLocationRequestState({ kind: "locating" });
+    try {
+      const position = await readCurrentPosition();
+      if (generation !== locationGeneration.current) return;
+      const { latitude: rawLatitude, longitude: rawLongitude, accuracy } = position.coords;
+      if (
+        !Number.isFinite(rawLatitude) ||
+        rawLatitude < -90 ||
+        rawLatitude > 90 ||
+        !Number.isFinite(rawLongitude) ||
+        rawLongitude < -180 ||
+        rawLongitude > 180
+      ) {
+        setLocationRequestState({
+          kind: "error",
+          message: "无法确认当前位置坐标。你仍可手动搜索地点。",
+        });
+        return;
+      }
+      if (!Number.isFinite(accuracy) || accuracy > 10_000) {
+        setLocationRequestState({
+          kind: "error",
+          message: "当前位置精度较低，暂未用于天气。请重试定位，或手动搜索区县。",
+        });
+        return;
+      }
+      const latitude = roundedWeatherCoordinate(rawLatitude);
+      const longitude = roundedWeatherCoordinate(rawLongitude);
+      setLocationRequestState({ kind: "resolving" });
+      let resolved: WeatherLocation | null = null;
+      try {
+        resolved = await provider.reverseGeocode(latitude, longitude);
+      } catch {
+        // Forecast may still use the selected coordinates without inventing a place name.
+      }
+      if (generation !== locationGeneration.current) return;
+      const selected: WeatherLocation = {
+        ...(resolved ?? {
+          displayName: "地点暂不可解析",
+          timezone: null,
+          precision: "coordinatesOnly" as const,
+        }),
+        latitude,
+        longitude,
+        source: "device",
+      };
+      selectLocation(selected);
+      setLocationRequestState({
+        kind: "notice",
+        message:
+          selected.precision === "coordinatesOnly"
+            ? "天气已切换到当前位置坐标，但地点名称暂不可解析；你也可以手动搜索区县。"
+            : accuracy > 2_000
+              ? `已使用当前位置获取天气（系统估算误差约 ${Math.round(accuracy / 1000)} 公里）。`
+              : "已使用当前位置获取天气；仅保存当前天气地点，不记录位置历史。",
+      });
+    } catch (error) {
+      if (generation === locationGeneration.current) {
+        setLocationRequestState({ kind: "error", message: geolocationErrorMessage(error) });
+      }
+    }
+  }, [provider, selectLocation, settings.enabled]);
+
   const setEnabled = useCallback(
     (enabled: boolean) => {
       if (!enabled) {
+        locationGeneration.current += 1;
         refreshController.current?.abort();
         refreshGeneration.current += 1;
         searchController.current?.abort();
         setIsRefreshing(false);
         setSearchState({ kind: "idle" });
+        setLocationRequestState({ kind: "idle" });
         setViewState({ kind: "disabled" });
       }
       persistSettings({ ...settings, enabled });
@@ -207,10 +316,12 @@ export function useWorkspaceWeather(
     settings: settings ?? DEFAULT_WEATHER_SETTINGS,
     viewState,
     searchState,
+    locationRequestState,
     isRefreshing,
     storageWarning,
     searchLocation,
     selectLocation,
+    useCurrentLocation,
     setEnabled,
     setTemperatureUnit,
     refresh,

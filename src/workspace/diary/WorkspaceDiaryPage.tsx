@@ -144,7 +144,11 @@ export function WorkspaceDiaryPage({
           <h2 id="workspace-diary-title">日记</h2>
           <p>仅保存在本机，不会发送到网络或进入日志。</p>
         </div>
-        <div className="workspace-diary-status" role={saveState === "failed" ? "alert" : "status"}>
+        <div
+          className="workspace-diary-status"
+          data-save-state={saveState}
+          role={saveState === "failed" ? "alert" : "status"}
+        >
           <span>{statusText()}</span>
           {saveState === "failed" && (
             <button type="button" onClick={() => void autosaveRef.current?.flush()}>

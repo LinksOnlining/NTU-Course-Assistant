@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   formatTemperature,
   formatWeatherDate,
   formatWeatherTime,
+  weatherLocationHierarchy,
+  weatherLocationPrecisionLabel,
+  weatherLocationSourceLabel,
   weatherCodeLabel,
 } from "../../application/weather/weather.ts";
 import type { WorkspaceWeatherController } from "./use-workspace-weather.ts";
@@ -14,7 +17,32 @@ interface WeatherHeaderProps {
 
 export function WeatherHeader({ weather }: WeatherHeaderProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLElement>(null);
   const { settings, viewState } = weather;
+  useEffect(() => {
+    if (!isOpen || !settings.enabled || !settings.location) return;
+    popoverRef.current?.focus();
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isOpen, settings.enabled, settings.location]);
+  useEffect(() => {
+    if (!settings.enabled || !settings.location) setIsOpen(false);
+  }, [settings.enabled, settings.location]);
+
   if (!settings.enabled || !settings.location) return null;
 
   const snapshot =
@@ -23,36 +51,58 @@ export function WeatherHeader({ weather }: WeatherHeaderProps) {
     ? formatTemperature(snapshot.current.temperatureCelsius, settings.temperatureUnit)
     : "天气";
   const status = snapshot ? weatherCodeLabel(snapshot.current.weatherCode) : "查看天气";
+  const hierarchy = weatherLocationHierarchy(settings.location);
 
   return (
-    <div className="weather-header">
+    <div className="weather-header" ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="weather-header-button"
-        aria-label={`天气：${temperature}，${status}`}
+        title={settings.location.displayName}
+        aria-label={`天气：${settings.location.displayName}，${temperature}，${status}`}
         aria-expanded={isOpen}
+        aria-haspopup="dialog"
         aria-controls="weather-popover"
         onClick={() => setIsOpen((open) => !open)}
       >
         <span aria-hidden="true">☁</span>
+        <span className="weather-header-location">{settings.location.displayName}</span>
         <strong>{temperature}</strong>
-        <span>{status}</span>
+        <span className="weather-header-status">{status}</span>
       </button>
       {isOpen && (
-        <section id="weather-popover" className="weather-popover" aria-label="天气预报">
+        <section
+          ref={popoverRef}
+          id="weather-popover"
+          className="weather-popover"
+          role="dialog"
+          aria-labelledby="weather-popover-title"
+          tabIndex={-1}
+        >
           <div className="weather-popover-heading">
             <div>
-              <h2>{settings.location.displayName}</h2>
+              <h2 id="weather-popover-title">{settings.location.displayName}</h2>
+              {hierarchy.length > 1 && (
+                <p className="weather-location-hierarchy">{hierarchy.slice(1).join(" · ")}</p>
+              )}
               <p>
                 {viewState.kind === "stale" ? "缓存天气 · " : "天气更新于 "}
                 {snapshot ? new Date(snapshot.fetchedAt).toLocaleString("zh-CN") : "正在获取…"}
+              </p>
+              <p className="weather-location-source">
+                {weatherLocationSourceLabel(settings.location.source)} · 精度：
+                {weatherLocationPrecisionLabel(settings.location.precision)}
               </p>
             </div>
             <button
               type="button"
               className="icon-button"
               aria-label="关闭天气详情"
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                setIsOpen(false);
+                triggerRef.current?.focus();
+              }}
             >
               ×
             </button>
@@ -104,7 +154,10 @@ export function WeatherHeader({ weather }: WeatherHeaderProps) {
                   </div>
                 ))}
               </div>
-              <p className="weather-attribution">天气数据由 Open-Meteo 提供，遵循 CC BY 4.0</p>
+              <p className="weather-attribution">
+                天气数据由 Open-Meteo 提供（CC BY 4.0）；地名由 Photon / OpenStreetMap 解析。©
+                OpenStreetMap contributors。
+              </p>
             </>
           ) : (
             <p

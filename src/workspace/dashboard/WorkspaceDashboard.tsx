@@ -403,6 +403,10 @@ export function WorkspaceDashboard({
   const date = localDateKey(now);
   const nowTime = localTimeKey(now);
   const [retry, setRetry] = useState(0);
+  const [showTodayDetails, setShowTodayDetails] = useState(false);
+  const todayOverviewRef = useRef<HTMLElement>(null);
+  const todayTriggerRef = useRef<HTMLButtonElement>(null);
+  const todayPopoverRef = useRef<HTMLElement>(null);
   const { sources, error } = useDashboardSources(ready, date, termConfig, retry);
   const model = useMemo(
     () =>
@@ -411,6 +415,25 @@ export function WorkspaceDashboard({
         : null,
     [date, nowTime, sources, weatherSnapshot],
   );
+
+  useEffect(() => {
+    if (!showTodayDetails) return;
+    todayPopoverRef.current?.focus();
+    const onPointerDown = (event: PointerEvent) => {
+      if (!todayOverviewRef.current?.contains(event.target as Node)) setShowTodayDetails(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setShowTodayDetails(false);
+      todayTriggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [showTodayDetails]);
 
   if (!ready) {
     return (
@@ -446,13 +469,75 @@ export function WorkspaceDashboard({
   return (
     <div className="workspace-dashboard-page">
       <section
+        ref={todayOverviewRef}
         className="workspace-today-overview"
         aria-label="今日概览"
         data-testid="workspace-today-overview"
       >
         <div className="workspace-ambient" aria-hidden="true" />
-        <h2>{model.todayStatusText}</h2>
-        <p>{model.todaySummaryText}</p>
+        <button
+          ref={todayTriggerRef}
+          type="button"
+          className="workspace-today-overview-trigger"
+          aria-haspopup="dialog"
+          aria-expanded={showTodayDetails}
+          aria-controls="workspace-today-details"
+          onClick={() => setShowTodayDetails((open) => !open)}
+        >
+          <span className="workspace-today-status" role="heading" aria-level={2}>
+            {model.todayStatusText}
+          </span>
+          <span className="workspace-today-summary">{model.todaySummaryText}</span>
+        </button>
+        {showTodayDetails && (
+          <section
+            ref={todayPopoverRef}
+            id="workspace-today-details"
+            className="workspace-today-details"
+            role="dialog"
+            aria-label="今日详情"
+            tabIndex={-1}
+          >
+            <div className="workspace-today-details-section">
+              <h3>今日安排（{model.todayItemCount} 项）</h3>
+              {model.todayArrangements.length ? (
+                <ul aria-label="今日安排列表">
+                  {model.todayArrangements.map((item) => (
+                    <li
+                      key={item.id}
+                      className={item.cancelled ? "workspace-today-detail-cancelled" : undefined}
+                    >
+                      <time>
+                        {item.startTime}–{item.endTime}
+                      </time>
+                      <strong>{item.title}</strong>
+                      <span>{item.cancelled ? "已停课" : item.sourceLabel}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>今天没有安排。</p>
+              )}
+            </div>
+            <div className="workspace-today-details-section">
+              <h3>今日待办（{model.taskSummary.todayItems.length} 项）</h3>
+              {model.taskSummary.todayItems.length ? (
+                <ul aria-label="今日待办列表">
+                  {model.taskSummary.todayItems.map((task) => (
+                    <li key={task.id}>
+                      <strong>{task.title}</strong>
+                      <span>
+                        {task.deadlineLabel} · {task.sourceLabel}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>没有逾期或今天截止的未完成待办。</p>
+              )}
+            </div>
+          </section>
+        )}
       </section>
       <div className="workspace-dashboard" data-testid="workspace-dashboard" data-date={model.date}>
         <TimelineCard model={model} nowTime={nowTime} onNavigate={onNavigate} />

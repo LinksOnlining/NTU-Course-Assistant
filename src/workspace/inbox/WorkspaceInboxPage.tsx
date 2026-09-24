@@ -275,10 +275,16 @@ export function WorkspaceInboxPage({ onNavigate, initialItemId }: WorkspaceInbox
                     {new Date(item.createdAt).toLocaleString("zh-CN")}
                   </time>
                 </header>
-                <p className="workspace-inbox-raw">{item.rawText}</p>
+                <section className="workspace-inbox-raw-section" aria-label="原始内容">
+                  <h3 className="workspace-inbox-raw-label">原始内容</h3>
+                  <p className="workspace-inbox-raw">{item.rawText}</p>
+                </section>
                 {editable ? (
                   <div className="workspace-inbox-preview">
                     <h3>整理预览</h3>
+                    <p className="workspace-inbox-safety-hint">
+                      尚未创建任务或日程，确认后才会保存。
+                    </p>
                     {proposal.kind === "unknown" && (
                       <label>
                         整理为

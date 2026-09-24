@@ -307,6 +307,16 @@ test("Dashboard Inbox count opens the local raw-first review and confirms user-e
   const taskItem = page
     .getByTestId("inbox-item")
     .filter({ hasText: "任务：整理材料 截止明天 18:00" });
+  await expect(taskItem.getByRole("region", { name: "原始内容" })).toContainText(
+    "任务：整理材料 截止明天 18:00",
+  );
+  expect(
+    await taskItem
+      .locator(".workspace-inbox-raw")
+      .evaluate((element) => getComputedStyle(element).userSelect),
+  ).toBe("text");
+  await expect(taskItem).toContainText("整理预览");
+  await expect(taskItem).toContainText("尚未创建任务或日程，确认后才会保存。");
   await expect(taskItem.getByLabel("标题")).toHaveValue("整理材料");
   await taskItem.getByLabel("标题").fill("用户确认后的材料任务");
   await taskItem.getByRole("button", { name: "确认创建任务" }).click();
@@ -481,6 +491,7 @@ test("Diary dashboard status is private and the Diary route saves plain text", a
   const editor = page.getByRole("textbox", { name: /日记正文/u });
   await expect(editor).toBeVisible();
   await expect(editor).toHaveValue("private diary fixture body");
+  expect(await editor.evaluate((element) => getComputedStyle(element).userSelect)).toBe("text");
   const surface = page.locator(".workspace-diary-editor");
   const lightSurface = await surface.evaluate(
     (element) => getComputedStyle(element).backgroundColor,
@@ -514,6 +525,14 @@ test("Diary save failure keeps the draft visible and can be retried", async ({ p
   await page.getByRole("button", { name: /工作台.*日记/u }).click();
   await expect(page.getByRole("alert")).toContainText("保存失败");
   await expect(editor).toHaveValue("保留在编辑器中的草稿");
+  const diaryStatus = page.locator(".workspace-diary-status");
+  await expect(diaryStatus).toHaveAttribute("data-save-state", "failed");
+  const failedStatusStyle = await diaryStatus.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, backgroundColor: style.backgroundColor };
+  });
+  expect(failedStatusStyle.color).not.toBe(failedStatusStyle.backgroundColor);
+  expect(failedStatusStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
   await page.evaluate(() =>
     (
       window as unknown as {
@@ -523,6 +542,7 @@ test("Diary save failure keeps the draft visible and can be retried", async ({ p
   );
   await page.getByRole("button", { name: "重试保存" }).click();
   await expect(page.getByRole("status")).toContainText("已保存");
+  await expect(page.locator(".workspace-diary-status")).toHaveAttribute("data-save-state", "saved");
   await page.getByRole("button", { name: /工作台.*日记/u }).click();
   await expect(page.getByRole("button", { name: /日记，今天已记录/u })).toBeVisible();
 });
@@ -731,6 +751,12 @@ test("empty Academic data still renders the complete axis and truthful empty/una
   await expect(page.getByText("暂无未完成任务")).toBeVisible();
   await expect(page.getByText("尚未开放").first()).toBeVisible();
   await expect(page.getByText(/^0$/u)).toHaveCount(0);
+  await page.getByRole("button", { name: /今天暂无安排/u }).click();
+  const details = page.getByRole("dialog", { name: "今日详情" });
+  await expect(details).toContainText("今日安排（0 项）");
+  await expect(details).toContainText("今天没有安排。");
+  await expect(details).toContainText("今日待办（0 项）");
+  await expect(details).toContainText("没有逾期或今天截止的未完成待办。");
 });
 
 test("Dashboard combines course, planner event and task block while keeping personal deadlines off the timeline", async ({
@@ -790,6 +816,18 @@ test("Dashboard combines course, planner event and task block while keeping pers
         updatedAt: "",
         completedAt: null,
       },
+      {
+        id: "tomorrow-task",
+        title: "明日事项",
+        description: null,
+        status: "open",
+        priority: "medium",
+        deadlineDate: "2026-09-24",
+        deadlineTime: "10:00",
+        createdAt: "",
+        updatedAt: "",
+        completedAt: null,
+      },
     ],
   });
 
@@ -802,10 +840,41 @@ test("Dashboard combines course, planner event and task block while keeping pers
   await expect(timeline).toContainText("项目讨论");
   await expect(timeline).toContainText("完成实验报告");
   await expect(page.getByTestId("workspace-today-overview")).toContainText("3 项安排");
-  await expect(page.getByTestId("workspace-today-overview")).toContainText("6 个待办");
+  await expect(page.getByTestId("workspace-today-overview")).toContainText("5 个待办");
   await expect(page.locator(".workspace-task-list")).toContainText("个人");
   await expect(timeline).not.toContainText("只设置截止日期");
   await expect(timeline.getByTestId("timeline-item").nth(2)).toContainText("15:00–16:00");
+
+  const overview = page.getByTestId("workspace-today-overview");
+  const summaryTrigger = overview.getByRole("button");
+  const overviewBoundsBefore = await summaryTrigger.boundingBox();
+  await summaryTrigger.focus();
+  await summaryTrigger.press("Enter");
+  const todayDetails = page.getByRole("dialog", { name: "今日详情" });
+  await expect(todayDetails).toBeVisible();
+  await expect(todayDetails).toContainText("今日安排（3 项）");
+  await expect(todayDetails).toContainText("今日待办（5 项）");
+  await expect(todayDetails).toContainText("数学基础");
+  await expect(todayDetails).toContainText("项目讨论");
+  await expect(todayDetails).toContainText("完成实验报告");
+  await expect(todayDetails).toContainText("逾期事项");
+  await expect(todayDetails).toContainText("今天事项");
+  await expect(todayDetails).toContainText("未来事项");
+  await expect(todayDetails).not.toContainText("明日事项");
+  await expect(todayDetails).not.toContainText("无截止事项");
+  const arrangementRows = todayDetails.locator('[aria-label="今日安排列表"] > li');
+  await expect(arrangementRows).toHaveCount(3);
+  await expect(arrangementRows.nth(0)).toContainText("数学基础");
+  await expect(arrangementRows.nth(1)).toContainText("项目讨论");
+  await expect(arrangementRows.nth(2)).toContainText("完成实验报告");
+  expect(await summaryTrigger.boundingBox()).toEqual(overviewBoundsBefore);
+  await todayDetails.press("Escape");
+  await expect(todayDetails).toHaveCount(0);
+  await expect(summaryTrigger).toBeFocused();
+  await summaryTrigger.press("Space");
+  await expect(todayDetails).toBeVisible();
+  await page.locator(".shell-brand h1").click();
+  await expect(todayDetails).toHaveCount(0);
 
   await page.getByRole("button", { name: "查看全部", exact: true }).click();
   await expect(page.getByTestId("workspace-tasks")).toBeVisible();
@@ -821,7 +890,7 @@ test("Dashboard combines course, planner event and task block while keeping pers
     .getByRole("navigation", { name: "产品模式" })
     .getByRole("button", { name: "工作台" })
     .click();
-  await expect(page.getByTestId("workspace-today-overview")).toContainText("7 个待办");
+  await expect(page.getByTestId("workspace-today-overview")).toContainText("6 个待办");
   await expect(page.locator(".workspace-task-list")).toContainText("整理项目资料");
 });
 
@@ -843,6 +912,7 @@ test("Weather stays offline while disabled and renders only after explicit city 
             name: "南通",
             admin1: "江苏",
             country: "中国",
+            feature_code: "ADM2",
             latitude: 31.98,
             longitude: 120.89,
             timezone: "Asia/Shanghai",
@@ -902,18 +972,44 @@ test("Weather stays offline while disabled and renders only after explicit city 
     .click();
   await expect(settings.getByTestId("weather-settings").getByLabel("启用天气")).not.toBeChecked();
   await settings.getByLabel("启用天气").check();
-  await settings.getByLabel("城市或地区").fill("南通");
+  await settings.getByLabel("手动选择城市、区县或街镇").fill("南通");
   expect(requests).toEqual([]);
   await settings.getByRole("button", { name: "搜索地点" }).click();
-  await expect(settings.getByRole("button", { name: /南通 · 江苏 · 中国/u })).toBeVisible();
-  await settings.getByRole("button", { name: /南通 · 江苏 · 中国/u }).click();
+  await expect(settings.getByRole("button", { name: /南通.*江苏.*中国/u })).toBeVisible();
+  await settings.getByRole("button", { name: /南通.*江苏.*中国/u }).click();
   await settings.getByLabel("温度单位").selectOption("fahrenheit");
   await settings.getByRole("button", { name: "取消" }).click();
-  await expect(page.getByRole("button", { name: /天气：72°F/u })).toBeVisible();
+  await expect(page.getByRole("button", { name: /天气：南通，72°F/u })).toBeVisible();
   expect(requests.some((url) => url.includes("api.open-meteo.com/v1/forecast"))).toBe(true);
-  await page.getByRole("button", { name: /天气：72°F/u }).click();
-  const popover = page.getByRole("region", { name: "天气预报" });
-  await expect(popover).toContainText("南通 · 江苏 · 中国");
+  const weatherTrigger = page.getByRole("button", { name: /天气：南通，72°F/u });
+  const weatherTriggerBounds = await weatherTrigger.boundingBox();
+  expect(weatherTriggerBounds!.height).toBeGreaterThanOrEqual(36);
+  await weatherTrigger.click();
+  const popover = page.getByRole("dialog", { name: "南通" });
+  expect(await weatherTrigger.boundingBox()).toEqual(weatherTriggerBounds);
+  await expect(popover.locator(".weather-location-hierarchy")).toContainText("江苏 · 中国");
+  await expect(popover).toContainText("精度：城市级");
+  await expect(popover).toContainText("手动选择 · 精度：城市级");
+  await page.mouse.move(0, 0);
+  const headerStyle = await page.locator(".weather-header-button").evaluate((element) => {
+    const style = getComputedStyle(element);
+    const alpha = Number(style.backgroundColor.match(/,\s*([0-9.]+)\)$/u)?.[1]);
+    return {
+      borderTopWidth: style.borderTopWidth,
+      transparentBackground: alpha < 1,
+      color: style.color,
+      backgroundColor: style.backgroundColor,
+    };
+  });
+  expect(headerStyle.borderTopWidth).toBe("0px");
+  expect(headerStyle.transparentBackground).toBe(true);
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+  const darkHeaderStyle = await page.locator(".weather-header-button").evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, backgroundColor: style.backgroundColor };
+  });
+  expect(darkHeaderStyle.color).not.toBe(darkHeaderStyle.backgroundColor);
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
   await expect(popover).toContainText("未来 6 小时");
   await expect(popover).toContainText("未来 7 天");
   await expect(popover).toContainText("Open-Meteo");
@@ -922,6 +1018,158 @@ test("Weather stays offline while disabled and renders only after explicit city 
   await popover.getByRole("button", { name: "刷新天气" }).click();
   await expect(popover).toContainText("正在显示缓存天气；暂时无法更新");
   await expect(popover).toContainText("缓存天气");
+  await page.keyboard.press("Escape");
+  await expect(popover).toHaveCount(0);
+  await expect(weatherTrigger).toBeFocused();
+  await weatherTrigger.click();
+  await expect(popover).toBeVisible();
+  await page.locator(".shell-brand h1").click();
+  await expect(popover).toHaveCount(0);
+});
+
+test("当前位置只在双重显式确认后请求，坐标先模糊化且低精度时保留手动入口", async ({ page }) => {
+  const requests: string[] = [];
+  await page.addInitScript(() => {
+    const state = { calls: 0, accuracy: 250 };
+    Object.assign(window, { __weatherGeoTest: state });
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: {
+        getCurrentPosition(
+          success: PositionCallback,
+          _error?: PositionErrorCallback | null,
+          _options?: PositionOptions,
+        ) {
+          state.calls += 1;
+          success({
+            coords: {
+              latitude: 31.2226,
+              longitude: 120.8974,
+              accuracy: state.accuracy,
+              altitude: null,
+              altitudeAccuracy: null,
+              heading: null,
+              speed: null,
+            } as GeolocationCoordinates,
+            timestamp: Date.now(),
+          } as GeolocationPosition);
+        },
+      },
+    });
+  });
+  page.on("request", (request) => {
+    if (/open-meteo\.com|photon\.komoot\.io/u.test(request.url())) requests.push(request.url());
+  });
+  await page.route("https://photon.komoot.io/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        features: [
+          {
+            properties: {
+              locality: "观音山街道",
+              district: "崇川区",
+              city: "南通市",
+              state: "江苏省",
+              country: "中国",
+              street: "不应保留的道路名",
+              housenumber: "88",
+            },
+          },
+        ],
+      }),
+    });
+  });
+  await page.route("https://api.open-meteo.com/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        timezone: "Asia/Shanghai",
+        current: {
+          time: "2026-09-23T20:00",
+          temperature_2m: 22,
+          apparent_temperature: 21,
+          weather_code: 2,
+          is_day: 1,
+          relative_humidity_2m: 65,
+        },
+        hourly: {
+          time: Array.from(
+            { length: 8 },
+            (_, index) => `2026-09-23T${String(20 + index).padStart(2, "0")}:00`,
+          ),
+          temperature_2m: Array(8).fill(22),
+          weather_code: Array(8).fill(2),
+          precipitation_probability: Array(8).fill(10),
+        },
+        daily: {
+          time: Array.from(
+            { length: 7 },
+            (_, index) => `2026-09-${String(23 + index).padStart(2, "0")}`,
+          ),
+          temperature_2m_max: Array(7).fill(27),
+          temperature_2m_min: Array(7).fill(19),
+          weather_code: Array(7).fill(2),
+          precipitation_probability_max: Array(7).fill(10),
+        },
+      }),
+    });
+  });
+  await seedDashboardRuntime(page);
+  expect(await page.evaluate(() => (window as any).__weatherGeoTest.calls)).toBe(0);
+
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "天气" })
+    .click();
+  await settings.getByLabel("启用天气").check();
+  await settings.getByRole("button", { name: "使用当前位置" }).click();
+  const locationConsent = settings.getByRole("region", { name: "当前位置使用说明" });
+  await expect(locationConsent).toBeVisible();
+  await locationConsent.getByRole("button", { name: "取消" }).click();
+  expect(await page.evaluate(() => (window as any).__weatherGeoTest.calls)).toBe(0);
+
+  await settings.getByRole("button", { name: "使用当前位置" }).click();
+  await settings.getByRole("button", { name: "同意并定位" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__weatherGeoTest.calls)).toBe(1);
+  await expect.poll(() => requests.some((url) => url.includes("api.open-meteo.com"))).toBe(true);
+  const reverseUrl = new URL(requests.find((url) => url.includes("photon.komoot.io"))!);
+  const forecastUrl = new URL(requests.find((url) => url.includes("api.open-meteo.com"))!);
+  expect(reverseUrl.searchParams.get("lat")).toBe("31.223");
+  expect(reverseUrl.searchParams.get("lon")).toBe("120.897");
+  expect(forecastUrl.searchParams.get("latitude")).toBe("31.223");
+  expect(forecastUrl.searchParams.get("longitude")).toBe("120.897");
+
+  await settings.getByRole("button", { name: "取消" }).click();
+  const weatherButton = page.getByRole("button", { name: /天气：观音山街道/u });
+  await expect(weatherButton).toBeVisible();
+  await weatherButton.click();
+  const details = page.getByRole("dialog", { name: "观音山街道" });
+  await expect(details.locator(".weather-location-hierarchy")).toContainText(
+    "崇川区 · 南通市 · 江苏省 · 中国",
+  );
+  await expect(details).toContainText("当前位置 · 精度：街镇/片区级");
+  await expect(page.locator("body")).not.toContainText("31.223");
+  await expect(page.locator("body")).not.toContainText("不应保留的道路名");
+  await page.keyboard.press("Escape");
+  await expect(weatherButton).toBeFocused();
+
+  await page.getByRole("button", { name: "设置" }).click();
+  const reopenedSettings = page.getByRole("dialog", { name: "设置" });
+  await reopenedSettings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "天气" })
+    .click();
+  await page.evaluate(() => ((window as any).__weatherGeoTest.accuracy = 15_000));
+  await reopenedSettings.getByRole("button", { name: "使用当前位置" }).click();
+  await reopenedSettings.getByRole("button", { name: "同意并定位" }).click();
+  await expect(reopenedSettings.getByRole("alert")).toContainText("精度较低");
+  await expect(reopenedSettings.getByLabel("手动选择城市、区县或街镇")).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__weatherGeoTest.calls)).toBe(2);
 });
 
 test("failed Weather requests never block offline core routes", async ({ page }) => {
@@ -946,7 +1194,7 @@ test("failed Weather requests never block offline core routes", async ({ page })
   await page.route("https://api.open-meteo.com/**", (route) => route.abort());
   await seedDashboardRuntime(page);
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
-  await page.getByRole("button", { name: /天气：天气/u }).click();
+  await page.getByRole("button", { name: /天气：南通/u }).click();
   await expect(page.getByRole("alert").filter({ hasText: "天气服务暂时无法访问" })).toBeVisible();
   await page.getByRole("button", { name: "关闭天气详情" }).click();
 
@@ -1096,9 +1344,30 @@ test("本机搜索可定位私人日记，支持无结果、键盘返回与多�
   );
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  expect(
+    await page
+      .locator(".workspace-task-list strong")
+      .first()
+      .evaluate((element) => getComputedStyle(element).userSelect),
+  ).toBe("text");
   await page.getByRole("button", { name: "搜索本机内容" }).click();
   const search = page.getByRole("searchbox", { name: "搜索本机内容" });
   await expect(search).toBeFocused();
+  expect(
+    await page.locator(".shell-header").evaluate((element) => getComputedStyle(element).userSelect),
+  ).toBe("none");
+  const searchField = page.locator(".workspace-search-field");
+  const searchBoundsBeforeFocus = await searchField.boundingBox();
+  await search.blur();
+  await search.focus();
+  expect(await searchField.boundingBox()).toEqual(searchBoundsBeforeFocus);
+  const descriptionBounds = await page
+    .locator(".workspace-search-header > div > p:last-child")
+    .boundingBox();
+  const inputBounds = await searchField.boundingBox();
+  const descriptionGap = inputBounds!.y - (descriptionBounds!.y + descriptionBounds!.height);
+  expect(descriptionGap).toBeGreaterThanOrEqual(10);
+  expect(descriptionGap).toBeLessThanOrEqual(16);
   expect(
     await page.evaluate(() => (window as any).__workspaceDashboardTest.getSearchDiaryReadCount()),
   ).toBe(0);
@@ -1108,9 +1377,18 @@ test("本机搜索可定位私人日记，支持无结果、键盘返回与多�
     };
   });
   await search.fill("PRIVATE");
+  const clearButton = page.getByRole("button", { name: "清除搜索" });
+  await expect(clearButton).toHaveText("×");
+  await clearButton.focus();
+  await expect(clearButton).toBeFocused();
+  await clearButton.click();
+  await search.fill("PRIVATE");
   const diaryResult = page.locator('.workspace-search-result[data-search-category="diaryEntry"]');
   await expect(diaryResult).toHaveCount(1);
   await expect(diaryResult).toHaveAttribute("data-object-type", "diaryEntry");
+  expect(
+    await diaryResult.locator("strong").evaluate((element) => getComputedStyle(element).userSelect),
+  ).toBe("text");
 
   for (const viewport of [
     { width: 1920, height: 1080 },

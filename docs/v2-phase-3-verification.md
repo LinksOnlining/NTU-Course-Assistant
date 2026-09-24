@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 3 综合验收
 
-日期：2026-09-24；结果：**Phase 3.0–3.7 与 Phase 3.M PASS；Phase 3 Overall = COMPLETE**；授权：Ethan 已授权自动综合验收，本结论不代表 v2 Release Ready。
+日期：2026-09-24；结果：**Phase 3.0–3.8 与 Phase 3.M PASS；Phase 3 Overall = COMPLETE**；本阶段基于 Ethan 已完成人工 review 的问题，并经授权由自动综合验收收口；不代表 v2 Release Ready。
 
 ## 基线与范围
 
@@ -94,6 +94,41 @@
 ## 已知限制与下一步
 
 - Diary 是每日纯文本，不含 Markdown / 标签 / PKM；Inbox 只接收文本，解析器是小型确定性本地规则；不支持模糊时间自动推断。
-- Weather 依赖 Open-Meteo 服务可用性与其当前条款；设备地理定位未实现。Routine 是软建议，不支持 RRULE / 自动重复任务。Search 仅限本机。AI 未实现。
+- Weather 依赖 Open-Meteo / Photon 服务可用性与其当前条款；设备定位仅在用户主动开启并确认后请求，不做后台轮询或位置历史。Routine 是软建议，不支持 RRULE / 自动重复任务。Search 仅限本机。AI 未实现。
 - 系统级品牌迁移、Installer compatibility、Updater E2E 尚未验证。Phase 3 COMPLETE 不等于 Release Ready。
-- Phase 3.M 与 Phase 3.7 最终门禁完成；下一步：等待 Ethan / ChatGPT 审核 Phase 3 总结并规划 Phase 4；本轮到此停止，不自动进入 Phase 4。
+- Phase 3.M、Phase 3.7 与 Phase 3.8 最终门禁完成；下一步仅等待 Ethan / ChatGPT 确认后进入 Phase 4；不自动进入 Phase 4。
+
+## Phase 3.8 — Windows 11 UI / UX Polish
+
+**状态：PASS。** 本阶段根据 Ethan 已完成的 Windows 11 真实界面 review 项进行小范围体验修整；按已给出的验收授权使用自动化验证收口，没有额外操作 Windows 桌面、安装器或真实用户数据。
+
+### 体验修改
+
+- **Search：** 输入框与结果区域保留可读、可选文本；焦点环与搜索头部布局稳定；将重复清除入口收敛为一个可访问的清除按钮，并保留键盘焦点路径。
+- **Weather Location：** 天气仍默认关闭且仅在用户操作后联网。手动搜索结果携带可靠的行政层级、定位精度及来源元数据。使用当前位置前需应用内二次确认及浏览器定位授权；坐标先四舍五入到三位小数，定位超时、精度差、权限拒绝或逆向地理解析失败均显示真实精度/失败状态，保留手动搜索和仅坐标天气回退，不猜测行政区、不保存位置历史或完整精度历史。
+- **Weather Header：** 以无边框、透明的紧凑行显示短地点与天气；完整层级、来源和精度放入不挤动布局的详情浮层，支持键盘、Escape、外部点击和深色主题。
+- **Dashboard：** Today 摘要与工作区之间增加轻微呼吸间距；紧凑窗口高度自动缩小，不扩大顶部画布。摘要入口可键盘操作并展示只读详情：课程/计划项按时间排序、显示来源与取消状态；任务仅含逾期或今天到期的未完成项；详情数目与摘要计数一致，并处理空状态、Esc/外部点击及焦点返回。
+- **Inbox：** 明确标注“原始内容”与“整理预览”，并提示预览在用户确认前不会写入任务或日程。
+- **Header / Diary：** Shell 头部标签不可被误选；课程、搜索结果、Inbox/Diary 正文仍可选择。Diary 已保存状态弱化显示，保存中与保存失败用各自清晰且不过度抢眼的状态表达；自动保存逻辑未改变。
+
+### Timeline 与架构边界
+
+- Timeline 几何改动：**NO**。仍为 **1 minute = 1px**；课程块、Current Time、滚动高度与时间业务坐标未因本阶段修改。
+- 00:00 / 24:00 边界标签仍由现有 UI regression 覆盖并保持在时间轴内容边界内。已知限制仍是自动定位时 viewport 顶边恰好切过整点刻度时，最上方可见的整点标签可能被裁切；本阶段不改变 Timeline，也未声称该限制已修复。
+- Weather 网络由独立 provider 适配器限定为 HTTPS 的 Open-Meteo 与 Photon；非天气页面不访问它们。定位只从用户操作路径触发。Search 继续本机读取；Dashboard 详情由 Workspace application projection 提供，不将 deadline 变为时间轴安排。Module Extension contract、数据库 schema、Rust 业务、产品身份、依赖、README/CHANGELOG 均未改变。
+
+### Phase 3.8 验收
+
+- 定向 Unit / Architecture：**31 PASS**；定向 1280×100 UI：**6 PASS**，覆盖天气权限与隐私、Dashboard 摘要、Search 与交互状态。
+- 完整 `npm run verify`：**PASS**。Unit **246 PASS**；Architecture **114 PASS**；UI **795 PASS / 15 条件跳过 / 0 FAIL**；TypeScript、Lint、Prettier 与 Vite production build 均 PASS。
+- Rust：`cargo test` **65 PASS / 0 FAIL**；`cargo fmt -- --check` **PASS**；`cargo clippy --all-targets -- -D warnings` **PASS**。
+- `npm run tauri build`：**PASS**。构建目标为 `%TEMP%\links-workplace-p38-target-20260924-182249\release`（仓库外隔离目录）。产物：EXE `ntu-course-assistant.exe`（67,399,168 bytes）；NSIS `NTU Course Assistant_1.3.1_x64-setup.exe`（52,173,642 bytes）及 `.sig`（436 bytes）；MSI `NTU Course Assistant_1.3.1_x64_en-US.msi`（54,177,792 bytes）及 `.sig`（436 bytes）。
+- 本阶段未运行 EXE、未安装 NSIS/MSI、未访问 Release DB 或真实用户数据；安装兼容性与 Updater E2E 仍未验证。没有使用 Computer Use 操作 Windows 界面。
+- 版本 `1.3.1`、identifier `com.ntu-course-assistant.desktop`、product name `NTU Course Assistant`、Windows 标题 `大学课程表`、schema `7` 保持不变；无 push、tag 或 Release。
+
+### 阶段状态
+
+- Phase 3.8：**PASS**。
+- Phase 3 Overall：**COMPLETE**。
+- Phase 3.M：**COMPLETE**。
+- Phase 4：**NOT STARTED**。下一步仅为等待 Ethan / ChatGPT 确认后进入 Phase 4。

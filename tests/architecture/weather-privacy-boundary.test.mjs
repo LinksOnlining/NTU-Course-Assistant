@@ -18,16 +18,23 @@ function sourceFiles(directory) {
 test("Weather network access is centralized and uses only the two exact HTTPS provider hosts", () => {
   const files = sourceFiles("src");
   const callers = files.filter((path) => /\b(?:fetch|fetcher)\s*\(/u.test(read(path)));
-  assert.deepEqual(callers, ["src/services/weather-provider.ts"]);
+  assert.deepEqual(callers, [
+    "src/services/reverse-geocoding-provider.ts",
+    "src/services/weather-provider.ts",
+  ]);
   const provider = read("src/services/weather-provider.ts");
   assert.match(provider, /https:\/\/geocoding-api\.open-meteo\.com\/v1\/search/u);
   assert.match(provider, /https:\/\/api\.open-meteo\.com\/v1\/forecast/u);
   assert.doesNotMatch(provider, /navigator\.geolocation|\bIP\s*location/u);
+  const reverseProvider = read("src/services/reverse-geocoding-provider.ts");
+  assert.match(reverseProvider, /https:\/\/photon\.komoot\.io\/reverse/u);
+  assert.doesNotMatch(reverseProvider, /street|housenumber|postcode\s*:/iu);
 
   const config = read("src-tauri/tauri.conf.json");
   const connectSrc = config.match(/connect-src ([^";]+)/u)?.[1] ?? "";
   assert.match(connectSrc, /https:\/\/geocoding-api\.open-meteo\.com/u);
   assert.match(connectSrc, /https:\/\/api\.open-meteo\.com/u);
+  assert.match(connectSrc, /https:\/\/photon\.komoot\.io/u);
   assert.doesNotMatch(connectSrc, /\*/u);
 });
 
@@ -42,7 +49,9 @@ test("Weather UI/application boundary cannot read personal repositories or send 
       code,
       /diary-storage|inbox-storage|planner-storage|course-storage|repository|\binvoke\s*\(/iu,
     );
-    assert.doesNotMatch(code, /navigator\.geolocation/u);
+    if (path !== "src/workspace/weather/use-workspace-weather.ts") {
+      assert.doesNotMatch(code, /navigator\.geolocation/u);
+    }
   }
   const settings = read("src/services/weather-storage.ts");
   assert.match(settings, /links-workplace\.weather\./u);

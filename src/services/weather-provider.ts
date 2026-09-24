@@ -44,11 +44,17 @@ function stringArray(value: unknown): readonly string[] | null {
 }
 
 function locationDisplayName(record: JsonRecord): string | null {
-  const name = nonEmptyString(record.name);
-  if (!name) return null;
-  return [name, nonEmptyString(record.admin1), nonEmptyString(record.country)]
-    .filter((part, index, parts) => part && parts.indexOf(part) === index)
-    .join(" · ");
+  return nonEmptyString(record.name);
+}
+
+function locationPrecision(featureCode: string | null): WeatherLocation["precision"] {
+  if (!featureCode) return "unknown";
+  const code = featureCode.toUpperCase();
+  if (code === "ADM4" || code === "PPLX") return "locality";
+  if (code === "ADM3") return "district";
+  if (code === "ADM2" || /^PPL(?:C|A\d*|S|Q)?$/u.test(code)) return "city";
+  if (code === "ADM1") return "region";
+  return "unknown";
 }
 
 function parseLocations(value: unknown): readonly WeatherLocation[] {
@@ -65,6 +71,13 @@ function parseLocations(value: unknown): readonly WeatherLocation[] {
         latitude,
         longitude,
         timezone: nonEmptyString(item.timezone),
+        country: nonEmptyString(item.country) ?? undefined,
+        admin1: nonEmptyString(item.admin1) ?? undefined,
+        admin2: nonEmptyString(item.admin2) ?? undefined,
+        admin3: nonEmptyString(item.admin3) ?? undefined,
+        admin4: nonEmptyString(item.admin4) ?? undefined,
+        precision: locationPrecision(nonEmptyString(item.feature_code)),
+        source: "manual",
       },
     ];
   });

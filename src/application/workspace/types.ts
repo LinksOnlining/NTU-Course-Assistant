@@ -21,8 +21,18 @@ export interface WorkspaceTaskPreview {
 export interface WorkspaceTaskSummary {
   readonly source: "workspace";
   readonly items: readonly WorkspaceTaskPreview[];
+  readonly todayItems: readonly WorkspaceTaskPreview[];
   readonly totalOpenCount: number;
   readonly hiddenCount: number;
+}
+
+export interface WorkspaceTodayArrangement {
+  readonly id: string;
+  readonly title: string;
+  readonly startTime: string;
+  readonly endTime: string;
+  readonly sourceLabel: "课程" | "日程" | "任务安排";
+  readonly cancelled: boolean;
 }
 
 export interface WorkspaceTimeSection {
@@ -40,6 +50,7 @@ export interface WorkspaceDashboardViewModel {
   readonly context: WorkspaceContext;
   readonly date: string;
   readonly timelineItems: readonly TimelineItem[];
+  readonly todayArrangements: readonly WorkspaceTodayArrangement[];
   readonly todayItemCount: number;
   readonly nextItem: TimelineItem | null;
   readonly todayStatusText: string;

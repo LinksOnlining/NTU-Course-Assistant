@@ -27,6 +27,7 @@ import type { TermConfig } from "../../types/reminder.ts";
 import type {
   WorkspaceDashboardSources,
   WorkspaceDashboardViewModel,
+  WorkspaceTodayArrangement,
   WorkspaceTaskPreview,
   WorkspaceTimeSection,
 } from "./types.ts";
@@ -327,9 +328,13 @@ function buildTaskSummary(
       );
     });
   const preview = items.slice(0, TASK_PREVIEW_LIMIT).map((item) => item.preview);
+  const todayItems = items
+    .map((item) => item.preview)
+    .filter((item) => item.deadlineKind === "overdue" || item.deadlineKind === "today");
   return {
     source: "workspace",
     items: preview,
+    todayItems,
     totalOpenCount: items.length,
     hiddenCount: Math.max(0, items.length - preview.length),
   };
@@ -385,7 +390,7 @@ function itemSection(
   };
 }
 
-function timeContext(context: WorkspaceContext) {
+function timeContext(context: WorkspaceContext, todayTaskCount: number) {
   const now = minutes(context.localTime);
   const active = context.currentItem ?? undefined;
   const activeInterval = active ? effectiveOccupancy(active) : null;
@@ -457,7 +462,7 @@ function timeContext(context: WorkspaceContext) {
     todaySummaryText:
       [
         context.todayItemCount ? `${context.todayItemCount} 项安排` : null,
-        context.openTaskCount ? `${context.openTaskCount} 个待办` : null,
+        todayTaskCount ? `${todayTaskCount} 个待办` : null,
       ]
         .filter((part): part is string => part !== null)
         .join(" · ") || "可自由安排今天的时间",
@@ -469,11 +474,12 @@ export function buildWorkspaceDashboardViewModel(
   nowTime: string,
   weatherSnapshot: WeatherSnapshot | null = null,
 ): WorkspaceDashboardViewModel {
+  const arrangements = sources.timelineItems.filter((item) => item.sourceType !== "aiProposal");
   const context = buildWorkspaceContext({
     date: sources.date,
     localTime: nowTime,
-    timelineItems: sources.timelineItems,
-    futureItems: sources.futureItems,
+    timelineItems: arrangements,
+    futureItems: sources.futureItems?.filter((item) => item.sourceType !== "aiProposal"),
     academicTasks: sources.tasks,
     personalTasks: sources.personalTasks ?? [],
     weatherSnapshot,
@@ -481,20 +487,48 @@ export function buildWorkspaceDashboardViewModel(
     pendingInboxCount: sources.pendingInboxCount ?? 0,
     routines: sources.routines ?? [],
   });
+  const taskSummary = buildTaskSummary(
+    sources.tasks,
+    sources.personalTasks ?? [],
+    sources.date,
+    nowTime,
+  );
+  const todayArrangements: WorkspaceTodayArrangement[] = arrangements
+    .flatMap((item) => {
+      if (item.sourceType === "aiProposal") return [];
+      const sourceLabel: WorkspaceTodayArrangement["sourceLabel"] =
+        item.sourceType === "timeBlock"
+          ? "任务安排"
+          : item.sourceType === "academicOccurrence"
+            ? "课程"
+            : "日程";
+      return [
+        {
+          id: item.id,
+          title: item.title,
+          startTime: item.startTime,
+          endTime: item.endTime,
+          sourceLabel,
+          cancelled: item.status === "cancelled",
+        },
+      ];
+    })
+    .sort(
+      (left, right) =>
+        left.startTime.localeCompare(right.startTime) ||
+        left.endTime.localeCompare(right.endTime) ||
+        left.id.localeCompare(right.id),
+    );
   return {
     context,
     date: sources.date,
     timelineItems: sources.timelineItems,
+    todayArrangements,
     todayItemCount: context.todayItemCount,
     nextItem: context.currentItem ?? context.nextItem,
-    ...timeContext(context),
+    ...timeContext(context, taskSummary.todayItems.length),
     routineSuggestion: context.routineSuggestion,
-    taskSummary: buildTaskSummary(
-      sources.tasks,
-      sources.personalTasks ?? [],
-      sources.date,
-      nowTime,
-    ),
+    taskSummary,
     moduleAvailability: {
       diary: "available",
       inbox: "unavailable",

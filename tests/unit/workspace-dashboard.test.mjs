@@ -249,6 +249,50 @@ test("dashboard timeline merges courses, independent events and task time blocks
   assert.equal(model.timeContext.secondary?.sourceLabel, "日程");
 });
 
+test("today detail projection aligns counts, sorts arrangements, keeps cancelled visible, and excludes future tasks", () => {
+  const model = buildWorkspaceDashboardViewModel(
+    {
+      date,
+      timelineItems: [
+        plannerItem("late", "plannerEvent", "14:00", "15:00", { title: "晚间日程" }),
+        plannerItem("proposal", "aiProposal", "16:00", "17:00", { title: "未确认建议" }),
+        plannerItem("cancelled", "plannerEvent", "13:00", "14:00", {
+          title: "取消的会议",
+          status: "cancelled",
+          occupiesTime: false,
+        }),
+        plannerItem("block", "timeBlock", "11:00", "12:00", { title: "专注任务" }),
+      ],
+      tasks: [
+        task("overdue", "2026-09-22T10:00:00"),
+        task("due-today", "2026-09-23T18:00:00"),
+        task("future", "2026-09-24T18:00:00"),
+        task("no-deadline", ""),
+        task("completed", "2026-09-23T10:00:00", 0, "COMPLETED"),
+      ],
+      warnings: [],
+    },
+    "12:00",
+  );
+
+  assert.deepEqual(
+    model.todayArrangements.map((item) => [item.id, item.title, item.sourceLabel, item.cancelled]),
+    [
+      ["block", "专注任务", "任务安排", false],
+      ["cancelled", "取消的会议", "日程", true],
+      ["late", "晚间日程", "日程", false],
+    ],
+  );
+  assert.equal(model.todayItemCount, 2);
+  assert.equal(model.todayStatusText, "今天还有 1 项安排");
+  assert.equal(model.todaySummaryText, "2 项安排 · 2 个待办");
+  assert.deepEqual(
+    model.taskSummary.todayItems.map((item) => item.id),
+    ["overdue", "due-today"],
+  );
+  assert.ok(!model.todayArrangements.some((item) => item.id === "proposal"));
+});
+
 test("time context names the source of active planner events and accounts for their buffer", () => {
   const event = plannerItem("event", "plannerEvent", "11:00", "12:00", {
     title: "团队会议",

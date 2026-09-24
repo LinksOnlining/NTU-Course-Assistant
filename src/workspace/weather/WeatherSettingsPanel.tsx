@@ -1,5 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { formatTemperature, weatherCodeLabel } from "../../application/weather/weather.ts";
+import {
+  formatTemperature,
+  weatherCodeLabel,
+  weatherLocationHierarchy,
+  weatherLocationPrecisionLabel,
+  weatherLocationSourceLabel,
+} from "../../application/weather/weather.ts";
 import type { TemperatureUnit } from "../../types/weather.ts";
 import type { WorkspaceWeatherController } from "./use-workspace-weather.ts";
 import "./weather.css";
@@ -10,6 +16,7 @@ interface WeatherSettingsPanelProps {
 
 export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
   const [query, setQuery] = useState("");
+  const [showLocationConsent, setShowLocationConsent] = useState(false);
   const { settings, viewState, searchState } = weather;
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
@@ -26,23 +33,85 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
         <input
           type="checkbox"
           checked={settings.enabled}
-          onChange={(event) => weather.setEnabled(event.currentTarget.checked)}
+          onChange={(event) => {
+            if (!event.currentTarget.checked) setShowLocationConsent(false);
+            weather.setEnabled(event.currentTarget.checked);
+          }}
         />
         <span>启用天气</span>
       </label>
       <p className="settings-domain-note">
-        天气默认关闭；只有启用并主动搜索、选择城市后才会连接天气服务。不会读取设备定位，也不会发送课程或个人内容。
+        天气默认关闭。手动搜索的地点名和天气坐标会发送给
+        Open-Meteo；使用当前位置前会先征求同意，坐标也会发送给 Photon / OpenStreetMap
+        解析地名。仅保存当前天气地点，不追踪位置，也不发送课程或个人内容。
       </p>
       {settings.enabled && (
         <>
+          <div className="weather-current-location-action">
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={
+                weather.locationRequestState.kind === "locating" ||
+                weather.locationRequestState.kind === "resolving"
+              }
+              aria-expanded={showLocationConsent}
+              aria-controls="weather-location-consent"
+              onClick={() => setShowLocationConsent((show) => !show)}
+            >
+              {weather.locationRequestState.kind === "locating"
+                ? "正在获取位置…"
+                : weather.locationRequestState.kind === "resolving"
+                  ? "正在识别地区…"
+                  : "使用当前位置"}
+            </button>
+            {showLocationConsent && (
+              <section
+                id="weather-location-consent"
+                className="weather-location-consent"
+                aria-label="当前位置使用说明"
+              >
+                <p>
+                  允许获取一次设备坐标。坐标会发送给 Open-Meteo 查询天气，并发送给 Photon /
+                  OpenStreetMap
+                  识别行政区名称；只保存当前天气地点，不保存定位历史，也不会用于其他功能。
+                </p>
+                <div>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => {
+                      setShowLocationConsent(false);
+                      void weather.useCurrentLocation();
+                    }}
+                  >
+                    同意并定位
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setShowLocationConsent(false)}
+                  >
+                    取消
+                  </button>
+                </div>
+              </section>
+            )}
+            {weather.locationRequestState.kind === "error" && (
+              <p role="alert">{weather.locationRequestState.message}</p>
+            )}
+            {weather.locationRequestState.kind === "notice" && (
+              <p role="status">{weather.locationRequestState.message}</p>
+            )}
+          </div>
           <form className="weather-location-search" onSubmit={submitSearch}>
-            <label htmlFor="weather-location-query">城市或地区</label>
+            <label htmlFor="weather-location-query">手动选择城市、区县或街镇</label>
             <div>
               <input
                 id="weather-location-query"
                 value={query}
                 onChange={(event) => setQuery(event.currentTarget.value)}
-                placeholder="例如：南通"
+                placeholder="例如：崇川区或南通"
                 autoComplete="off"
               />
               <button
@@ -67,12 +136,14 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
                   >
                     <span>{location.displayName}</span>
                     <small>
-                      {location.latitude.toFixed(2)}, {location.longitude.toFixed(2)}
+                      {weatherLocationHierarchy(location).slice(1).join(" · ")}
+                      {weatherLocationHierarchy(location).length > 1 ? " · " : ""}精度：
+                      {weatherLocationPrecisionLabel(location.precision)}
                     </small>
                   </button>
                 ))
               ) : (
-                <p>没有找到地点，请尝试更具体的城市名称。</p>
+                <p>没有找到地点，请尝试搜索区县或附近城市。</p>
               )}
             </div>
           )}
@@ -92,6 +163,11 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
           {settings.location && (
             <section className="weather-current-settings" aria-label="当前天气设置">
               <h4>当前地点：{settings.location.displayName}</h4>
+              <p>{weatherLocationHierarchy(settings.location).join(" · ")}</p>
+              <p>
+                {weatherLocationSourceLabel(settings.location.source)} · 精度：
+                {weatherLocationPrecisionLabel(settings.location.precision)}
+              </p>
               {snapshot && (
                 <p>
                   {formatTemperature(snapshot.current.temperatureCelsius, settings.temperatureUnit)}{" "}
@@ -113,7 +189,10 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
         </>
       )}
       {weather.storageWarning && <p role="status">{weather.storageWarning}</p>}
-      <p className="weather-attribution">天气数据由 Open-Meteo 提供，遵循 CC BY 4.0。</p>
+      <p className="weather-attribution">
+        天气数据由 Open-Meteo 提供（CC BY 4.0）；当前位置地名由 Photon / OpenStreetMap 解析。 ©
+        OpenStreetMap contributors。
+      </p>
     </div>
   );
 }

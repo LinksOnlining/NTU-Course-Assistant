@@ -64,6 +64,28 @@
   color: var(--text-secondary);
 }
 
+.workspace-diary-status[data-save-state="pending"] {
+  color: var(--text-secondary);
+}
+
+.workspace-diary-status[data-save-state="saving"] {
+  color: var(--text-heading);
+  font-weight: 550;
+}
+
+.workspace-diary-status[data-save-state="saved"] {
+  color: var(--text-muted);
+}
+
+.workspace-diary-status[data-save-state="failed"] {
+  color: var(--danger);
+}
+
+.workspace-diary-editor,
+.workspace-diary-editor textarea {
+  user-select: text;
+}
+
 .workspace-diary-status button,
 .workspace-diary-date-actions button,
 .workspace-diary-dates li button,

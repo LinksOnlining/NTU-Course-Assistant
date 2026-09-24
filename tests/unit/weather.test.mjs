@@ -16,6 +16,7 @@ import {
   saveWeatherSettings,
 } from "../../src/services/weather-storage.ts";
 import { createOpenMeteoProvider } from "../../src/services/weather-provider.ts";
+import { createPhotonReverseGeocodingProvider } from "../../src/services/reverse-geocoding-provider.ts";
 
 const location = {
   displayName: "南通 · 江苏 · 中国",
@@ -147,6 +148,7 @@ test("Open-Meteo adapter sends only explicit city/weather parameters and normali
               name: "南通",
               admin1: "江苏",
               country: "中国",
+              feature_code: "ADM2",
               latitude: 31.98,
               longitude: 120.89,
               timezone: "Asia/Shanghai",
@@ -186,7 +188,10 @@ test("Open-Meteo adapter sends only explicit city/weather parameters and normali
   });
 
   const locations = await provider.searchLocation(" 南通 ");
-  assert.equal(locations[0].displayName, "南通 · 江苏 · 中国");
+  assert.equal(locations[0].displayName, "南通");
+  assert.equal(locations[0].admin1, "江苏");
+  assert.equal(locations[0].precision, "city");
+  assert.equal(locations[0].source, "manual");
   const result = await provider.fetchForecast(locations[0]);
   assert.equal(result.current.temperatureCelsius, 22);
   assert.equal(result.hourly[0].precipitationProbability, null);
@@ -198,6 +203,7 @@ test("Open-Meteo adapter sends only explicit city/weather parameters and normali
   );
   assert.equal(urls[0].searchParams.get("name"), "南通");
   assert.equal(urls[0].searchParams.get("language"), "zh");
+  assert.equal(urls[0].searchParams.get("count"), "5");
   assert.equal(urls[1].searchParams.get("latitude"), "31.98");
   assert.equal(urls[1].searchParams.get("forecast_days"), "7");
   assert.equal(urls[1].searchParams.has("task"), false);
@@ -205,6 +211,54 @@ test("Open-Meteo adapter sends only explicit city/weather parameters and normali
   assert.equal(urls[1].searchParams.has("inbox"), false);
   assert.equal(urls[1].searchParams.has("course"), false);
   assert.equal(urls[1].searchParams.has("query"), false);
+});
+
+test("Photon reverse geocoding keeps only administrative hierarchy and preserves rounded coordinates", async () => {
+  let requestedUrl;
+  const provider = createPhotonReverseGeocodingProvider(async (input) => {
+    requestedUrl = new URL(String(input));
+    return new Response(
+      JSON.stringify({
+        features: [
+          {
+            properties: {
+              name: "崇川区",
+              locality: "观音山街道",
+              district: "崇川区",
+              city: "南通市",
+              state: "江苏省",
+              country: "中国",
+              street: "私人道路名称",
+              housenumber: "88",
+              postcode: "226000",
+            },
+          },
+        ],
+      }),
+      { status: 200 },
+    );
+  });
+
+  const location = await provider.reverseGeocode(31.223, 120.897);
+  assert.equal(requestedUrl.hostname, "photon.komoot.io");
+  assert.equal(requestedUrl.pathname, "/reverse");
+  assert.equal(requestedUrl.searchParams.get("lat"), "31.223");
+  assert.equal(requestedUrl.searchParams.get("lon"), "120.897");
+  assert.deepEqual(location, {
+    displayName: "观音山街道",
+    latitude: 31.223,
+    longitude: 120.897,
+    timezone: null,
+    country: "中国",
+    admin1: "江苏省",
+    admin2: "南通市",
+    admin3: "崇川区",
+    admin4: "观音山街道",
+    precision: "locality",
+    source: "device",
+  });
+  assert.ok(!JSON.stringify(location).includes("私人道路名称"));
+  assert.ok(!JSON.stringify(location).includes("226000"));
 });
 
 test("Open-Meteo adapter rejects malformed and failed service responses", async () => {

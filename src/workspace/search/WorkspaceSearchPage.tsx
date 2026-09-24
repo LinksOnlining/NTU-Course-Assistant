@@ -82,8 +82,14 @@ export function WorkspaceSearchPage({ onNavigate }: WorkspaceSearchPageProps) {
           onKeyDown={handleKeyDown}
         />
         {query && (
-          <button type="button" aria-label="清除搜索" onClick={() => setQuery("")}>
-            清除
+          <button
+            type="button"
+            className="workspace-search-clear"
+            aria-label="清除搜索"
+            title="清除搜索"
+            onClick={() => setQuery("")}
+          >
+            ×
           </button>
         )}
       </label>

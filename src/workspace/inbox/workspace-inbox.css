@@ -30,6 +30,7 @@
 .workspace-inbox-heading h2,
 .workspace-inbox-heading p,
 .workspace-inbox-preview h3,
+.workspace-inbox-raw-label,
 .workspace-inbox-raw {
   margin: 0;
 }
@@ -142,13 +143,26 @@
   font-size: var(--font-size-secondary);
 }
 
+.workspace-inbox-raw-section {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.workspace-inbox-raw-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-secondary);
+  font-weight: 550;
+}
+
 .workspace-inbox-raw {
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-control);
   background: var(--surface-inset);
-  color: var(--text-primary);
+  color: var(--text-secondary);
+  font-size: var(--font-size-secondary);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  user-select: text;
 }
 
 .workspace-inbox-preview {
@@ -160,6 +174,12 @@
 
 .workspace-inbox-preview h3 {
   font-size: var(--font-size-body);
+}
+
+.workspace-inbox-safety-hint {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-secondary);
 }
 
 .workspace-inbox-fields {
