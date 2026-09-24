@@ -15,27 +15,39 @@ function sourceFiles(directory) {
   });
 }
 
-test("Weather network access is centralized and uses only the exact HTTPS provider hosts", () => {
+test("Weather forecast stays in WebView while geocoding crosses the native transport boundary", () => {
   const files = sourceFiles("src");
-  const callers = files.filter((path) => /\b(?:fetch|fetcher)\s*\(/u.test(read(path))).sort();
-  assert.deepEqual(callers, [
+  const transportCalls = files.filter((path) => /\bfetcher\s*\(/u.test(read(path))).sort();
+  assert.deepEqual(transportCalls, [
     "src/services/photon-location-provider.ts",
     "src/services/reverse-geocoding-provider.ts",
     "src/services/weather-provider.ts",
   ]);
   const provider = read("src/services/weather-provider.ts");
-  assert.match(provider, /https:\/\/geocoding-api\.open-meteo\.com\/v1\/search/u);
   assert.match(provider, /https:\/\/api\.open-meteo\.com\/v1\/forecast/u);
+  assert.doesNotMatch(provider, /geocoding-api\.open-meteo\.com/u);
   assert.doesNotMatch(provider, /navigator\.geolocation|\bIP\s*location/u);
   const reverseProvider = read("src/services/reverse-geocoding-provider.ts");
-  assert.match(reverseProvider, /https:\/\/photon\.komoot\.io\/reverse/u);
+  assert.match(reverseProvider, /nativeGeocodingFetch/u);
+  assert.doesNotMatch(reverseProvider, /fetch\s*\(/u);
   assert.doesNotMatch(reverseProvider, /street|housenumber|postcode\s*:/iu);
   const photonSearch = read("src/services/photon-location-provider.ts");
-  assert.match(photonSearch, /https:\/\/photon\.komoot\.io\/api/u);
+  assert.match(photonSearch, /nativeGeocodingFetch/u);
+  assert.doesNotMatch(photonSearch, /fetch\s*\(/u);
   assert.match(photonSearch, /searchParams\.set\("q"/u);
-  assert.match(photonSearch, /searchParams\.set\("lang", "zh"\)/u);
+  assert.match(photonSearch, /searchParams\.set\("lang", "default"\)/u);
   assert.doesNotMatch(photonSearch, /searchParams\.set\("layer"/u);
   assert.doesNotMatch(photonSearch, /searchParams\.set\("countrycode"/u);
+  const transport = read("src/services/native-geocoding-transport.ts");
+  assert.match(transport, /search_weather_location/u);
+  assert.match(transport, /reverse_geocode_weather_location/u);
+  assert.doesNotMatch(transport, /\bfetch\s*\(/u);
+  const native = read("src-tauri/src/geocoding.rs");
+  assert.match(native, /photon\.komoot\.io/u);
+  assert.match(native, /nominatim\.openstreetmap\.org/u);
+  assert.match(native, /LinksWorkplace\//u);
+  assert.match(native, /NOMINATIM_INTERVAL/u);
+  assert.match(native, /CACHE_TTL/u);
   const application = read("src/application/weather/weather.ts");
   assert.match(application, /createPhotonLocationSearchProvider/u);
   assert.ok(
@@ -46,9 +58,8 @@ test("Weather network access is centralized and uses only the exact HTTPS provid
 
   const config = read("src-tauri/tauri.conf.json");
   const connectSrc = config.match(/connect-src ([^";]+)/u)?.[1] ?? "";
-  assert.match(connectSrc, /https:\/\/geocoding-api\.open-meteo\.com/u);
   assert.match(connectSrc, /https:\/\/api\.open-meteo\.com/u);
-  assert.match(connectSrc, /https:\/\/photon\.komoot\.io/u);
+  assert.doesNotMatch(connectSrc, /photon|nominatim|geocoding-api/u);
   assert.doesNotMatch(connectSrc, /\*/u);
 });
 

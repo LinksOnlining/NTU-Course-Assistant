@@ -42,9 +42,10 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
         <span>启用天气</span>
       </label>
       <p className="settings-domain-note">
-        天气默认关闭。手动搜索时，搜索文字会发送给 Photon / OpenStreetMap；选择地点后，坐标会发送给
-        Open-Meteo 查询天气。使用当前位置前会先征求同意，坐标也会发送给 Photon / OpenStreetMap
-        解析地名。仅保存当前选择，不保存搜索历史或门牌号，也不发送课程或个人内容。
+        天气默认关闭。手动搜索时，搜索文字会发送给 Photon；仅在 Photon 暂不可用时才会请求
+        Nominatim。选择地点后，所选坐标会发送给 Open-Meteo 查询天气。使用当前位置前会先征求同意，
+        隐私模糊后的坐标会发送给地点服务解析地名。仅保存当前选择，不保存搜索历史或门牌号，
+        也不发送课程或个人内容。
       </p>
       {settings.enabled && (
         <>
@@ -54,7 +55,8 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
               className="secondary-button"
               disabled={
                 weather.locationRequestState.kind === "locating" ||
-                weather.locationRequestState.kind === "resolving"
+                weather.locationRequestState.kind === "resolving" ||
+                weather.locationRequestState.kind === "fetching"
               }
               aria-expanded={showLocationConsent}
               aria-controls="weather-location-consent"
@@ -64,7 +66,9 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
                 ? "正在获取位置…"
                 : weather.locationRequestState.kind === "resolving"
                   ? "正在识别地区…"
-                  : "使用当前位置"}
+                  : weather.locationRequestState.kind === "fetching"
+                    ? "正在获取天气…"
+                    : "使用当前位置"}
             </button>
             {showLocationConsent && (
               <section
@@ -73,9 +77,9 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
                 aria-label="当前位置使用说明"
               >
                 <p>
-                  允许获取一次设备坐标。坐标会发送给 Open-Meteo 查询天气，并发送给 Photon /
-                  OpenStreetMap
-                  识别行政区名称；只保存当前天气地点，不保存定位历史，也不会用于其他功能。
+                  允许获取一次设备坐标。模糊后的坐标会发送给 Open-Meteo 查询天气，并发送给 Photon /
+                  OpenStreetMap（必要时使用 Nominatim）识别行政区名称；只保存当前天气地点，
+                  不保存定位历史，也不会用于其他功能。
                 </p>
                 <div>
                   <button
@@ -196,8 +200,8 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
       )}
       {weather.storageWarning && <p role="status">{weather.storageWarning}</p>}
       <p className="weather-attribution">
-        天气数据由 Open-Meteo 提供（CC BY 4.0）；当前位置地名由 Photon / OpenStreetMap 解析。 ©
-        OpenStreetMap contributors。
+        天气数据由 Open-Meteo 提供（CC BY 4.0）；地点由 Photon 解析，必要时使用 Nominatim。 地图数据
+        © OpenStreetMap contributors。
       </p>
     </div>
   );

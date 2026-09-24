@@ -20,8 +20,10 @@ import type {
   WeatherSnapshot,
   WeatherViewState,
   WeatherLocationRequestState,
+  WeatherErrorCategory,
   WorkspaceWeatherProvider,
 } from "../../types/weather.ts";
+import { weatherErrorCategory, weatherErrorMessage } from "./weather-errors.ts";
 
 export interface WorkspaceWeatherController {
   readonly settings: WeatherSettings;
@@ -39,8 +41,6 @@ export interface WorkspaceWeatherController {
 }
 
 const DEFAULT_PROVIDER = createWorkspaceWeatherProvider();
-const SERVICE_ERROR = "天气服务暂时无法访问。请检查网络后重试。";
-const LOCATION_ERROR = "无法获取当前位置。请检查定位权限，或手动搜索地点。";
 
 function readCurrentPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
@@ -60,14 +60,14 @@ function roundedWeatherCoordinate(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-function geolocationErrorMessage(error: unknown): string {
+function geolocationErrorCategory(error: unknown): WeatherErrorCategory {
   const code =
     typeof error === "object" && error !== null && "code" in error
       ? (error as { code?: unknown }).code
       : null;
-  if (code === 1) return "定位权限未获准。你仍可手动搜索地点。";
-  if (code === 3) return "定位超时。请重试，或手动搜索地点。";
-  return LOCATION_ERROR;
+  if (code === 1) return "permissionDenied";
+  if (code === 3) return "locationTimeout";
+  return "locationUnavailable";
 }
 
 function viewForCache(
@@ -106,6 +106,8 @@ export function useWorkspaceWeather(
   const searchController = useRef<AbortController | null>(null);
   const refreshGeneration = useRef(0);
   const locationGeneration = useRef(0);
+  const pendingCurrentLocationKey = useRef<string | null>(null);
+  const pendingCurrentLocationNotice = useRef("");
   const location = settings.location;
   const locationKey = location
     ? `${weatherLocationKey(location)}|${location.displayName}|${location.timezone ?? ""}`
@@ -122,6 +124,13 @@ export function useWorkspaceWeather(
       const freshness = classifyWeatherCache(cache, target);
       if (freshness === "fresh" && !force) {
         setViewState({ kind: "ready", snapshot: cache! });
+        if (pendingCurrentLocationKey.current === weatherLocationKey(target)) {
+          pendingCurrentLocationKey.current = null;
+          setLocationRequestState({
+            kind: "notice",
+            message: `${pendingCurrentLocationNotice.current} 天气已就绪。`,
+          });
+        }
         return;
       }
       const usableCache = freshness === "fresh" || freshness === "stale" ? cache : null;
@@ -135,22 +144,35 @@ export function useWorkspaceWeather(
       const controller = new AbortController();
       refreshController.current = controller;
       const generation = ++refreshGeneration.current;
+      let forecastSucceeded = false;
       try {
         const snapshot = await provider.fetchForecast(target, controller.signal);
         if (controller.signal.aborted || generation !== refreshGeneration.current) return;
         saveWeatherCache(snapshot);
         setViewState({ kind: "ready", snapshot });
-      } catch {
+        forecastSucceeded = true;
+      } catch (error) {
         if (controller.signal.aborted || generation !== refreshGeneration.current) return;
+        const category = weatherErrorCategory(error, "forecastUnavailable");
+        const message = weatherErrorMessage(category);
         setViewState(
           usableCache
-            ? { kind: "stale", snapshot: usableCache, refreshing: false, error: SERVICE_ERROR }
-            : { kind: "unavailable", error: SERVICE_ERROR },
+            ? { kind: "stale", snapshot: usableCache, refreshing: false, error: message }
+            : { kind: "unavailable", error: message },
         );
       } finally {
         if (generation === refreshGeneration.current) {
           refreshController.current = null;
           setIsRefreshing(false);
+          if (pendingCurrentLocationKey.current === weatherLocationKey(target)) {
+            pendingCurrentLocationKey.current = null;
+            setLocationRequestState({
+              kind: "notice",
+              message: forecastSucceeded
+                ? `${pendingCurrentLocationNotice.current} 天气已更新。`
+                : `${pendingCurrentLocationNotice.current} 天气数据暂时不可用，但当前位置仍可继续使用。`,
+            });
+          }
         }
       }
     },
@@ -189,9 +211,10 @@ export function useWorkspaceWeather(
       try {
         const locations = await provider.searchLocation(query.trim(), controller.signal);
         if (!controller.signal.aborted) setSearchState({ kind: "results", locations });
-      } catch {
+      } catch (error) {
         if (!controller.signal.aborted) {
-          setSearchState({ kind: "error", message: SERVICE_ERROR });
+          const category = weatherErrorCategory(error, "geocodingUnavailable");
+          setSearchState({ kind: "error", category, message: weatherErrorMessage(category) });
         }
       } finally {
         if (searchController.current === controller) searchController.current = null;
@@ -202,6 +225,8 @@ export function useWorkspaceWeather(
 
   const selectLocation = useCallback(
     (nextLocation: WeatherLocation) => {
+      pendingCurrentLocationKey.current = null;
+      pendingCurrentLocationNotice.current = "";
       locationGeneration.current += 1;
       refreshController.current?.abort();
       refreshGeneration.current += 1;
@@ -236,6 +261,7 @@ export function useWorkspaceWeather(
       ) {
         setLocationRequestState({
           kind: "error",
+          category: "locationUnavailable",
           message: "无法确认当前位置坐标。你仍可手动搜索地点。",
         });
         return;
@@ -243,6 +269,7 @@ export function useWorkspaceWeather(
       if (!Number.isFinite(accuracy) || accuracy > 10_000) {
         setLocationRequestState({
           kind: "error",
+          category: "lowAccuracy",
           message: "当前位置精度较低，暂未用于天气。请重试定位，或手动搜索区县。",
         });
         return;
@@ -259,7 +286,7 @@ export function useWorkspaceWeather(
       if (generation !== locationGeneration.current) return;
       const selected: WeatherLocation = {
         ...(resolved ?? {
-          displayName: "地点暂不可解析",
+          displayName: "当前位置",
           timezone: null,
           precision: "coordinatesOnly" as const,
         }),
@@ -268,18 +295,22 @@ export function useWorkspaceWeather(
         source: "device",
       };
       selectLocation(selected);
-      setLocationRequestState({
-        kind: "notice",
-        message:
-          selected.precision === "coordinatesOnly"
-            ? "天气已切换到当前位置坐标，但地点名称暂不可解析；你也可以手动搜索区县。"
-            : accuracy > 2_000
-              ? `已使用当前位置获取天气（系统估算误差约 ${Math.round(accuracy / 1000)} 公里）。`
-              : "已使用当前位置获取天气；仅保存当前天气地点，不记录位置历史。",
-      });
+      pendingCurrentLocationKey.current = weatherLocationKey(selected);
+      pendingCurrentLocationNotice.current =
+        selected.precision === "coordinatesOnly"
+          ? "已切换到当前位置；地点名称暂时无法解析。"
+          : accuracy > 2_000
+            ? `已使用当前位置（系统估算误差约 ${Math.round(accuracy / 1000)} 公里）。`
+            : "已使用当前位置；仅保存当前天气地点，不记录位置历史。";
+      setLocationRequestState({ kind: "fetching" });
     } catch (error) {
       if (generation === locationGeneration.current) {
-        setLocationRequestState({ kind: "error", message: geolocationErrorMessage(error) });
+        const category = geolocationErrorCategory(error);
+        setLocationRequestState({
+          kind: "error",
+          category,
+          message: weatherErrorMessage(category),
+        });
       }
     }
   }, [provider, selectLocation, settings.enabled]);

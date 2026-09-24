@@ -1,6 +1,6 @@
 import type { WeatherLocation, WeatherRequestSignal } from "../types/weather.ts";
+import { nativeGeocodingFetch, type GeocodingFetch } from "./native-geocoding-transport.ts";
 
-type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type JsonRecord = Record<string, unknown>;
 
 const PHOTON_LAYERS = new Set([
@@ -134,13 +134,6 @@ function parseResults(value: unknown): readonly WeatherLocation[] {
   return locations;
 }
 
-function queryWithoutAdministrativeSuffix(query: string): string | null {
-  const simplified = query
-    .replace(/(?:特别行政区|自治区|自治州|自治县|街道|地区|新区|区|县|市|镇|乡)$/u, "")
-    .trim();
-  return simplified.length >= 2 && simplified !== query ? simplified : null;
-}
-
 function locationIdentity(location: WeatherLocation): string {
   return location.providerId
     ? `osm:${location.providerId}`
@@ -173,7 +166,7 @@ function rankResults(
 }
 
 async function fetchJson(
-  fetcher: FetchLike,
+  fetcher: GeocodingFetch,
   url: URL,
   signal?: WeatherRequestSignal,
 ): Promise<unknown> {
@@ -183,11 +176,17 @@ async function fetchJson(
     signal: abortSignal ? AbortSignal.any([abortSignal, timeout]) : timeout,
     headers: { Accept: "application/json" },
   });
-  if (!response.ok) throw new Error("location-provider-unavailable");
+  if (
+    response.status === 400 ||
+    (response.status >= 400 && response.status < 500 && response.status !== 429)
+  ) {
+    throw new Error("invalidProviderRequest");
+  }
+  if (!response.ok) throw new Error("geocodingUnavailable");
   return response.json() as Promise<unknown>;
 }
 
-export function createPhotonLocationSearchProvider(fetcher: FetchLike = fetch) {
+export function createPhotonLocationSearchProvider(fetcher: GeocodingFetch = nativeGeocodingFetch) {
   return {
     async searchLocation(
       query: string,
@@ -198,14 +197,12 @@ export function createPhotonLocationSearchProvider(fetcher: FetchLike = fetch) {
       const search = async (value: string) => {
         const url = new URL("https://photon.komoot.io/api");
         url.searchParams.set("q", value);
-        url.searchParams.set("lang", "zh");
+        url.searchParams.set("lang", "default");
         url.searchParams.set("limit", "12");
         return rankResults(parseResults(await fetchJson(fetcher, url, signal)), term);
       };
 
-      const results = await search(term);
-      const fallback = queryWithoutAdministrativeSuffix(term);
-      return results.length || !fallback ? results : search(fallback);
+      return search(term);
     },
   };
 }

@@ -1,6 +1,6 @@
 import type { ReverseGeocodingProvider, WeatherLocation } from "../types/weather.ts";
+import { nativeGeocodingFetch, type GeocodingFetch } from "./native-geocoding-transport.ts";
 
-type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type JsonRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -54,21 +54,27 @@ function reverseLocation(
 }
 
 export function createPhotonReverseGeocodingProvider(
-  fetcher: FetchLike = fetch,
+  fetcher: GeocodingFetch = nativeGeocodingFetch,
 ): ReverseGeocodingProvider {
   return {
     async reverseGeocode(latitude, longitude, signal) {
       const url = new URL("https://photon.komoot.io/reverse");
       url.searchParams.set("lat", String(latitude));
       url.searchParams.set("lon", String(longitude));
-      url.searchParams.set("lang", "zh");
+      url.searchParams.set("lang", "default");
       const timeout = AbortSignal.timeout(10_000);
       const abortSignal = signal instanceof AbortSignal ? signal : undefined;
       const response = await fetcher(url, {
         signal: abortSignal ? AbortSignal.any([abortSignal, timeout]) : timeout,
         headers: { Accept: "application/json" },
       });
-      if (!response.ok) throw new Error("location-provider-unavailable");
+      if (
+        response.status === 400 ||
+        (response.status >= 400 && response.status < 500 && response.status !== 429)
+      ) {
+        throw new Error("invalidProviderRequest");
+      }
+      if (!response.ok) throw new Error("reverseGeocodingUnavailable");
       return reverseLocation(await response.json(), latitude, longitude);
     },
   };

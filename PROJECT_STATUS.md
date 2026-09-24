@@ -1,10 +1,10 @@
 # 当前项目状态
 
-- 最后更新：2026-09-24
+- 最后更新：2026-09-25
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3.0–3.8.1 与 Phase 3.M PASS；Phase 3 Overall = COMPLETE（自动验收由 Ethan 授权）。** Phase 3.8.1 修复详细天气地点搜索。最新 `npm run verify`：251 Unit、114 Architecture、795 UI PASS / 15 条件跳过；Rust 65 tests 与当前 HEAD Tauri production build 均 PASS。完整记录及产物见 `docs/v2-phase-3-verification.md`。Schema 为 7，且只有一次 `6→7` 生产迁移。Debug 路径 `<app_local_data_dir>/dev-v2/courses.sqlite3`，Release 路径 `<app_local_data_dir>/courses.sqlite3`。版本仍为 1.3.1；未运行 Production EXE、未安装 Installer、未访问真实用户 DB。Photon live endpoint 本轮无法稳定诊断；Windows 真实界面复验未由 Codex 执行。Installer compatibility 与 Updater E2E 未验证。Phase 3 完成不代表 v2 Release Ready；下一步仅等待 Ethan / ChatGPT 确认后进入 Phase 4；当前不得自动进入 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
+- **当前状态：Phase 3.8.2 Weather Geocoding Reliability Fix 已实现，自动验证及 Tauri production build PASS；Windows 11 Tauri 实际界面验收 PENDING。** 修正 Photon 不支持 `lang=zh` 导致的 HTTP 400，改为 `lang=default`；Photon / Nominatim 地理编码改走 Rust Native HTTP，天气预报仍独立使用 Open-Meteo；前向搜索 HTTP 200 空结果不再偷偷改写 query 重试。最终 `npm run verify`：253 Unit、114 Architecture、804 UI PASS / 15 条件跳过；Rust 74 tests、fmt、clippy PASS。完整诊断与产物见 `docs/v2-phase-3-verification.md`。Schema 仍为 7、应用版本仍为 1.3.1；没有运行 production EXE、安装包或访问真实用户 DB。真实 Windows 天气界面验收仍待 Ethan 执行，故 Phase 3.8.2 还不能标为人工验收 PASS；Phase 4 保持 NOT STARTED。不得自动进入 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 是唯一外网能力且默认关闭，手动搜索仅在提交后请求 Photon 并只保存最终选中地点，当前位置需明确同意、系统授权和坐标模糊化；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 

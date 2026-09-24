@@ -8,15 +8,18 @@ import type {
 import { createOpenMeteoProvider } from "../../services/weather-provider.ts";
 import { createPhotonReverseGeocodingProvider } from "../../services/reverse-geocoding-provider.ts";
 import { createPhotonLocationSearchProvider } from "../../services/photon-location-provider.ts";
+import type { GeocodingFetch } from "../../services/native-geocoding-transport.ts";
+import { nativeGeocodingFetch } from "../../services/native-geocoding-transport.ts";
 
 /** Weather Application boundary owns the production provider selection. */
 export function createWorkspaceWeatherProvider(
   fetcher: typeof fetch = fetch,
+  geocodingFetcher: GeocodingFetch = fetcher === fetch ? nativeGeocodingFetch : fetcher,
 ): WorkspaceWeatherProvider {
   return {
     ...createOpenMeteoProvider(fetcher),
-    ...createPhotonLocationSearchProvider(fetcher),
-    ...createPhotonReverseGeocodingProvider(fetcher),
+    ...createPhotonLocationSearchProvider(geocodingFetcher),
+    ...createPhotonReverseGeocodingProvider(geocodingFetcher),
   };
 }
 

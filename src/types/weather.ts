@@ -30,10 +30,15 @@ export type WeatherLocationPrecision =
   | "coordinatesOnly"
   | "unknown";
 
-export interface WeatherProvider {
+export interface LocationSearchProvider {
   searchLocation(query: string, signal?: WeatherRequestSignal): Promise<readonly WeatherLocation[]>;
+}
+
+export interface ForecastProvider {
   fetchForecast(location: WeatherLocation, signal?: WeatherRequestSignal): Promise<WeatherSnapshot>;
 }
+
+export type WeatherProvider = ForecastProvider & LocationSearchProvider;
 
 export interface ReverseGeocodingProvider {
   reverseGeocode(
@@ -45,11 +50,23 @@ export interface ReverseGeocodingProvider {
 
 export type WorkspaceWeatherProvider = WeatherProvider & ReverseGeocodingProvider;
 
+export type WeatherErrorCategory =
+  | "geocodingUnavailable"
+  | "reverseGeocodingUnavailable"
+  | "forecastUnavailable"
+  | "permissionDenied"
+  | "locationTimeout"
+  | "locationUnavailable"
+  | "lowAccuracy"
+  | "invalidProviderRequest"
+  | "offline";
+
 export type WeatherLocationRequestState =
   | { readonly kind: "idle" }
   | { readonly kind: "locating" }
   | { readonly kind: "resolving" }
-  | { readonly kind: "error"; readonly message: string }
+  | { readonly kind: "fetching" }
+  | { readonly kind: "error"; readonly message: string; readonly category: WeatherErrorCategory }
   | { readonly kind: "notice"; readonly message: string };
 
 export interface WeatherRequestSignal {
@@ -114,4 +131,4 @@ export type WeatherSearchState =
   | { readonly kind: "idle" }
   | { readonly kind: "searching" }
   | { readonly kind: "results"; readonly locations: readonly WeatherLocation[] }
-  | { readonly kind: "error"; readonly message: string };
+  | { readonly kind: "error"; readonly message: string; readonly category: WeatherErrorCategory };

@@ -15,7 +15,7 @@
 
 - Phase 3 中 Weather 是唯一允许主动访问外部网络的模块。Diary、Inbox、Search、Context、Routine、Academic 和 Planner 不得为了本阶段功能发起外部请求。
 - Diary 正文和 Inbox raw text 只能在本地数据库、本地 UI 与本地 Search 中流转；不得进入 console、Rust stdout、错误遥测、远端分析、Weather 或 AI。
-- Weather provider 仅可收到用户明确选择城市所必需的城市搜索文本，或该城市级坐标，以及天气查询参数。不得附带 Course、Task、PlannerEvent、Diary、Inbox、Routine 标题或 Search query。不得访问设备精确位置、浏览器 geolocation、IP 地理推断或后台定位。
+- Weather provider 仅可收到用户主动提交的地点搜索文本、用户确认并模糊化到三位小数的设备坐标，或天气查询所需坐标。不得附带 Course、Task、PlannerEvent、Diary、Inbox、Routine 标题或 Search query；不得使用 IP 地理推断或后台定位。
 - 天气默认关闭；关闭时不得请求天气或城市搜索服务。地点搜索只在用户启用天气并主动提交搜索时发生。
 - Context Engine 不联网、不访问数据库、不调用 Tauri、不调用 AI；仅将上层已经读取的数据投影为确定结果。不得包含 Diary 正文/片段、Inbox raw text 或完整 Task description。
 - Search 完全本地；不使用远程索引、搜索服务、query logging 或 query history。空查询不得加载全库内容。
@@ -30,7 +30,7 @@
 - `CourseState` 保存路径而非全局 SQLite connection；每个 command 使用 `spawn_blocking` 和短生命周期 `CourseDatabase::connect`。新 Repository 命令遵循同样边界，不把 SQLite 访问写进 Presentation。
 - 前端既有 `src/application/academic/`、`src/application/planner/`、`src/application/timeline/`、`src/application/workspace/` 与 service adapters。新模块遵循 Presentation → Application → service/Tauri adapter → Rust Repository/SQLite，不绕过 Academic canonical read boundary。
 - `AppRoute` 已有 workspace/diary、workspace/inbox，`ObjectRef` 已有 `diaryEntry`、`inboxItem`；当前 diary/inbox 仍显示未开放状态，`workspace/search` 尚未建成。Search 结果应复用 typed ObjectRef/NavigationTarget，不在结果组件散写 route 字符串。
-- Settings 已有“工作台 → 天气”占位页；现有 `connect-src` 仅允许本地 Tauri IPC。天气阶段若确认 WebView fetch 可安全使用，只能加入 provider 所需的精确 HTTPS 域名，不得使用 `connect-src *`。
+- Weather 仅在用户启用并主动使用时联网。Open-Meteo forecast 使用精确 CSP allowlist；Photon / Nominatim forward/reverse geocoding 经 Tauri Native HTTP Adapter，不开放给 WebView `connect-src`。
 - Phase 2 已有 buffer-aware `computeFreeTimeIntervals`、PlannerEvent Application API 与 Workspace Schedule/Application boundaries；Context/Routine 应复用这些纯逻辑与 API，不复制课程解析、冲突或空闲算法。
 - 当前没有统一 Local Search 实现或 Weather provider 调用。本文件后续明确的功能仍待各自阶段实现和验证。
 
@@ -75,13 +75,13 @@ Repository 最少支持按日期读取与 upsert，必要时删除。SQLite `ent
 ## 5. Weather 契约
 
 - `工作台 → 天气` 是真实设置：启用、地点、温度单位、手动刷新。默认为关闭；关闭时无网络访问，也不显示虚假天气。
-- 手动地点搜索只在用户提交搜索时将搜索文字发送给 Photon / OpenStreetMap；支持区县、街镇、道路与地点，且不保存搜索历史。只有用户选中的地点及其坐标/层级元数据会保存在天气设置中；天气预报请求将该选中地点自己的坐标发送给 Open-Meteo。
-- “使用当前位置”仅在应用内说明确认及系统定位授权后读取一次；接受系统估算精度不差于 10 公里的坐标，并在发送给 Photon 逆向解析与 Open-Meteo 前四舍五入到三位小数。只保存当前选择，不记录定位历史；解析失败时不猜测地名。
+- 手动地点搜索只在用户提交搜索时通过 Tauri Native HTTP Adapter 将搜索文字发送给 Photon；只有网络/超时/5xx/服务不可用或无有效逆向结果时才使用 Nominatim fallback。公共 Nominatim 请求由共享限流器控制为最多 1 次/秒，使用可识别的 Links Workplace User-Agent；成功结果仅作短期内存缓存，不保存搜索历史。只有用户选中的地点及其坐标/层级元数据会保存在天气设置中，预报使用被选中的准确坐标。
+- “使用当前位置”仅在应用内说明确认及系统定位授权后读取一次；接受系统估算精度不差于 10 公里的坐标，并在发送给 Native reverse geocoding 与 Open-Meteo 前四舍五入到三位小数。只保存当前选择，不记录定位历史；解析失败时仍可用模糊后的坐标请求天气，并显示“当前位置”，不猜测地名。
 - Presentation 不直接散落 provider fetch；通过 `searchLocation`、`fetchForecast` 等单一 adapter 返回内部 `current/hourly/daily` 模型，不让 UI 绑定 provider 原始 JSON。
 - Header 仅显示温度与简短状态；点击打开轻量 popover，显示当前、未来数小时、七日预报、地点与更新时间。
 - 缓存用 `links-workplace.weather.*` 命名空间，不进入 schema 7。≤30 分钟为 fresh，≤24 小时 stale-but-usable；过期视为不可用。网络失败时可显示 stale cache 并明确标注缓存状态/更新时间；无缓存显示天气暂不可用。
 - App 启动或天气实际需要展示时，只在 cache stale 后刷新；地点改变或手动刷新时刷新；禁止分钟级轮询。Weather 错误不得导致 Error Boundary、启动或任何离线核心功能失败。
-- Provider 需无用户 API key、HTTPS、有官方文档，支持城市搜索及 current/hourly/daily。优先 WebView 原生 fetch + 精确 CSP allowlist；只有经证据证明 CORS/CSP/platform 不可行时才增加最小官方 Tauri network capability。不得抓网页、使用代理或提交密钥。
+- Geocoding 与 forecast 使用分离的 provider adapter：Photon primary / Nominatim fallback 由 Native HTTP adapter 请求；Open-Meteo 仅负责 current/hourly/daily forecast。请求设有限 timeout；HTTP 400 映射为 provider 请求异常，不通过 fallback 掩盖；Geocoding attribution 标明 OpenStreetMap contributors。不得抓网页、使用代理或提交密钥。
 - 所有 provider 请求只含天气所需地点/参数；不得附带个人工作区内容。Tests 使用 mock/fixtures，不依赖第三方实时 API。
 
 ## 6. Deterministic Context Engine

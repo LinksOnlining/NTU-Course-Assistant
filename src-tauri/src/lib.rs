@@ -1,4 +1,5 @@
 mod db;
+mod geocoding;
 mod models;
 mod notification;
 mod scheduler;
@@ -1142,6 +1143,7 @@ fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(geocoding::GeocodingState::new().expect("初始化天气地理编码 HTTP 客户端失败"))
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             let _ = show_main_window(app);
         }))
@@ -1247,6 +1249,8 @@ pub fn run() {
             update_routine,
             delete_routine,
             confirm_routine_suggestion,
+            geocoding::search_weather_location,
+            geocoding::reverse_geocode_weather_location,
             load_time_blocks,
             load_time_blocks_for_task,
             create_time_block,

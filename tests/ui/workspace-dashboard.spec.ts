@@ -79,8 +79,11 @@ async function seedDashboardRuntime(
         });
       }
       let failDiarySave = diaryFixture.failSave ?? false;
+      let failGeocodingSearch = false;
+      let failReverseGeocoding = false;
       let loadCoursesCount = 0;
       let searchDiaryReadCount = 0;
+      const geocodingCalls: { command: string; args?: Record<string, unknown> }[] = [];
       Object.defineProperty(window, "__TAURI_INTERNALS__", {
         configurable: true,
         value: {
@@ -109,6 +112,98 @@ async function seedDashboardRuntime(
               };
             }
             if (command === "load_day_count") return 7;
+            if (command === "search_weather_location") {
+              geocodingCalls.push({ command, args });
+              if (failGeocodingSearch) throw new Error("geocodingUnavailable");
+              const features =
+                args?.query === "南通大学"
+                  ? [
+                      {
+                        type: "Feature",
+                        geometry: { type: "Point", coordinates: [120.874, 31.934] },
+                        properties: {
+                          name: "南通大学",
+                          type: "other",
+                          city: "南通市",
+                          state: "江苏省",
+                          country: "中国",
+                          osm_type: "R",
+                          osm_id: 4,
+                        },
+                      },
+                    ]
+                  : args?.query === "青年中路"
+                    ? [
+                        {
+                          type: "Feature",
+                          geometry: { type: "Point", coordinates: [120.8626, 31.982] },
+                          properties: {
+                            name: "青年中路",
+                            type: "street",
+                            street: "青年中路",
+                            locality: "文峰街道",
+                            district: "崇川区",
+                            city: "南通市",
+                            state: "江苏省",
+                            country: "中国",
+                            osm_type: "W",
+                            osm_id: 3,
+                          },
+                        },
+                      ]
+                    : [
+                        {
+                          type: "Feature",
+                          geometry: { type: "Point", coordinates: [121.1, 32.1] },
+                          properties: {
+                            name: "南通市",
+                            type: "city",
+                            city: "南通市",
+                            state: "江苏省",
+                            country: "中国",
+                            osm_type: "R",
+                            osm_id: 1,
+                          },
+                        },
+                        {
+                          type: "Feature",
+                          geometry: { type: "Point", coordinates: [120.86234, 31.98123] },
+                          properties: {
+                            name: "崇川区",
+                            type: "district",
+                            district: "崇川区",
+                            city: "南通市",
+                            state: "江苏省",
+                            country: "中国",
+                            osm_type: "R",
+                            osm_id: 2,
+                          },
+                        },
+                      ];
+              return { type: "FeatureCollection", features };
+            }
+            if (command === "reverse_geocode_weather_location") {
+              geocodingCalls.push({ command, args });
+              if (failReverseGeocoding) throw new Error("reverseGeocodingUnavailable");
+              return {
+                type: "FeatureCollection",
+                features: [
+                  {
+                    type: "Feature",
+                    geometry: { type: "Point", coordinates: [120.897, 31.223] },
+                    properties: {
+                      locality: "观音山街道",
+                      district: "崇川区",
+                      city: "南通市",
+                      state: "江苏省",
+                      country: "中国",
+                      street: "不应保留的道路名",
+                      housenumber: "88",
+                    },
+                  },
+                ],
+              };
+            }
             if (command === "load_semesters") return [activeSemester];
             if (command === "load_course_overrides" || command === "load_exams") return [];
             if (command === "load_academic_tasks") return tasks;
@@ -253,6 +348,7 @@ async function seedDashboardRuntime(
       Object.assign(window, {
         __workspaceDashboardTest: {
           getLoadCoursesCount: () => loadCoursesCount,
+          getGeocodingCalls: () => geocodingCalls,
           getSearchDiaryReadCount: () => searchDiaryReadCount,
           getPersonalTaskCount: () => personalTasks.length,
           getDiaryBody: (date: string) => diaryEntries.get(date)?.body ?? null,
@@ -261,6 +357,12 @@ async function seedDashboardRuntime(
           getEventCount: () => dashboardEvents.length,
           setDiarySaveFailure: (value: boolean) => {
             failDiarySave = value;
+          },
+          setGeocodingSearchFailure: (value: boolean) => {
+            failGeocodingSearch = value;
+          },
+          setReverseGeocodingFailure: (value: boolean) => {
+            failReverseGeocoding = value;
           },
         },
       });
@@ -900,64 +1002,7 @@ test("Weather stays offline until explicit Photon detailed-place search and uses
   const requests: string[] = [];
   let failForecast = false;
   page.on("request", (request) => {
-    if (/open-meteo\.com|photon\.komoot\.io/u.test(request.url())) requests.push(request.url());
-  });
-  await page.route("https://photon.komoot.io/api**", async (route) => {
-    const query = new URL(route.request().url()).searchParams.get("q");
-    const features =
-      query === "青年中路"
-        ? [
-            {
-              type: "Feature",
-              geometry: { type: "Point", coordinates: [120.8626, 31.982] },
-              properties: {
-                name: "青年中路",
-                type: "street",
-                street: "青年中路",
-                locality: "文峰街道",
-                district: "崇川区",
-                city: "南通市",
-                state: "江苏省",
-                country: "中国",
-                osm_type: "W",
-                osm_id: 3,
-              },
-            },
-          ]
-        : [
-            {
-              type: "Feature",
-              geometry: { type: "Point", coordinates: [121.1, 32.1] },
-              properties: {
-                name: "南通市",
-                type: "city",
-                city: "南通市",
-                state: "江苏省",
-                country: "中国",
-                osm_type: "R",
-                osm_id: 1,
-              },
-            },
-            {
-              type: "Feature",
-              geometry: { type: "Point", coordinates: [120.86234, 31.98123] },
-              properties: {
-                name: "崇川区",
-                type: "district",
-                district: "崇川区",
-                city: "南通市",
-                state: "江苏省",
-                country: "中国",
-                osm_type: "R",
-                osm_id: 2,
-              },
-            },
-          ];
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ features }),
-    });
+    if (request.url().includes("open-meteo.com")) requests.push(request.url());
   });
   await page.route("https://api.open-meteo.com/**", async (route) => {
     if (failForecast) {
@@ -1025,15 +1070,15 @@ test("Weather stays offline until explicit Photon detailed-place search and uses
   await settings.getByRole("button", { name: "取消" }).click();
   await expect(page.getByRole("button", { name: /天气：青年中路，72°F/u })).toBeVisible();
   expect(requests.some((url) => url.includes("api.open-meteo.com/v1/forecast"))).toBe(true);
-  const searchUrls = requests
-    .filter((url) => url.includes("photon.komoot.io/api"))
-    .map((url) => new URL(url));
+  const geocodingCalls = await page.evaluate(() =>
+    (window as any).__workspaceDashboardTest.getGeocodingCalls(),
+  );
+  expect(geocodingCalls.map((call: any) => call.args.query)).toEqual(["崇川区", "青年中路"]);
+  expect(requests.some((url) => url.includes("photon.komoot.io"))).toBe(false);
   const forecastUrls = requests
     .filter((url) => url.includes("api.open-meteo.com/v1/forecast"))
     .map((url) => new URL(url));
-  expect(searchUrls.map((url) => url.searchParams.get("q"))).toEqual(["崇川区", "青年中路"]);
-  expect(searchUrls.every((url) => url.searchParams.get("lang") === "zh")).toBe(true);
-  expect(searchUrls.every((url) => !url.searchParams.has("layer"))).toBe(true);
+
   expect(requests.some((url) => url.includes("geocoding-api.open-meteo.com"))).toBe(false);
   expect(forecastUrls[0].searchParams.get("latitude")).toBe("31.98123");
   expect(forecastUrls[0].searchParams.get("longitude")).toBe("120.86234");
@@ -1118,28 +1163,7 @@ test("当前位置只在双重显式确认后请求，坐标先模糊化且低�
     });
   });
   page.on("request", (request) => {
-    if (/open-meteo\.com|photon\.komoot\.io/u.test(request.url())) requests.push(request.url());
-  });
-  await page.route("https://photon.komoot.io/**", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        features: [
-          {
-            properties: {
-              locality: "观音山街道",
-              district: "崇川区",
-              city: "南通市",
-              state: "江苏省",
-              country: "中国",
-              street: "不应保留的道路名",
-              housenumber: "88",
-            },
-          },
-        ],
-      }),
-    });
+    if (request.url().includes("open-meteo.com")) requests.push(request.url());
   });
   await page.route("https://api.open-meteo.com/**", async (route) => {
     await route.fulfill({
@@ -1197,10 +1221,15 @@ test("当前位置只在双重显式确认后请求，坐标先模糊化且低�
   await settings.getByRole("button", { name: "同意并定位" }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__weatherGeoTest.calls)).toBe(1);
   await expect.poll(() => requests.some((url) => url.includes("api.open-meteo.com"))).toBe(true);
-  const reverseUrl = new URL(requests.find((url) => url.includes("photon.komoot.io"))!);
+  const reverseCall = await page.evaluate(() =>
+    (window as any).__workspaceDashboardTest
+      .getGeocodingCalls()
+      .find((call: any) => call.command === "reverse_geocode_weather_location"),
+  );
   const forecastUrl = new URL(requests.find((url) => url.includes("api.open-meteo.com"))!);
-  expect(reverseUrl.searchParams.get("lat")).toBe("31.223");
-  expect(reverseUrl.searchParams.get("lon")).toBe("120.897");
+  expect(reverseCall.args.latitude).toBe(31.223);
+  expect(reverseCall.args.longitude).toBe(120.897);
+  expect(requests.some((url) => url.includes("photon.komoot.io"))).toBe(false);
   expect(forecastUrl.searchParams.get("latitude")).toBe("31.223");
   expect(forecastUrl.searchParams.get("longitude")).toBe("120.897");
 
@@ -1230,6 +1259,44 @@ test("当前位置只在双重显式确认后请求，坐标先模糊化且低�
   await expect(reopenedSettings.getByRole("alert")).toContainText("精度较低");
   await expect(reopenedSettings.getByLabel("搜索城市、区县、街道或地点")).toBeVisible();
   expect(await page.evaluate(() => (window as any).__weatherGeoTest.calls)).toBe(2);
+
+  await page.evaluate(() => {
+    (window as any).__weatherGeoTest.accuracy = 250;
+    (window as any).__workspaceDashboardTest.setReverseGeocodingFailure(true);
+  });
+  await reopenedSettings.getByRole("button", { name: "使用当前位置" }).click();
+  await reopenedSettings
+    .getByRole("region", { name: "当前位置使用说明" })
+    .getByRole("button", { name: "同意并定位" })
+    .click();
+  await expect(reopenedSettings.getByRole("status")).toContainText("地点名称暂时无法解析");
+  await expect(page.getByRole("button", { name: /天气：当前位置/u })).toBeVisible();
+  expect(requests.some((url) => url.includes("api.open-meteo.com/v1/forecast"))).toBe(true);
+});
+
+test("地点搜索错误与天气预报错误分开显示，搜索失败后可重试", async ({ page }) => {
+  await seedDashboardRuntime(page);
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "天气" })
+    .click();
+  await settings.getByLabel("启用天气").check();
+  await settings.getByLabel("搜索城市、区县、街道或地点").fill("南通大学");
+  await page.evaluate(() =>
+    (window as any).__workspaceDashboardTest.setGeocodingSearchFailure(true),
+  );
+  await settings.getByRole("button", { name: "搜索地点" }).click();
+  await expect(settings.getByRole("alert")).toHaveText("地点搜索服务暂时不可用，请稍后重试。");
+  await expect(settings.getByRole("button", { name: "搜索地点" })).toBeEnabled();
+
+  await page.evaluate(() =>
+    (window as any).__workspaceDashboardTest.setGeocodingSearchFailure(false),
+  );
+  await settings.getByRole("button", { name: "搜索地点" }).click();
+  await expect(settings.getByRole("button", { name: /南通大学/u })).toBeVisible();
+  await expect(settings.getByRole("alert")).toHaveCount(0);
 });
 
 test("failed Weather requests never block offline core routes", async ({ page }) => {
@@ -1250,12 +1317,11 @@ test("failed Weather requests never block offline core routes", async ({ page })
       }),
     );
   });
-  await page.route("https://geocoding-api.open-meteo.com/**", (route) => route.abort());
   await page.route("https://api.open-meteo.com/**", (route) => route.abort());
   await seedDashboardRuntime(page);
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
   await page.getByRole("button", { name: /天气：南通/u }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "天气服务暂时无法访问" })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "天气数据暂时不可用" })).toBeVisible();
   await page.getByRole("button", { name: "关闭天气详情" }).click();
 
   await page.getByRole("button", { name: "任务", exact: true }).click();

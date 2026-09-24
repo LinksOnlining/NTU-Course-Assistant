@@ -19,6 +19,7 @@ import {
   saveWeatherSettings,
 } from "../../src/services/weather-storage.ts";
 import { createOpenMeteoProvider } from "../../src/services/weather-provider.ts";
+import { createNativeGeocodingFetch } from "../../src/services/native-geocoding-transport.ts";
 import { createPhotonLocationSearchProvider } from "../../src/services/photon-location-provider.ts";
 import { createPhotonReverseGeocodingProvider } from "../../src/services/reverse-geocoding-provider.ts";
 
@@ -170,29 +171,50 @@ test("temperature and WMO labels are normalized for presentation", () => {
   assert.match(weatherLocationKey(location), /^31\.9800,120\.8900$/u);
 });
 
-test("Open-Meteo adapter sends only explicit city/weather parameters and normalizes data", async () => {
+test("native geocoding transport routes forward and reverse requests through Tauri commands", async () => {
+  const calls = [];
+  const fetcher = createNativeGeocodingFetch(async (command, args) => {
+    calls.push({ command, args });
+    return { type: "FeatureCollection", features: [] };
+  });
+  const forward = await fetcher(
+    "https://photon.komoot.io/api?q=%E5%8D%97%E9%80%9A%E5%A4%A7%E5%AD%A6&lang=default&limit=12",
+  );
+  assert.equal(forward.status, 200);
+  assert.deepEqual(calls[0], {
+    command: "search_weather_location",
+    args: { query: "南通大学" },
+  });
+  await fetcher("https://photon.komoot.io/reverse?lat=31.223&lon=120.897&lang=default");
+  assert.deepEqual(calls[1], {
+    command: "reverse_geocode_weather_location",
+    args: { latitude: 31.223, longitude: 120.897 },
+  });
+  await assert.rejects(
+    () => fetcher("https://example.com/api?q=南通大学"),
+    /invalidProviderRequest/u,
+  );
+});
+
+test("native geocoding transport discards a result after its request is aborted", async () => {
+  let resolveInvocation;
+  const fetcher = createNativeGeocodingFetch(
+    () => new Promise((resolve) => (resolveInvocation = resolve)),
+  );
+  const controller = new AbortController();
+  const pending = fetcher("https://photon.komoot.io/api?q=Berlin&lang=default", {
+    signal: controller.signal,
+  });
+  controller.abort();
+  resolveInvocation({ type: "FeatureCollection", features: [] });
+  await assert.rejects(pending, { name: "AbortError" });
+});
+
+test("Open-Meteo adapter only fetches forecasts at the selected coordinates", async () => {
   const urls = [];
   const provider = createOpenMeteoProvider(async (input) => {
     const url = new URL(String(input));
     urls.push(url);
-    if (url.hostname === "geocoding-api.open-meteo.com") {
-      return new Response(
-        JSON.stringify({
-          results: [
-            {
-              name: "南通",
-              admin1: "江苏",
-              country: "中国",
-              feature_code: "ADM2",
-              latitude: 31.98,
-              longitude: 120.89,
-              timezone: "Asia/Shanghai",
-            },
-          ],
-        }),
-        { status: 200 },
-      );
-    }
     return new Response(
       JSON.stringify({
         timezone: "Asia/Shanghai",
@@ -222,30 +244,23 @@ test("Open-Meteo adapter sends only explicit city/weather parameters and normali
     );
   });
 
-  const locations = await provider.searchLocation(" 南通 ");
-  assert.equal(locations[0].displayName, "南通");
-  assert.equal(locations[0].admin1, "江苏");
-  assert.equal(locations[0].precision, "city");
-  assert.equal(locations[0].source, "manual");
-  const result = await provider.fetchForecast(locations[0]);
+  const result = await provider.fetchForecast(location);
   assert.equal(result.current.temperatureCelsius, 22);
   assert.equal(result.hourly[0].precipitationProbability, null);
   assert.equal(result.daily.length, 7);
   assert.ok(Number.isFinite(Date.parse(result.fetchedAt)));
   assert.deepEqual(
     urls.map((url) => url.hostname),
-    ["geocoding-api.open-meteo.com", "api.open-meteo.com"],
+    ["api.open-meteo.com"],
   );
-  assert.equal(urls[0].searchParams.get("name"), "南通");
-  assert.equal(urls[0].searchParams.get("language"), "zh");
-  assert.equal(urls[0].searchParams.get("count"), "5");
-  assert.equal(urls[1].searchParams.get("latitude"), "31.98");
-  assert.equal(urls[1].searchParams.get("forecast_days"), "7");
-  assert.equal(urls[1].searchParams.has("task"), false);
-  assert.equal(urls[1].searchParams.has("diary"), false);
-  assert.equal(urls[1].searchParams.has("inbox"), false);
-  assert.equal(urls[1].searchParams.has("course"), false);
-  assert.equal(urls[1].searchParams.has("query"), false);
+  assert.equal(urls[0].searchParams.get("latitude"), "31.98");
+  assert.equal(urls[0].searchParams.get("longitude"), "120.89");
+  assert.equal(urls[0].searchParams.get("forecast_days"), "7");
+  assert.equal(urls[0].searchParams.has("task"), false);
+  assert.equal(urls[0].searchParams.has("diary"), false);
+  assert.equal(urls[0].searchParams.has("inbox"), false);
+  assert.equal(urls[0].searchParams.has("course"), false);
+  assert.equal(urls[0].searchParams.has("query"), false);
 });
 
 test("Photon forward search supports the required Chinese detailed-place queries without layer filtering", async () => {
@@ -349,7 +364,7 @@ test("Photon forward search supports the required Chinese detailed-place queries
     queries,
   );
   assert.ok(requested.every((url) => url.pathname === "/api"));
-  assert.ok(requested.every((url) => url.searchParams.get("lang") === "zh"));
+  assert.ok(requested.every((url) => url.searchParams.get("lang") === "default"));
   assert.ok(requested.every((url) => url.searchParams.get("limit") === "12"));
   assert.ok(requested.every((url) => !url.searchParams.has("layer")));
   assert.ok(requested.every((url) => !url.searchParams.has("countrycode")));
@@ -503,36 +518,16 @@ test("Photon normalization accepts missing city/district, maps layers, ranks exa
   assert.equal(weatherLocationIdentity(results[0]), "osm:R:2");
 });
 
-test("Photon falls back only after an empty administrative-suffix search and still uses provider results", async () => {
+test("Photon HTTP 200 empty results do not trigger another query and malformed data remains an error", async () => {
   const requested = [];
   const provider = createPhotonLocationSearchProvider(async (input) => {
     const url = new URL(String(input));
     requested.push(url.searchParams.get("q"));
-    return new Response(
-      JSON.stringify({
-        features:
-          url.searchParams.get("q") === "崇川"
-            ? [
-                photonFeature({
-                  name: "崇川区",
-                  type: "district",
-                  district: "崇川区",
-                  state: "江苏省",
-                }),
-              ]
-            : [],
-      }),
-      { status: 200 },
-    );
+    return new Response(JSON.stringify({ features: [] }), { status: 200 });
   });
   const results = await provider.searchLocation("崇川区");
-  assert.deepEqual(requested, ["崇川区", "崇川"]);
-  assert.equal(results[0].displayName, "崇川区");
-
-  const empty = createPhotonLocationSearchProvider(
-    async () => new Response(JSON.stringify({ features: [] }), { status: 200 }),
-  );
-  assert.deepEqual(await empty.searchLocation("青年中路"), []);
+  assert.deepEqual(requested, ["崇川区"]);
+  assert.deepEqual(results, []);
   const malformed = createPhotonLocationSearchProvider(
     async () =>
       new Response(JSON.stringify({ features: [{ properties: { name: "缺少坐标" } }] }), {
@@ -659,9 +654,5 @@ test("Open-Meteo adapter rejects malformed and failed service responses", async 
   );
   await assert.rejects(() => malformed.fetchForecast(location), /invalid-weather-response/u);
   const failed = createOpenMeteoProvider(async () => new Response("", { status: 503 }));
-  await assert.rejects(() => failed.searchLocation("南通"), /weather-provider-unavailable/u);
-  const empty = createOpenMeteoProvider(
-    async () => new Response(JSON.stringify({ results: [] }), { status: 200 }),
-  );
-  assert.deepEqual(await empty.searchLocation("不存在的城市"), []);
+  await assert.rejects(() => failed.fetchForecast(location), /weather-provider-unavailable/u);
 });

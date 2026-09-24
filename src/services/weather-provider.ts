@@ -3,7 +3,7 @@ import type {
   WeatherDailyForecast,
   WeatherHourlyForecast,
   WeatherLocation,
-  WeatherProvider,
+  ForecastProvider,
   WeatherRequestSignal,
   WeatherSnapshot,
 } from "../types/weather.ts";
@@ -41,46 +41,6 @@ function stringArray(value: unknown): readonly string[] | null {
   if (!Array.isArray(value)) return null;
   const strings = value.map(nonEmptyString);
   return strings.some((item) => item === null) ? null : (strings as string[]);
-}
-
-function locationDisplayName(record: JsonRecord): string | null {
-  return nonEmptyString(record.name);
-}
-
-function locationPrecision(featureCode: string | null): WeatherLocation["precision"] {
-  if (!featureCode) return "unknown";
-  const code = featureCode.toUpperCase();
-  if (code === "ADM4" || code === "PPLX") return "locality";
-  if (code === "ADM3") return "district";
-  if (code === "ADM2" || /^PPL(?:C|A\d*|S|Q)?$/u.test(code)) return "city";
-  if (code === "ADM1") return "region";
-  return "unknown";
-}
-
-function parseLocations(value: unknown): readonly WeatherLocation[] {
-  if (!isRecord(value) || !Array.isArray(value.results)) return [];
-  return value.results.flatMap((item) => {
-    if (!isRecord(item)) return [];
-    const latitude = finiteNumber(item.latitude);
-    const longitude = finiteNumber(item.longitude);
-    const displayName = locationDisplayName(item);
-    if (latitude === null || longitude === null || !displayName) return [];
-    return [
-      {
-        displayName,
-        latitude,
-        longitude,
-        timezone: nonEmptyString(item.timezone),
-        country: nonEmptyString(item.country) ?? undefined,
-        admin1: nonEmptyString(item.admin1) ?? undefined,
-        admin2: nonEmptyString(item.admin2) ?? undefined,
-        admin3: nonEmptyString(item.admin3) ?? undefined,
-        admin4: nonEmptyString(item.admin4) ?? undefined,
-        precision: locationPrecision(nonEmptyString(item.feature_code)),
-        source: "manual",
-      },
-    ];
-  });
 }
 
 function parseForecast(
@@ -188,17 +148,8 @@ async function getJson(
   return response.json() as Promise<unknown>;
 }
 
-export function createOpenMeteoProvider(fetcher: FetchLike = fetch): WeatherProvider {
+export function createOpenMeteoProvider(fetcher: FetchLike = fetch): ForecastProvider {
   return {
-    async searchLocation(query, signal) {
-      const term = query.trim();
-      if (!term) return [];
-      const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
-      url.searchParams.set("name", term);
-      url.searchParams.set("count", "5");
-      url.searchParams.set("language", "zh");
-      return parseLocations(await getJson(fetcher, url, signal));
-    },
     async fetchForecast(location, signal) {
       const url = new URL("https://api.open-meteo.com/v1/forecast");
       url.searchParams.set("latitude", String(location.latitude));

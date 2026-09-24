@@ -170,3 +170,59 @@
 - Phase 3.8.1：**PASS（自动回归与构建门禁）**。
 - Phase 3：**COMPLETE**。
 - Phase 4：**NOT STARTED**；等待 Ethan / ChatGPT 明确确认。
+
+## Phase 3.8.2 — Weather Geocoding Reliability Fix
+
+**状态：实现、自动回归、live provider 诊断与 Tauri production build PASS；Windows 11 实际界面验收 PENDING。不得据此进入 Phase 4。**
+
+### 根因与边界
+
+- 确认的 Photon 请求错误是 `lang=zh`：该值导致 HTTP 400。当前 forward/reverse 请求统一使用 Photon 支持的 `lang=default`。HTTP 400 映射为 `invalidProviderRequest`，不触发 Nominatim fallback；HTTP 200 且空 feature collection 直接返回“没有匹配地点”，不改写或重复发送 query。
+- 之前的现象不能证明 WebView CORS 是根因；本轮未把 CORS 当作已确认原因。为减少 WebView/CSP 对公共 geocoder 的额外变量，Photon 与 Nominatim 请求通过 Tauri Rust Native HTTP 命令执行。Open-Meteo 仍只提供天气预报，并保持与 geocoding 的 transport / error 状态分离。
+- Photon 仅在网络/timeout、HTTP 5xx、响应损坏/无法归一化，或 reverse 没有可用结果时才回退到 Nominatim。前向 Photon 正常返回空结果时不回退。错误分类分别保留地点搜索、逆向地点解析、天气预报、权限、定位超时、精度及 offline 状态；失败不阻塞 Dashboard / Settings 等本地功能。
+- Rust HTTP timeout 为 8 秒；Nominatim 仅由用户主动触发，使用带产品标识的 User-Agent，跨请求保留最多 1 次/秒节流，结果仅存短期内存缓存（15 分钟、最多 64 条）。请求日志只写 provider/操作/status/content type/耗时/结果类别与数量，不写 query、坐标或地址。Reverse 输入先按三位小数取整；天气预报使用最终选中的准确地点坐标。界面提供 OpenStreetMap contributors attribution。
+- Tauri CSP 仅保留 Open-Meteo forecast 域名；Photon/Nominatim 不向 WebView 开放。SQLite schema 仍为 7；没有课程数据、数据库 migration、应用版本或产品身份改动。Cargo 增加 Native HTTP 所需的 `reqwest` / `rustls` / `tokio`，没有新增前端运行时依赖。
+
+### Live Provider 诊断（2026-09-25）
+
+| 请求 | HTTP | 耗时 | 原始结果 / 可归一化结果 |
+| --- | ---: | ---: | ---: |
+| Photon forward `Berlin` | 200 | 3299 ms | 12 / 12 |
+| Photon forward `南通大学` | 200 | 2075 ms | 12 / 12 |
+| Photon forward `崇川区` | 200 | 1874 ms | 6 / 6 |
+| Photon reverse（公开坐标：Brandenburg Gate） | 200 | 2221 ms | 1 / 1 |
+
+测试使用公开城市查询与公开地标坐标，不使用用户设备位置。Nominatim 策略、fallback 成功/失败与保密归一化由本地 mock tests 覆盖，没有执行 Nominatim bulk/live 查询。
+
+### 自动验证与构建
+
+- Weather Unit + Weather / module-boundary Architecture 定向测试：**24 PASS**；Weather UI 定向 Playwright：**27 PASS**（9 个 viewport / scale 项目组合）。
+- 最终完整 `npm run verify`：TypeScript typecheck PASS；Unit **253 PASS**；Architecture **114 PASS**；UI **804 PASS / 15 条件跳过 / 0 FAIL**；lint、Prettier 与前端 production build PASS。Vite 输出一个既有 chunk size 提示，不影响构建。
+- 初次完整回归有两条跨 viewport 的非天气 UI 用例在页面初始化时得到空白首帧；两条用例各自单独重跑 PASS，之后最终完整回归为 **0 FAIL**。
+- Rust：`cargo test` **74 PASS / 0 FAIL**；`cargo fmt -- --check` PASS；`cargo clippy --all-targets -- -D warnings` PASS。
+- `npm run tauri build` 首次不能覆盖仓库 target 下已被运行中的 `ntu-course-assistant.exe` 锁定的文件；未关闭或终止该用户进程。随后将 `CARGO_TARGET_DIR` 指向系统临时目录重跑同一 production build，**成功**，不运行产出的 EXE，也不安装 MSI/NSIS。
+
+Production artifacts（2026-09-25，临时构建目录 `%TEMP%\links-workplace-p38-2-target-20260925-003826\release`，未纳入 Git）：
+
+| 产物 | 大小（bytes） |
+| --- | ---: |
+| `ntu-course-assistant.exe` | 67,738,624 |
+| `NTU Course Assistant_1.3.1_x64-setup.exe` | 52,241,643 |
+| `NTU Course Assistant_1.3.1_x64-setup.exe.sig` | 436 |
+| `NTU Course Assistant_1.3.1_x64_en-US.msi` | 54,267,904 |
+| `NTU Course Assistant_1.3.1_x64_en-US.msi.sig` | 436 |
+
+### 尚待 Ethan 执行：Windows 11 Tauri 人工验收
+
+Codex 未使用 Computer Use，未启动 production EXE、未安装构建产物，也未打开或触碰真实用户数据库。以下实机项目必须由 Ethan 在 Windows 11 的真实 Tauri 窗口确认；当前均为 **PENDING（不是 PASS）**：
+
+1. 打开天气设置并启用天气，搜索 `南通大学`、`崇川区`；结果应能显示/选择，选择后天气预报使用所选坐标。
+2. 使用当前位置：依次看到“正在定位 / 正在解析地点 / 正在获取天气”；若无法解析名称，仍可用模糊坐标获取天气，不伪造地点名。
+3. 断网或制造 provider 错误后，天气显示对应错误且可重试；Dashboard、Settings 与课表仍保持可操作。
+4. 确认地点 / 天气 attribution 可见，关闭天气后没有 geocoding/forecast 后台请求。
+
+### 阶段状态
+
+- Phase 3.8.2 自动验证与 production build：**PASS**；Windows 11 Tauri 人工验收：**PENDING**。
+- Phase 4：**NOT STARTED**，等待 Ethan / ChatGPT 明确确认。
+- 未运行 production EXE / installer、未访问真实用户 DB；未 push、未创建 tag、未发布 Release。
