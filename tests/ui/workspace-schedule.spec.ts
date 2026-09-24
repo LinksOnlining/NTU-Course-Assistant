@@ -439,6 +439,62 @@ test("keyboard editing remains available and manual Event save previews conflict
   await expect(page.getByRole("button", { name: /人工安排/u })).toBeVisible();
 });
 
+test("PlannerEvent add/edit dialogs keep comfortable spacing and reachable actions", async ({
+  page,
+}) => {
+  await seedScheduleRuntime(page);
+  await page.setViewportSize({ width: 900, height: 700 });
+
+  const assertEditorSpacing = async (name: "添加日程" | "编辑日程") => {
+    const editor = page.getByRole("dialog", { name });
+    await expect(editor).toBeVisible();
+    const spacing = await editor.evaluate((element) => {
+      const form = element.querySelector("form");
+      const label = element.querySelector("label");
+      const input = element.querySelector("input");
+      if (!form || !label || !input) throw new Error("Editor layout is incomplete.");
+      return {
+        padding: getComputedStyle(element).padding,
+        formGap: getComputedStyle(form).rowGap,
+        labelGap: getComputedStyle(label).rowGap,
+        inputPadding: getComputedStyle(input).padding,
+      };
+    });
+    expect(spacing.padding).toBe("30px 30px 26px");
+    expect(spacing.formGap).toBe("18px");
+    expect(spacing.labelGap).toBe("8px");
+    expect(spacing.inputPadding).toBe("10px 14px");
+    await editor.locator("footer").scrollIntoViewIfNeeded();
+    await expect(editor.getByRole("button", { name: "取消" })).toBeInViewport();
+    await expect(editor.getByRole("button", { name: "保存", exact: true })).toBeInViewport();
+  };
+
+  await page.getByRole("button", { name: "+ 添加日程" }).click();
+  await assertEditorSpacing("添加日程");
+  await page
+    .getByRole("dialog", { name: "添加日程" })
+    .getByRole("button", { name: "取消" })
+    .click();
+
+  await page.getByRole("button", { name: /项目讨论/u }).click();
+  await assertEditorSpacing("编辑日程");
+  await page.locator("html").evaluate((element) => element.setAttribute("data-theme", "dark"));
+  await expect(
+    page
+      .getByRole("dialog", { name: "编辑日程" })
+      .getByRole("button", { name: "保存", exact: true }),
+  ).toBeVisible();
+
+  await page.setViewportSize({ width: 900, height: 520 });
+  const compactEditor = page.getByRole("dialog", { name: "编辑日程" });
+  await expect(compactEditor).toBeVisible();
+  await expect
+    .poll(() => compactEditor.evaluate((element) => getComputedStyle(element).padding))
+    .toBe("20px 24px");
+  await compactEditor.locator("footer").scrollIntoViewIfNeeded();
+  await expect(compactEditor.getByRole("button", { name: "保存", exact: true })).toBeInViewport();
+});
+
 test("end-of-day 24:00 is a valid planner end boundary", async ({ page }) => {
   await seedScheduleRuntime(page);
   await page.getByRole("button", { name: "+ 添加日程" }).click();

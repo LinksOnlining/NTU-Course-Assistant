@@ -72,7 +72,7 @@ export function PlannerEventEditor({
   return (
     <div className="workspace-task-backdrop">
       <section
-        className="workspace-task-dialog"
+        className="workspace-task-dialog workspace-planner-event-dialog"
         role="dialog"
         aria-modal="true"
         aria-label={event ? "编辑日程" : "添加日程"}

@@ -138,6 +138,43 @@
   color: var(--text-primary);
 }
 
+.workspace-planner-event-dialog {
+  padding: 30px 30px 26px;
+}
+
+.workspace-planner-event-dialog > header {
+  gap: var(--space-4);
+}
+
+.workspace-planner-event-dialog form {
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.workspace-planner-event-dialog label {
+  gap: var(--space-2);
+}
+
+.workspace-planner-event-dialog input,
+.workspace-planner-event-dialog textarea {
+  min-height: 44px;
+  padding: 10px 14px;
+}
+
+.workspace-planner-event-dialog textarea {
+  min-height: 72px;
+}
+
+.workspace-planner-event-dialog .workspace-task-deadline-fields {
+  gap: 18px;
+}
+
+.workspace-planner-event-dialog footer {
+  gap: var(--space-4);
+  margin-top: 4px;
+  padding-top: var(--space-2);
+}
+
 .workspace-schedule-item--plannerEvent {
   border-left-color: var(--accent-primary);
 }
@@ -195,5 +232,45 @@
   .workspace-schedule-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+}
+
+@media (max-height: 650px) {
+  .workspace-planner-event-dialog {
+    padding: 20px 24px;
+  }
+
+  .workspace-planner-event-dialog form {
+    gap: 14px;
+    margin-top: 16px;
+  }
+
+  .workspace-planner-event-dialog label {
+    gap: 6px;
+  }
+
+  .workspace-planner-event-dialog input,
+  .workspace-planner-event-dialog textarea {
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+
+  .workspace-planner-event-dialog textarea {
+    min-height: 64px;
+  }
+
+  .workspace-planner-event-dialog footer {
+    margin-top: 0;
+    padding-top: 4px;
+  }
+}
+
+@media (max-width: 560px) {
+  .workspace-planner-event-dialog {
+    padding: 24px 20px;
+  }
+
+  .workspace-planner-event-dialog .workspace-task-deadline-fields {
+    gap: var(--space-2);
   }
 }
