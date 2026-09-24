@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3.0–3.6 PASS；继续执行 Phase 3.7 综合自动验收与 Production Build。** Phase 3.6 已启用 `workspace/search` 本机统一搜索，覆盖七类数据并返回 typed NavigationTarget/ObjectRef；空查询不读取全库，搜索无远端请求、无搜索历史或 schema 变更。专项 typecheck、21 个相关 unit、2 个 architecture、1 个 Playwright UI、3 个 Rust DB 测试均 PASS；详见 `docs/v2-phase-3-6-verification.md`。Phase 3.5 Routine 行为及此前 Phase 3.0–3.4 状态保持不变，既有完整 `npm run verify` 与 Rust 检查结果见对应记录。Phase 3 生产 schema 仍为 `6→7` 单次迁移；Debug 路径 `<app_local_data_dir>/dev-v2/courses.sqlite3`，Release 路径 `<app_local_data_dir>/courses.sqlite3`。版本仍为 1.3.1；未运行 Production EXE、未安装 Installer、未访问真实用户 DB。Phase 3 连续授权仍为 3.0–3.7；不得开始 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
+- **当前状态：Phase 3.0–3.7 PASS；Phase 3 Overall = COMPLETE（自动验收由 Ethan 授权）。** 综合门禁与 Production Build 记录见 `docs/v2-phase-3-verification.md`；各阶段功能和隐私边界分别见 Phase 3.0–3.6 文档。Schema 为 7，且只有一次 `6→7` 生产迁移。Debug 路径 `<app_local_data_dir>/dev-v2/courses.sqlite3`，Release 路径 `<app_local_data_dir>/courses.sqlite3`。版本仍为 1.3.1；未运行 Production EXE、未安装 Installer、未访问真实用户 DB。Installer compatibility 与 Updater E2E 未验证。Phase 3 完成不代表 v2 Release Ready；下一步仅等待 Ethan / ChatGPT 审核 Phase 3 总结并规划 Phase 4，当前不得自动进入 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 为唯一外网能力且默认关闭、仅使用用户主动选择的城市；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 
