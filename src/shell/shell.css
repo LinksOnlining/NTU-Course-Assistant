@@ -92,6 +92,7 @@
   font-weight: 650;
 }
 
+.shell-search-button,
 .shell-settings-button {
   min-height: 36px;
   padding: 0 var(--space-3);
@@ -102,6 +103,7 @@
   font-size: var(--font-size-body);
 }
 
+.shell-search-button:hover,
 .shell-settings-button:hover:not(:disabled) {
   border-color: var(--accent-border);
   background: var(--surface-hover);
@@ -179,6 +181,7 @@
 }
 
 .shell-settings-button:focus-visible,
+.shell-search-button:focus-visible,
 .shell-mode-switch button:focus-visible,
 .academic-subnav button:focus-visible {
   outline: 3px solid var(--focus-ring);

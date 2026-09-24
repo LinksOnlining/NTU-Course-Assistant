@@ -475,6 +475,18 @@ async fn load_diary_entry(
 }
 
 #[tauri::command]
+async fn load_diary_entries_for_search(
+    state: State<'_, CourseState>,
+) -> Result<Vec<DiaryEntry>, String> {
+    state
+        .run_in_background(
+            "本地搜索日记",
+            CourseDatabase::load_diary_entries_for_search,
+        )
+        .await
+}
+
+#[tauri::command]
 async fn save_diary_entry(
     state: State<'_, CourseState>,
     entry: DiaryEntry,
@@ -612,6 +624,18 @@ async fn load_planner_events(
         .run_in_background("读取个人日程", move |database| {
             database.load_planner_events(&start_date, &end_date)
         })
+        .await
+}
+
+#[tauri::command]
+async fn load_all_planner_events_for_search(
+    state: State<'_, CourseState>,
+) -> Result<Vec<PlannerEvent>, String> {
+    state
+        .run_in_background(
+            "本地搜索个人日程",
+            CourseDatabase::load_all_planner_events_for_search,
+        )
         .await
 }
 
@@ -1201,6 +1225,7 @@ pub fn run() {
             set_personal_task_completed,
             delete_personal_task,
             load_diary_entry,
+            load_diary_entries_for_search,
             save_diary_entry,
             load_diary_content_dates,
             has_diary_entry,
@@ -1213,6 +1238,7 @@ pub fn run() {
             confirm_inbox_as_task,
             confirm_inbox_as_event,
             load_planner_events,
+            load_all_planner_events_for_search,
             create_planner_event,
             update_planner_event,
             delete_planner_event,

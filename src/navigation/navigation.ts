@@ -8,6 +8,7 @@ export type ShellRouteView =
   | "workspace-tasks"
   | "workspace-diary"
   | "workspace-inbox"
+  | "workspace-search"
   | "academic-schedule"
   | "academic-hub"
   | "unsupported";
@@ -22,6 +23,41 @@ export function createWorkspaceTasksTarget(): NavigationTarget {
 
 export function createWorkspaceScheduleTarget(): NavigationTarget {
   return { route: { area: "workspace", page: "schedule" } };
+}
+
+export function createWorkspaceSearchTarget(): NavigationTarget {
+  return { route: { area: "workspace", page: "search" } };
+}
+
+export function createCourseTarget(id: string): NavigationTarget {
+  return { route: { area: "academic", page: "schedule" }, object: { type: "course", id } };
+}
+
+export function createPersonalTaskTarget(id: string): NavigationTarget {
+  return { route: { area: "workspace", page: "tasks" }, object: { type: "personalTask", id } };
+}
+
+export function createPlannerEventTarget(id: string, date: LocalDate): NavigationTarget {
+  return {
+    route: { area: "workspace", page: "schedule" },
+    object: { type: "plannerEvent", id },
+    date,
+  };
+}
+
+export function createDiaryEntryTarget(id: string, date: LocalDate): NavigationTarget {
+  return {
+    route: { area: "workspace", page: "diary" },
+    object: { type: "diaryEntry", id },
+    date,
+  };
+}
+
+export function createInboxItemTarget(id: string): NavigationTarget {
+  return {
+    route: { area: "workspace", page: "inbox" },
+    object: { type: "inboxItem", id },
+  };
 }
 
 export function createAcademicScheduleTarget(): NavigationTarget {
@@ -43,6 +79,7 @@ export function getShellRouteView(route: AppRoute): ShellRouteView {
     if (route.page === "tasks") return "workspace-tasks";
     if (route.page === "diary") return "workspace-diary";
     if (route.page === "inbox") return "workspace-inbox";
+    if (route.page === "search") return "workspace-search";
     return "unsupported";
   }
   if (route.area === "settings") return "unsupported";

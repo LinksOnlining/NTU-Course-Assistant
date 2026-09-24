@@ -7,6 +7,7 @@ import {
   createExamTarget,
   createWorkspaceHomeTarget,
   createWorkspaceScheduleTarget,
+  createWorkspaceSearchTarget,
   createWorkspaceTasksTarget,
   getAcademicHubTab,
   getShellRouteView,
@@ -28,6 +29,9 @@ test("workspace home and academic schedule targets use typed routes", () => {
   });
   assert.deepEqual(createWorkspaceScheduleTarget(), {
     route: { area: "workspace", page: "schedule" },
+  });
+  assert.deepEqual(createWorkspaceSearchTarget(), {
+    route: { area: "workspace", page: "search" },
   });
 });
 
@@ -110,5 +114,6 @@ test("implemented workspace routes resolve to page content; future routes stay u
   assert.equal(getShellRouteView({ area: "academic", page: "tasks-legacy" }), "academic-hub");
   assert.equal(getShellRouteView({ area: "workspace", page: "diary" }), "workspace-diary");
   assert.equal(getShellRouteView({ area: "workspace", page: "inbox" }), "workspace-inbox");
+  assert.equal(getShellRouteView({ area: "workspace", page: "search" }), "workspace-search");
   assert.equal(getShellRouteView({ area: "settings", page: "main" }), "unsupported");
 });

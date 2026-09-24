@@ -34,6 +34,14 @@ interface AcademicHubReader {
   loadExams(semesterId: string): Promise<readonly Exam[]>;
 }
 
+export interface AcademicSearchReader extends AcademicScheduleReader, AcademicHubReader {}
+
+export interface AcademicSearchData {
+  readonly schedule: AcademicScheduleData;
+  readonly tasks: readonly AcademicTask[];
+  readonly exams: readonly Exam[];
+}
+
 export interface AcademicHubLoadOptions {
   /** Load this semester, including archived semesters selected in Academic Hub. */
   readonly semesterId?: string;
@@ -52,6 +60,8 @@ const hubReader: AcademicHubReader = {
   loadAcademicTasks,
   loadExams,
 };
+
+const academicSearchReader: AcademicSearchReader = { ...scheduleReader, ...hubReader };
 
 export function loadAcademicScheduleData(
   reader: AcademicScheduleReader = scheduleReader,
@@ -83,6 +93,26 @@ export async function loadAcademicHubData(
     reader.loadExams(semesterId),
   ]);
   return { semesters, overrides, tasks, exams };
+}
+
+/** Local search reads all semester-owned Academic records through this application boundary. */
+export async function loadAcademicSearchData(
+  reader: AcademicSearchReader = academicSearchReader,
+): Promise<AcademicSearchData> {
+  const [schedule, semesters] = await Promise.all([
+    loadAcademicScheduleData(reader),
+    reader.loadSemesters(),
+  ]);
+  const semesterRecords = await Promise.all(
+    semesters.map(async (semester) =>
+      Promise.all([reader.loadAcademicTasks(semester.id), reader.loadExams(semester.id)]),
+    ),
+  );
+  return {
+    schedule,
+    tasks: semesterRecords.flatMap(([tasks]) => tasks),
+    exams: semesterRecords.flatMap(([, exams]) => exams),
+  };
 }
 
 export function resolveAcademicOccurrences(

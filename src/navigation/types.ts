@@ -7,6 +7,7 @@ export type AppRoute =
   | { readonly area: "workspace"; readonly page: "tasks" }
   | { readonly area: "workspace"; readonly page: "diary" }
   | { readonly area: "workspace"; readonly page: "inbox" }
+  | { readonly area: "workspace"; readonly page: "search" }
   | { readonly area: "workspace"; readonly page: "ai" }
   | { readonly area: "academic"; readonly page: "schedule" }
   | { readonly area: "academic"; readonly page: "changes" }

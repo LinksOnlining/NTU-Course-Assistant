@@ -13,6 +13,7 @@ import "./workspace-diary.css";
 interface WorkspaceDiaryPageProps {
   readonly onNavigate: (route: AppRoute) => void;
   readonly registerFlush: (flush: () => Promise<boolean>) => () => void;
+  readonly initialDate?: string;
 }
 
 function shiftDate(date: string, days: number): string {
@@ -34,8 +35,12 @@ function createAutosave(onState: (state: DiarySaveState) => void): DiaryAutosave
   return new DiaryAutosave(saveDiaryEntry, onState);
 }
 
-export function WorkspaceDiaryPage({ onNavigate, registerFlush }: WorkspaceDiaryPageProps) {
-  const [selectedDate, setSelectedDate] = useState(() => localDateKey(new Date()));
+export function WorkspaceDiaryPage({
+  onNavigate,
+  registerFlush,
+  initialDate,
+}: WorkspaceDiaryPageProps) {
+  const [selectedDate, setSelectedDate] = useState(() => initialDate ?? localDateKey(new Date()));
   const [body, setBody] = useState("");
   const [entry, setEntry] = useState<DiaryEntry | null>(null);
   const [recentDates, setRecentDates] = useState<readonly string[]>([]);

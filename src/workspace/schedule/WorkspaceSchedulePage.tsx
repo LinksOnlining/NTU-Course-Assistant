@@ -46,6 +46,7 @@ type ScheduleEditor =
 
 interface WorkspaceSchedulePageProps {
   readonly termConfig: TermConfig | null;
+  readonly initialDate?: string;
   readonly requestedTaskId: string | null;
   readonly onTaskRequestHandled: () => void;
   readonly requestedRoutineSuggestion: RoutineSuggestion | null;
@@ -343,12 +344,13 @@ function DayTimeline({
 
 export function WorkspaceSchedulePage({
   termConfig,
+  initialDate,
   requestedTaskId,
   onTaskRequestHandled,
   requestedRoutineSuggestion,
   onRoutineRequestHandled,
 }: WorkspaceSchedulePageProps) {
-  const [date, setDate] = useState(() => localDateKey(new Date()));
+  const [date, setDate] = useState(() => initialDate ?? localDateKey(new Date()));
   const [day, setDay] = useState<Awaited<ReturnType<typeof loadWorkspaceScheduleDay>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

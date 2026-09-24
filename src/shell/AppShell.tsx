@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   createAcademicScheduleTarget,
+  createWorkspaceSearchTarget,
   getShellRouteView,
   routeForAcademicHubTab,
   routeForProductMode,
@@ -95,6 +96,15 @@ function ShellHeader({
             </button>
           ))}
         </nav>
+        <button
+          type="button"
+          className="shell-search-button"
+          aria-label="搜索本机内容"
+          title="搜索本机内容"
+          onClick={() => onNavigate(createWorkspaceSearchTarget().route)}
+        >
+          搜索
+        </button>
         <button
           type="button"
           className="shell-settings-button"

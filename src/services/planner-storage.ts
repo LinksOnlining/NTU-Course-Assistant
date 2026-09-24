@@ -108,6 +108,24 @@ export async function loadPlannerEvents(
   }
 }
 
+export async function loadAllPlannerEventsForSearch(): Promise<readonly PlannerEvent[]> {
+  if (usesDevelopmentMemory()) {
+    return developmentEvents
+      .slice()
+      .sort(
+        (left, right) =>
+          right.date.localeCompare(left.date) ||
+          left.startTime.localeCompare(right.startTime) ||
+          left.id.localeCompare(right.id),
+      );
+  }
+  try {
+    return await invoke<readonly PlannerEvent[]>("load_all_planner_events_for_search");
+  } catch (error) {
+    throw new Error(typeof error === "string" ? error : "无法读取本地日程搜索索引。");
+  }
+}
+
 export async function createPlannerEvent(event: PlannerEvent): Promise<PlannerEvent> {
   if (usesDevelopmentMemory()) {
     if (developmentEvents.some((item) => item.id === event.id)) throw new Error("个人日程已存在。");

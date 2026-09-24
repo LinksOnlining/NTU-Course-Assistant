@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   loadAcademicHubData,
+  loadAcademicSearchData,
   loadAcademicScheduleData,
   resolveAcademicOccurrences,
 } from "../../src/application/academic/academic-application.ts";
@@ -51,6 +52,44 @@ test("schedule loader preserves read failures", async () => {
     }),
     failure,
   );
+});
+
+test("Academic Search reads courses and task/exam records from every semester via the application boundary", async () => {
+  const loadedSemesters = [];
+  const current = activeSemester;
+  const archived = { ...activeSemester, id: "semester-archived", status: "ARCHIVED" };
+  const data = await loadAcademicSearchData({
+    async loadCourses() {
+      return { courses: [{ id: "course-1" }], warnings: [] };
+    },
+    async loadPeriodTimes() {
+      return null;
+    },
+    async loadSemesters() {
+      return [current, archived];
+    },
+    async loadCourseOverrides() {
+      return [];
+    },
+    async loadAcademicTasks(semesterId) {
+      loadedSemesters.push(semesterId);
+      return [{ id: `task-${semesterId}` }];
+    },
+    async loadExams(semesterId) {
+      return [{ id: `exam-${semesterId}` }];
+    },
+  });
+
+  assert.deepEqual(data.schedule.courses, [{ id: "course-1" }]);
+  assert.deepEqual(data.tasks.map((task) => task.id).sort(), [
+    "task-semester-archived",
+    "task-semester-current",
+  ]);
+  assert.deepEqual(data.exams.map((exam) => exam.id).sort(), [
+    "exam-semester-archived",
+    "exam-semester-current",
+  ]);
+  assert.deepEqual(loadedSemesters.sort(), ["semester-archived", "semester-current"]);
 });
 
 test("hub loader reads active semester data and parallelizes its independent reads", async () => {

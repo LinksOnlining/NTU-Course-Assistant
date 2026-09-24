@@ -26,6 +26,7 @@ interface WorkspaceTasksPageProps {
   readonly termConfig: TermConfig | null;
   readonly onNavigate: (route: AppRoute) => void;
   readonly onScheduleTask: (taskId: string) => void;
+  readonly initialTaskId?: string;
 }
 
 type TaskTab = "open" | "completed";
@@ -201,6 +202,7 @@ export function WorkspaceTasksPage({
   termConfig,
   onNavigate,
   onScheduleTask,
+  initialTaskId,
 }: WorkspaceTasksPageProps) {
   const [personalTasks, setPersonalTasks] = useState<readonly PersonalTask[]>([]);
   const [academicTasks, setAcademicTasks] = useState<readonly AcademicTask[]>([]);
@@ -252,6 +254,11 @@ export function WorkspaceTasksPage({
     };
   }, [refresh, termConfig]);
 
+  useEffect(() => {
+    const target = personalTasks.find((task) => task.id === initialTaskId);
+    if (target) setTab(target.status === "completed" ? "completed" : "open");
+  }, [initialTaskId, personalTasks]);
+
   const visiblePersonalTasks = useMemo(
     () =>
       sortPersonalTasks(
@@ -273,6 +280,15 @@ export function WorkspaceTasksPage({
         ),
     [academicTasks, tab],
   );
+
+  useEffect(() => {
+    if (!initialTaskId || !visiblePersonalTasks.some((task) => task.id === initialTaskId)) return;
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>(`[data-personal-task-id="${CSS.escape(initialTaskId)}"]`)
+        ?.scrollIntoView({ block: "center" });
+    });
+  }, [initialTaskId, visiblePersonalTasks]);
 
   async function saveTask(draft: PersonalTaskDraft) {
     setBusy(true);
@@ -370,7 +386,11 @@ export function WorkspaceTasksPage({
       ) : (
         <div className="workspace-personal-task-list">
           {visiblePersonalTasks.map((task) => (
-            <article className="workspace-task-row" key={"personal:" + task.id}>
+            <article
+              className="workspace-task-row"
+              key={"personal:" + task.id}
+              data-personal-task-id={task.id}
+            >
               <button
                 type="button"
                 className="workspace-task-complete"

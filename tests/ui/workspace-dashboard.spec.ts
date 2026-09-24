@@ -80,6 +80,7 @@ async function seedDashboardRuntime(
       }
       let failDiarySave = diaryFixture.failSave ?? false;
       let loadCoursesCount = 0;
+      let searchDiaryReadCount = 0;
       Object.defineProperty(window, "__TAURI_INTERNALS__", {
         configurable: true,
         value: {
@@ -118,6 +119,10 @@ async function seedDashboardRuntime(
               return task;
             }
             if (command === "load_diary_entry") return diaryEntries.get(String(args?.date)) ?? null;
+            if (command === "load_diary_entries_for_search") {
+              searchDiaryReadCount += 1;
+              return [...diaryEntries.values()].filter((entry) => entry.body.trim());
+            }
             if (command === "load_diary_content_dates")
               return [...diaryEntries.keys()].sort().reverse();
             if (command === "has_diary_entry") {
@@ -200,6 +205,7 @@ async function seedDashboardRuntime(
                 (event) => event.date >= args?.startDate && event.date <= args?.endDate,
               );
             }
+            if (command === "load_all_planner_events_for_search") return [...dashboardEvents];
             if (command === "create_planner_event") {
               dashboardEvents.push(args?.event as Record<string, any>);
               return args?.event;
@@ -247,6 +253,7 @@ async function seedDashboardRuntime(
       Object.assign(window, {
         __workspaceDashboardTest: {
           getLoadCoursesCount: () => loadCoursesCount,
+          getSearchDiaryReadCount: () => searchDiaryReadCount,
           getPersonalTaskCount: () => personalTasks.length,
           getDiaryBody: (date: string) => diaryEntries.get(date)?.body ?? null,
           getRoutineScheduledDate: (id: string) =>
@@ -1061,4 +1068,80 @@ test("设置中的日常习惯可新增、编辑、停用和删除", async ({ pa
   page.once("dialog", (dialog) => void dialog.accept());
   await updated.getByRole("button", { name: "删除" }).click();
   await expect(panel.getByRole("listitem")).toHaveCount(0);
+});
+
+test("本机搜索可定位私人日记，支持无结果、键盘返回与多种窗口尺寸", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("links-workplace.theme-preference", "dark");
+  });
+  const searchEvent = {
+    id: "search-event",
+    title: "搜索结果日程",
+    description: null,
+    date: "2026-09-24",
+    startTime: "15:00",
+    endTime: "16:00",
+    location: "A101",
+    bufferBeforeMinutes: 0,
+    bufferAfterMinutes: 0,
+    createdAt: "2026-09-20T00:00:00.000Z",
+    updatedAt: "2026-09-20T00:00:00.000Z",
+  };
+  await seedDashboardRuntime(
+    page,
+    FIXED_NOW,
+    "数学基础",
+    { events: [searchEvent] },
+    { hasEntry: true },
+  );
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("button", { name: "搜索本机内容" }).click();
+  const search = page.getByRole("searchbox", { name: "搜索本机内容" });
+  await expect(search).toBeFocused();
+  expect(
+    await page.evaluate(() => (window as any).__workspaceDashboardTest.getSearchDiaryReadCount()),
+  ).toBe(0);
+  await page.evaluate(() => {
+    window.fetch = async () => {
+      throw new Error("本机搜索不得发起网络请求");
+    };
+  });
+  await search.fill("PRIVATE");
+  const diaryResult = page.locator('.workspace-search-result[data-search-category="diaryEntry"]');
+  await expect(diaryResult).toHaveCount(1);
+  await expect(diaryResult).toHaveAttribute("data-object-type", "diaryEntry");
+
+  for (const viewport of [
+    { width: 1920, height: 1080 },
+    { width: 1600, height: 900 },
+    { width: 1366, height: 768 },
+    { width: 720, height: 520 },
+  ]) {
+    await page.setViewportSize(viewport);
+    expect(
+      await page.locator(".workspace-search-page").evaluate((element) => {
+        const pageElement = element as HTMLElement;
+        return pageElement.scrollWidth <= pageElement.clientWidth + 1;
+      }),
+    ).toBe(true);
+  }
+
+  await diaryResult.click();
+  await expect(page.getByLabel("2026-09-23 日记正文")).toHaveValue("private diary fixture body");
+  await page.getByRole("button", { name: "搜索本机内容" }).click();
+  const reopenedSearch = page.getByRole("searchbox", { name: "搜索本机内容" });
+  await expect(reopenedSearch).toBeFocused();
+  await reopenedSearch.fill("no-such-local-record");
+  await expect(page.getByText("没有找到相关内容。", { exact: true })).toBeVisible();
+  await reopenedSearch.press("Escape");
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
+
+  await page.getByRole("button", { name: "搜索本机内容" }).click();
+  await page.getByRole("searchbox", { name: "搜索本机内容" }).fill("搜索结果日程");
+  const eventResult = page.locator('.workspace-search-result[data-search-category="plannerEvent"]');
+  await expect(eventResult).toHaveAttribute("data-object-type", "plannerEvent");
+  await eventResult.click();
+  await expect(page.getByTestId("workspace-schedule")).toHaveAttribute("data-date", "2026-09-24");
+  await expect(page.getByText("搜索结果日程", { exact: true })).toBeVisible();
 });

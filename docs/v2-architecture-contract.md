@@ -202,3 +202,5 @@ Phase 3.3 Weather 通过唯一网络 adapter `src/services/weather-provider.ts` 
 Phase 3.4 新增 `buildWorkspaceContext` 纯投影：消费调用方显式提供的本地日期/时间、统一 Timeline、Task、Weather snapshot、Diary 是否有记录、Inbox 待整理计数；不读库、不发网络、不调用 Tauri、不依赖 AI。结果提供 current/next item、buffer-aware next free slot、任务计数与私密模块状态。Context 不携带 Diary/Inbox 正文或 Task description；Dashboard Overview、Time Context 与 Diary/Inbox 状态均消费该投影。无 schema 变更。记录见 `docs/v2-phase-3-4-verification.md`。
 
 Phase 3.5 启用 Routine 设置与 Dashboard 日常习惯建议，复用 schema 7 的 `routines` 表。候选以启用状态、ISO 星期、当日 `last_scheduled_date`、目标时长和可选偏好窗口筛选；只建议一条，使用现有 buffer-aware 空闲区间并选最早可容纳时长的起点。建议不是持久化安排；用户确认 PlannerEvent 编辑器后，事件创建与 `last_scheduled_date` 更新在同一个事务提交。Routine 不生成 Task/TimeBlock，删除 Routine 保留既有 PlannerEvent。记录见 `docs/v2-phase-3-5-verification.md`。
+
+Phase 3.6 启用 `workspace/search` 本机统一搜索，覆盖 Course、AcademicTask、PersonalTask、PlannerEvent、Exam、Diary、Inbox；TimeBlock 不重复呈现。搜索不建表、不留历史、不联网，空查询不加载全库；非空查询经 Academic application boundary 与本地 Planner/Diary/Inbox readers 获取数据，以确定性本地排序并使用 typed NavigationTarget/ObjectRef 定位目标。Diary/Inbox 正文仅参与本机匹配，结果只暴露短摘要，不上传或写入日志。验证记录见 `docs/v2-phase-3-6-verification.md`。

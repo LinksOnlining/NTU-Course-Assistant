@@ -16,6 +16,19 @@ export async function loadDiaryEntry(date: string): Promise<DiaryEntry | null> {
   }
 }
 
+export async function loadDiaryEntriesForSearch(): Promise<readonly DiaryEntry[]> {
+  if (usesDevelopmentMemory()) {
+    return [...developmentEntries.values()]
+      .filter((entry) => entry.body.trim() !== "")
+      .sort((left, right) => right.entryDate.localeCompare(left.entryDate));
+  }
+  try {
+    return await invoke<readonly DiaryEntry[]>("load_diary_entries_for_search");
+  } catch {
+    throw new Error("无法读取本地日记搜索索引。");
+  }
+}
+
 export async function saveDiaryEntry(entry: DiaryEntry): Promise<DiaryEntry> {
   if (usesDevelopmentMemory()) {
     const current = developmentEntries.get(entry.entryDate);

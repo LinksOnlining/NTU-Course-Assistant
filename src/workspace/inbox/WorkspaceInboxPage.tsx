@@ -17,6 +17,7 @@ import "./workspace-inbox.css";
 
 interface WorkspaceInboxPageProps {
   readonly onNavigate: (route: AppRoute) => void;
+  readonly initialItemId?: string;
 }
 
 function updateProposalField<K extends keyof InboxProposal>(
@@ -41,7 +42,7 @@ function statusLabel(item: InboxItem): string {
   }
 }
 
-export function WorkspaceInboxPage({ onNavigate }: WorkspaceInboxPageProps) {
+export function WorkspaceInboxPage({ onNavigate, initialItemId }: WorkspaceInboxPageProps) {
   const [items, setItems] = useState<readonly InboxItem[]>([]);
   const [proposals, setProposals] = useState<Record<string, InboxProposal>>({});
   const [unknownKinds, setUnknownKinds] = useState<Record<string, "" | "task" | "event">>({});
@@ -71,6 +72,14 @@ export function WorkspaceInboxPage({ onNavigate }: WorkspaceInboxPageProps) {
   useEffect(() => {
     void reload();
   }, []);
+
+  useEffect(() => {
+    if (!initialItemId || loading) return;
+    const target = [...document.querySelectorAll<HTMLElement>("[data-inbox-item-id]")].find(
+      (element) => element.dataset.inboxItemId === initialItemId,
+    );
+    target?.scrollIntoView({ block: "center" });
+  }, [initialItemId, items, loading]);
 
   async function addCapture(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -254,7 +263,12 @@ export function WorkspaceInboxPage({ onNavigate }: WorkspaceInboxPageProps) {
                   );
             const busy = busyId === item.id;
             return (
-              <article className="workspace-inbox-item" key={item.id} data-testid="inbox-item">
+              <article
+                className="workspace-inbox-item"
+                key={item.id}
+                data-testid="inbox-item"
+                data-inbox-item-id={item.id}
+              >
                 <header className="workspace-inbox-item-heading">
                   <span className="workspace-inbox-status">{statusLabel(item)}</span>
                   <time dateTime={item.createdAt}>

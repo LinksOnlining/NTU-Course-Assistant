@@ -82,12 +82,14 @@ import type { RoutineSuggestion } from "./types/routine.ts";
 import { createWorkspaceHomeTarget, getShellRouteView } from "./navigation/navigation.ts";
 import type { AcademicRoute } from "./navigation/navigation.ts";
 import type { AppRoute } from "./navigation/types.ts";
+import type { NavigationTarget } from "./navigation/types.ts";
 import { AppShell } from "./shell/index.ts";
 import { WorkspaceDashboard } from "./workspace/dashboard/WorkspaceDashboard.tsx";
 import { WorkspaceTasksPage } from "./workspace/tasks/WorkspaceTasksPage.tsx";
 import { WorkspaceSchedulePage } from "./workspace/schedule/WorkspaceSchedulePage.tsx";
 import { WorkspaceDiaryPage } from "./workspace/diary/WorkspaceDiaryPage.tsx";
 import { WorkspaceInboxPage } from "./workspace/inbox/WorkspaceInboxPage.tsx";
+import { WorkspaceSearchPage } from "./workspace/search/WorkspaceSearchPage.tsx";
 import { WeatherHeader } from "./workspace/weather/WeatherHeader.tsx";
 import { useWorkspaceWeather } from "./workspace/weather/use-workspace-weather.ts";
 
@@ -151,6 +153,7 @@ export function App() {
   const [currentRoute, setCurrentRoute] = useState<AppRoute>(
     () => createWorkspaceHomeTarget().route,
   );
+  const [navigationTarget, setNavigationTarget] = useState<NavigationTarget | null>(null);
   const diaryFlushRef = useRef<(() => Promise<boolean>) | null>(null);
   const [scheduleTaskRequest, setScheduleTaskRequest] = useState<string | null>(null);
   const [routineScheduleRequest, setRoutineScheduleRequest] = useState<RoutineSuggestion | null>(
@@ -165,6 +168,7 @@ export function App() {
   const isWorkspaceTasks = routeView === "workspace-tasks";
   const isWorkspaceDiary = routeView === "workspace-diary";
   const isWorkspaceInbox = routeView === "workspace-inbox";
+  const isWorkspaceSearch = routeView === "workspace-search";
   const isUnsupportedRoute = routeView === "unsupported";
   const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
   const [dayCount, setDayCount] = useState<5 | 7>(7);
@@ -187,7 +191,8 @@ export function App() {
   const pdfDialogActive = useRef(false);
   const reminderRefreshGeneration = useRef(0);
 
-  function navigateToRoute(route: AppRoute) {
+  function navigateToRoute(route: AppRoute, target: NavigationTarget | null = null) {
+    setNavigationTarget(target);
     const completeNavigation = () => {
       if (route.area === "academic") setLastAcademicRoute(route);
       setCurrentRoute(route);
@@ -993,23 +998,44 @@ export function App() {
         <WorkspaceTasksPage
           termConfig={reminderConfiguration.termConfig}
           onNavigate={navigateToRoute}
+          initialTaskId={
+            navigationTarget?.object?.type === "personalTask"
+              ? navigationTarget.object.id
+              : undefined
+          }
           onScheduleTask={(taskId) => {
             setScheduleTaskRequest(taskId);
             navigateToRoute({ area: "workspace", page: "schedule" });
           }}
         />
       ) : isWorkspaceDiary && storageStatus === "ready" ? (
-        <WorkspaceDiaryPage onNavigate={navigateToRoute} registerFlush={registerDiaryFlush} />
+        <WorkspaceDiaryPage
+          onNavigate={navigateToRoute}
+          registerFlush={registerDiaryFlush}
+          initialDate={
+            navigationTarget?.object?.type === "diaryEntry" ? navigationTarget.date : undefined
+          }
+        />
       ) : isWorkspaceInbox && storageStatus === "ready" ? (
-        <WorkspaceInboxPage onNavigate={navigateToRoute} />
+        <WorkspaceInboxPage
+          onNavigate={navigateToRoute}
+          initialItemId={
+            navigationTarget?.object?.type === "inboxItem" ? navigationTarget.object.id : undefined
+          }
+        />
       ) : isWorkspaceSchedule && storageStatus === "ready" ? (
         <WorkspaceSchedulePage
           termConfig={reminderConfiguration.termConfig}
+          initialDate={
+            navigationTarget?.object?.type === "plannerEvent" ? navigationTarget.date : undefined
+          }
           requestedTaskId={scheduleTaskRequest}
           onTaskRequestHandled={() => setScheduleTaskRequest(null)}
           requestedRoutineSuggestion={routineScheduleRequest}
           onRoutineRequestHandled={() => setRoutineScheduleRequest(null)}
         />
+      ) : isWorkspaceSearch && storageStatus === "ready" ? (
+        <WorkspaceSearchPage onNavigate={(target) => navigateToRoute(target.route, target)} />
       ) : isAcademicHubPage ? (
         <AcademicHub
           route={currentRoute}

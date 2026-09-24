@@ -1193,6 +1193,22 @@ impl CourseDatabase {
             .map_err(StorageError::from)
     }
 
+    /// Returns only non-empty local entries for the explicit on-device search feature.
+    pub fn load_diary_entries_for_search(&self) -> Result<Vec<DiaryEntry>, StorageError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, entry_date, body, created_at, updated_at
+             FROM diary_entries
+             WHERE length(trim(body)) > 0
+             ORDER BY entry_date DESC, id",
+        )?;
+        let mut rows = statement.query([])?;
+        let mut entries = Vec::new();
+        while let Some(row) = rows.next()? {
+            entries.push(row_to_diary_entry(row)?);
+        }
+        Ok(entries)
+    }
+
     pub fn save_diary_entry(&self, entry: &DiaryEntry) -> Result<DiaryEntry, StorageError> {
         validate_diary_entry(entry)?;
         let transaction = self.connection.unchecked_transaction()?;
@@ -1554,6 +1570,21 @@ impl CourseDatabase {
              ORDER BY date, start_time, id",
         )?;
         let mut rows = statement.query(params![start_date, end_date])?;
+        let mut events = Vec::new();
+        while let Some(row) = rows.next()? {
+            events.push(row_to_planner_event(row)?);
+        }
+        Ok(events)
+    }
+
+    pub fn load_all_planner_events_for_search(&self) -> Result<Vec<PlannerEvent>, StorageError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, title, description, date, start_time, end_time, location,
+                    buffer_before_minutes, buffer_after_minutes, created_at, updated_at
+             FROM planner_events
+             ORDER BY date DESC, start_time, id",
+        )?;
+        let mut rows = statement.query([])?;
         let mut events = Vec::new();
         while let Some(row) = rows.next()? {
             events.push(row_to_planner_event(row)?);
@@ -2641,6 +2672,10 @@ mod tests {
 
             assert_eq!(database.create_time_block(&block).unwrap(), block);
             assert_eq!(
+                database.load_all_planner_events_for_search().unwrap(),
+                vec![event.clone()]
+            );
+            assert_eq!(
                 database
                     .load_time_blocks_for_task(&block.personal_task_id)
                     .unwrap(),
@@ -3339,6 +3374,10 @@ mod tests {
             reopened.load_diary_content_dates().expect("content dates"),
             vec!["2026-09-24"]
         );
+        let searchable_entries = reopened
+            .load_diary_entries_for_search()
+            .expect("load local diary search entries");
+        assert!(searchable_entries.len() == 1 && searchable_entries[0] == loaded);
         drop(reopened);
         remove_database_files(&path);
     }
