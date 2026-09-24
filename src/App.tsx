@@ -78,6 +78,7 @@ import {
   subscribeToSystemTheme,
 } from "./theme/index.ts";
 import type { ThemePreference } from "./theme/index.ts";
+import type { RoutineSuggestion } from "./types/routine.ts";
 import { createWorkspaceHomeTarget, getShellRouteView } from "./navigation/navigation.ts";
 import type { AcademicRoute } from "./navigation/navigation.ts";
 import type { AppRoute } from "./navigation/types.ts";
@@ -152,6 +153,9 @@ export function App() {
   );
   const diaryFlushRef = useRef<(() => Promise<boolean>) | null>(null);
   const [scheduleTaskRequest, setScheduleTaskRequest] = useState<string | null>(null);
+  const [routineScheduleRequest, setRoutineScheduleRequest] = useState<RoutineSuggestion | null>(
+    null,
+  );
   const [lastAcademicRoute, setLastAcademicRoute] = useState<AcademicRoute | null>(null);
   const routeView = getShellRouteView(currentRoute);
   const isScheduleView = routeView === "academic-schedule";
@@ -980,6 +984,10 @@ export function App() {
               : null
           }
           onNavigate={navigateToRoute}
+          onScheduleRoutine={(suggestion) => {
+            setRoutineScheduleRequest(suggestion);
+            navigateToRoute({ area: "workspace", page: "schedule" });
+          }}
         />
       ) : isWorkspaceTasks && storageStatus === "ready" ? (
         <WorkspaceTasksPage
@@ -999,6 +1007,8 @@ export function App() {
           termConfig={reminderConfiguration.termConfig}
           requestedTaskId={scheduleTaskRequest}
           onTaskRequestHandled={() => setScheduleTaskRequest(null)}
+          requestedRoutineSuggestion={routineScheduleRequest}
+          onRoutineRequestHandled={() => setRoutineScheduleRequest(null)}
         />
       ) : isAcademicHubPage ? (
         <AcademicHub

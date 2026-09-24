@@ -12,7 +12,7 @@ use crate::models::{
     validate_widget_settings, AcademicTask, AcademicTaskStatus, Course, CourseOverride,
     CourseOverrideKind, DiaryEntry, Exam, ExamStatus, InboxConfirmation, InboxItem, PeriodTime,
     PersonalTask, PersonalTaskPriority, PersonalTaskStatus, PlannerEvent, ReminderSettings,
-    Semester, SemesterStatus, TermConfig, TimeBlock, WidgetSettings, WidgetSettingsPatch,
+    Routine, Semester, SemesterStatus, TermConfig, TimeBlock, WidgetSettings, WidgetSettingsPatch,
 };
 
 const SCHEMA_SIX_VERSION: i64 = 6;
@@ -1561,6 +1561,126 @@ impl CourseDatabase {
         Ok(events)
     }
 
+    pub fn load_routines(&self) -> Result<Vec<Routine>, StorageError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, title, target_duration_minutes, weekdays_mask, preferred_start_time,
+                    preferred_end_time, enabled, last_scheduled_date, created_at, updated_at
+             FROM routines ORDER BY created_at, id",
+        )?;
+        let mut rows = statement.query([])?;
+        let mut routines = Vec::new();
+        while let Some(row) = rows.next()? {
+            routines.push(row_to_routine(row)?);
+        }
+        Ok(routines)
+    }
+
+    pub fn create_routine(&self, routine: &Routine) -> Result<Routine, StorageError> {
+        routine.validate().map_err(StorageError::InvalidData)?;
+        if routine.last_scheduled_date.is_some() {
+            return Err(StorageError::InvalidData(
+                "新建日常习惯不能预设已安排日期".into(),
+            ));
+        }
+        self.connection.execute(
+            "INSERT INTO routines
+             (id, title, target_duration_minutes, weekdays_mask, preferred_start_time,
+              preferred_end_time, enabled, last_scheduled_date, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                &routine.id,
+                &routine.title,
+                routine.target_duration_minutes,
+                routine.weekdays_mask,
+                &routine.preferred_start_time,
+                &routine.preferred_end_time,
+                routine.enabled,
+                &routine.last_scheduled_date,
+                &routine.created_at,
+                &routine.updated_at,
+            ],
+        )?;
+        self.load_routine(&routine.id)
+    }
+
+    pub fn update_routine(&self, routine: &Routine) -> Result<Routine, StorageError> {
+        routine.validate().map_err(StorageError::InvalidData)?;
+        if self.connection.execute(
+            "UPDATE routines SET title=?2, target_duration_minutes=?3, weekdays_mask=?4,
+             preferred_start_time=?5, preferred_end_time=?6, enabled=?7,
+             updated_at=?8 WHERE id=?1",
+            params![
+                &routine.id,
+                &routine.title,
+                routine.target_duration_minutes,
+                routine.weekdays_mask,
+                &routine.preferred_start_time,
+                &routine.preferred_end_time,
+                routine.enabled,
+                &routine.updated_at,
+            ],
+        )? == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        self.load_routine(&routine.id)
+    }
+
+    pub fn delete_routine(&self, id: &str) -> Result<(), StorageError> {
+        if id.trim().is_empty()
+            || self
+                .connection
+                .execute("DELETE FROM routines WHERE id=?1", [id])?
+                == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        Ok(())
+    }
+
+    pub fn confirm_routine_suggestion(
+        &self,
+        routine_id: &str,
+        target_date: &str,
+        event: &PlannerEvent,
+    ) -> Result<PlannerEvent, StorageError> {
+        event.validate().map_err(StorageError::InvalidData)?;
+        parse_date(target_date).map_err(StorageError::InvalidData)?;
+        if routine_id.trim().is_empty() || routine_id.trim() != routine_id {
+            return Err(StorageError::InvalidData("日常习惯 ID 无效".into()));
+        }
+
+        let transaction =
+            rusqlite::Transaction::new_unchecked(&self.connection, TransactionBehavior::Immediate)?;
+        let current: Option<(bool, Option<String>)> = transaction
+            .query_row(
+                "SELECT enabled, last_scheduled_date FROM routines WHERE id=?1",
+                [routine_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((enabled, last_scheduled_date)) = current else {
+            return Err(StorageError::NotFound);
+        };
+        if !enabled || last_scheduled_date.as_deref() == Some(target_date) {
+            return Err(StorageError::InvalidData(
+                "日常习惯建议已失效，请刷新后重试".into(),
+            ));
+        }
+
+        insert_planner_event(&transaction, event)?;
+        if transaction.execute(
+            "UPDATE routines SET last_scheduled_date=?2, updated_at=?3
+             WHERE id=?1 AND enabled=1 AND (last_scheduled_date IS NULL OR last_scheduled_date != ?2)",
+            params![routine_id, target_date, &event.updated_at],
+        )? == 0
+        {
+            return Err(StorageError::InvalidData("日常习惯建议已失效，请刷新后重试".into()));
+        }
+        transaction.commit()?;
+        Ok(event.clone())
+    }
+
     pub fn create_planner_event(&self, event: &PlannerEvent) -> Result<PlannerEvent, StorageError> {
         event.validate().map_err(StorageError::InvalidData)?;
         self.connection.execute(
@@ -1631,6 +1751,18 @@ impl CourseDatabase {
                  FROM planner_events WHERE id=?1",
                 [id],
                 row_to_planner_event,
+            )
+            .map_err(StorageError::from)
+    }
+
+    fn load_routine(&self, id: &str) -> Result<Routine, StorageError> {
+        self.connection
+            .query_row(
+                "SELECT id, title, target_duration_minutes, weekdays_mask, preferred_start_time,
+                        preferred_end_time, enabled, last_scheduled_date, created_at, updated_at
+                 FROM routines WHERE id=?1",
+                [id],
+                row_to_routine,
             )
             .map_err(StorageError::from)
     }
@@ -2234,6 +2366,44 @@ fn row_to_planner_event(row: &Row<'_>) -> rusqlite::Result<PlannerEvent> {
     })
 }
 
+fn row_to_routine(row: &Row<'_>) -> rusqlite::Result<Routine> {
+    Ok(Routine {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        target_duration_minutes: row.get(2)?,
+        weekdays_mask: row.get(3)?,
+        preferred_start_time: row.get(4)?,
+        preferred_end_time: row.get(5)?,
+        enabled: row.get(6)?,
+        last_scheduled_date: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
+    })
+}
+
+fn insert_planner_event(connection: &Connection, event: &PlannerEvent) -> Result<(), StorageError> {
+    connection.execute(
+        "INSERT INTO planner_events
+         (id, title, description, date, start_time, end_time, location,
+          buffer_before_minutes, buffer_after_minutes, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![
+            &event.id,
+            &event.title,
+            &event.description,
+            &event.date,
+            &event.start_time,
+            &event.end_time,
+            &event.location,
+            event.buffer_before_minutes,
+            event.buffer_after_minutes,
+            &event.created_at,
+            &event.updated_at,
+        ],
+    )?;
+    Ok(())
+}
+
 fn row_to_time_block(row: &Row<'_>) -> rusqlite::Result<TimeBlock> {
     Ok(TimeBlock {
         id: row.get(0)?,
@@ -2324,6 +2494,21 @@ mod tests {
             location: Some("图书馆".into()),
             buffer_before_minutes: 10,
             buffer_after_minutes: 20,
+            created_at: "2026-09-23T08:00:00.000Z".into(),
+            updated_at: "2026-09-23T08:00:00.000Z".into(),
+        }
+    }
+
+    fn routine(id: &str) -> Routine {
+        Routine {
+            id: id.into(),
+            title: "跑步".into(),
+            target_duration_minutes: 40,
+            weekdays_mask: 0b0010101,
+            preferred_start_time: Some("18:00".into()),
+            preferred_end_time: Some("21:00".into()),
+            enabled: true,
+            last_scheduled_date: None,
             created_at: "2026-09-23T08:00:00.000Z".into(),
             updated_at: "2026-09-23T08:00:00.000Z".into(),
         }
@@ -2515,6 +2700,105 @@ mod tests {
         assert!(database.delete_planner_event(&event.id).is_err());
         assert!(database.delete_time_block(&block.id).is_err());
         let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn routine_confirmation_atomically_saves_event_and_date_and_delete_preserves_event() {
+        let database = database();
+        let saved_routine = database.create_routine(&routine("run")).unwrap();
+        assert_eq!(database.load_routines().unwrap(), vec![saved_routine]);
+
+        let event = planner_event("run-event", "2026-09-24");
+        assert_eq!(
+            database
+                .confirm_routine_suggestion("run", "2026-09-24", &event)
+                .unwrap(),
+            event
+        );
+        assert_eq!(
+            database
+                .load_routine("run")
+                .unwrap()
+                .last_scheduled_date
+                .as_deref(),
+            Some("2026-09-24")
+        );
+        assert_eq!(
+            database
+                .load_planner_events("2026-09-24", "2026-09-24")
+                .unwrap(),
+            vec![event.clone()]
+        );
+        let personal_task_count: i64 = database
+            .connection
+            .query_row("SELECT COUNT(*) FROM personal_tasks", [], |row| row.get(0))
+            .unwrap();
+        let time_block_count: i64 = database
+            .connection
+            .query_row("SELECT COUNT(*) FROM time_blocks", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(personal_task_count, 0);
+        assert_eq!(time_block_count, 0);
+
+        let duplicate = planner_event("run-event", "2026-09-25");
+        assert!(database
+            .confirm_routine_suggestion("run", "2026-09-25", &duplicate)
+            .is_err());
+        assert_eq!(
+            database
+                .load_routine("run")
+                .unwrap()
+                .last_scheduled_date
+                .as_deref(),
+            Some("2026-09-24"),
+            "failed event insert must not advance the routine date"
+        );
+        assert_eq!(
+            database
+                .load_planner_events("2026-09-25", "2026-09-25")
+                .unwrap()
+                .len(),
+            0
+        );
+
+        database.delete_routine("run").unwrap();
+        assert!(database.load_routines().unwrap().is_empty());
+        assert_eq!(
+            database
+                .load_planner_events("2026-09-24", "2026-09-24")
+                .unwrap(),
+            vec![event],
+            "deleting a routine must not remove its confirmed event"
+        );
+    }
+
+    #[test]
+    fn routine_confirmation_rolls_back_event_when_routine_update_fails() {
+        let database = database();
+        database.create_routine(&routine("run")).unwrap();
+        database
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER reject_routine_schedule BEFORE UPDATE OF last_scheduled_date ON routines
+                 BEGIN SELECT RAISE(ABORT, 'test rollback'); END;",
+            )
+            .unwrap();
+
+        assert!(database
+            .confirm_routine_suggestion(
+                "run",
+                "2026-09-24",
+                &planner_event("rolled-back", "2026-09-24")
+            )
+            .is_err());
+        assert!(database
+            .load_planner_events("2026-09-24", "2026-09-24")
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            database.load_routine("run").unwrap().last_scheduled_date,
+            None
+        );
     }
 
     #[test]

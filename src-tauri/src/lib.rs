@@ -15,8 +15,8 @@ use std::{
 use db::CourseDatabase;
 use models::{
     AcademicTask, Course, CourseOverride, DiaryEntry, Exam, InboxConfirmation, InboxItem,
-    PeriodTime, PersonalTask, PlannerEvent, ReminderSettings, Semester, TermConfig, TimeBlock,
-    WidgetSettings, WidgetSettingsPatch,
+    PeriodTime, PersonalTask, PlannerEvent, ReminderSettings, Routine, Semester, TermConfig,
+    TimeBlock, WidgetSettings, WidgetSettingsPatch,
 };
 use serde::Serialize;
 use tauri::{
@@ -649,6 +649,60 @@ async fn delete_planner_event(state: State<'_, CourseState>, id: String) -> Resu
 }
 
 #[tauri::command]
+async fn load_routines(state: State<'_, CourseState>) -> Result<Vec<Routine>, String> {
+    state
+        .run_in_background("读取日常习惯", CourseDatabase::load_routines)
+        .await
+}
+
+#[tauri::command]
+async fn create_routine(
+    state: State<'_, CourseState>,
+    routine: Routine,
+) -> Result<Routine, String> {
+    state
+        .run_in_background("创建日常习惯", move |database| {
+            database.create_routine(&routine)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn update_routine(
+    state: State<'_, CourseState>,
+    routine: Routine,
+) -> Result<Routine, String> {
+    state
+        .run_in_background("更新日常习惯", move |database| {
+            database.update_routine(&routine)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn delete_routine(state: State<'_, CourseState>, id: String) -> Result<(), String> {
+    state
+        .run_in_background("删除日常习惯", move |database| {
+            database.delete_routine(&id)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn confirm_routine_suggestion(
+    state: State<'_, CourseState>,
+    routine_id: String,
+    target_date: String,
+    event: PlannerEvent,
+) -> Result<PlannerEvent, String> {
+    state
+        .run_in_background("确认日常习惯安排", move |database| {
+            database.confirm_routine_suggestion(&routine_id, &target_date, &event)
+        })
+        .await
+}
+
+#[tauri::command]
 async fn load_time_blocks(
     state: State<'_, CourseState>,
     start_date: String,
@@ -1162,6 +1216,11 @@ pub fn run() {
             create_planner_event,
             update_planner_event,
             delete_planner_event,
+            load_routines,
+            create_routine,
+            update_routine,
+            delete_routine,
+            confirm_routine_suggestion,
             load_time_blocks,
             load_time_blocks_for_task,
             create_time_block,

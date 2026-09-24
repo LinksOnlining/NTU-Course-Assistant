@@ -1,10 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PersonalTask } from "../types/personal-task.ts";
 import type { PlannerEvent, TimeBlock } from "../types/planner.ts";
+import type { Routine } from "../types/routine.ts";
 
 let developmentTasks: PersonalTask[] = [];
 let developmentEvents: PlannerEvent[] = [];
 let developmentTimeBlocks: TimeBlock[] = [];
+let developmentRoutines: Routine[] = [];
 
 function usesDevelopmentMemory(): boolean {
   return import.meta.env.DEV && !("__TAURI_INTERNALS__" in window);
@@ -143,6 +145,95 @@ export async function deletePlannerEvent(id: string): Promise<void> {
     await invoke("delete_planner_event", { id });
   } catch (error) {
     throw new Error(typeof error === "string" ? error : "删除个人日程失败，请稍后重试。");
+  }
+}
+
+export async function loadRoutines(): Promise<readonly Routine[]> {
+  if (usesDevelopmentMemory()) {
+    return developmentRoutines
+      .slice()
+      .sort(
+        (left, right) =>
+          left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+      );
+  }
+  try {
+    return await invoke<readonly Routine[]>("load_routines");
+  } catch (error) {
+    throw new Error(typeof error === "string" ? error : "无法读取日常习惯，请稍后重试。");
+  }
+}
+
+export async function createRoutine(routine: Routine): Promise<Routine> {
+  if (usesDevelopmentMemory()) {
+    if (developmentRoutines.some((item) => item.id === routine.id))
+      throw new Error("日常习惯已存在。");
+    developmentRoutines = [...developmentRoutines, routine];
+    return routine;
+  }
+  try {
+    return await invoke<Routine>("create_routine", { routine });
+  } catch (error) {
+    throw new Error(typeof error === "string" ? error : "创建日常习惯失败，请稍后重试。");
+  }
+}
+
+export async function updateRoutine(routine: Routine): Promise<Routine> {
+  if (usesDevelopmentMemory()) {
+    if (!developmentRoutines.some((item) => item.id === routine.id))
+      throw new Error("日常习惯不存在。");
+    developmentRoutines = developmentRoutines.map((item) =>
+      item.id === routine.id ? routine : item,
+    );
+    return routine;
+  }
+  try {
+    return await invoke<Routine>("update_routine", { routine });
+  } catch (error) {
+    throw new Error(typeof error === "string" ? error : "保存日常习惯失败，请稍后重试。");
+  }
+}
+
+export async function deleteRoutine(id: string): Promise<void> {
+  if (usesDevelopmentMemory()) {
+    if (!developmentRoutines.some((item) => item.id === id)) throw new Error("日常习惯不存在。");
+    developmentRoutines = developmentRoutines.filter((item) => item.id !== id);
+    return;
+  }
+  try {
+    await invoke("delete_routine", { id });
+  } catch (error) {
+    throw new Error(typeof error === "string" ? error : "删除日常习惯失败，请稍后重试。");
+  }
+}
+
+export async function confirmRoutineSuggestion(
+  routineId: string,
+  targetDate: string,
+  event: PlannerEvent,
+): Promise<PlannerEvent> {
+  if (usesDevelopmentMemory()) {
+    const routine = developmentRoutines.find((item) => item.id === routineId);
+    if (!routine || !routine.enabled || routine.lastScheduledDate === targetDate) {
+      throw new Error("日常习惯建议已失效，请刷新后重试。");
+    }
+    if (developmentEvents.some((item) => item.id === event.id)) throw new Error("个人日程已存在。");
+    developmentEvents = [...developmentEvents, event];
+    developmentRoutines = developmentRoutines.map((item) =>
+      item.id === routineId
+        ? { ...item, lastScheduledDate: targetDate, updatedAt: event.updatedAt }
+        : item,
+    );
+    return event;
+  }
+  try {
+    return await invoke<PlannerEvent>("confirm_routine_suggestion", {
+      routineId,
+      targetDate,
+      event,
+    });
+  } catch (error) {
+    throw new Error(typeof error === "string" ? error : "安排日常习惯失败，请稍后重试。");
   }
 }
 

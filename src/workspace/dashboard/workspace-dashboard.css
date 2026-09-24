@@ -70,6 +70,38 @@
   color: var(--text-secondary);
   font-size: var(--font-size-secondary);
 }
+
+.workspace-routine-suggestion {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.workspace-routine-suggestion > span {
+  color: var(--text-muted);
+  font-size: var(--font-size-caption);
+}
+
+.workspace-routine-suggestion > strong {
+  grid-column: 1;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.workspace-routine-suggestion > button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  color: var(--accent-text);
+  cursor: pointer;
+}
 .workspace-time-section {
   display: flex;
   min-width: 0;

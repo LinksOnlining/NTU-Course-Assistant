@@ -3,6 +3,7 @@ import type { TimelineItem } from "../timeline/types.ts";
 import type { PersonalTask } from "../../types/personal-task.ts";
 import type { PlannerEvent, TimeBlock } from "../../types/planner.ts";
 import type { WorkspaceContext } from "./workspace-context.ts";
+import type { Routine, RoutineSuggestion } from "../../types/routine.ts";
 
 export type WorkspaceTaskDeadlineKind = "overdue" | "today" | "upcoming" | "none" | "invalid";
 
@@ -47,6 +48,7 @@ export interface WorkspaceDashboardViewModel {
     readonly primary: WorkspaceTimeSection;
     readonly secondary: WorkspaceTimeSection | null;
   };
+  readonly routineSuggestion: RoutineSuggestion | null;
   readonly taskSummary: WorkspaceTaskSummary;
   readonly moduleAvailability: {
     readonly diary: WorkspaceModuleAvailability;
@@ -67,6 +69,7 @@ export interface WorkspaceDashboardSources {
   readonly hasDiaryToday?: boolean;
   readonly pendingInboxCount?: number;
   readonly warnings: readonly string[];
+  readonly routines?: readonly Routine[];
 }
 
 export interface WorkspaceScheduleDay {

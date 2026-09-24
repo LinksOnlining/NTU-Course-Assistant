@@ -12,6 +12,7 @@ import {
   updatePlannerEvent,
   updateTimeBlock,
 } from "../../application/planner/planner-schedule.ts";
+import { confirmRoutineSuggestion } from "../../application/planner/routines.ts";
 import {
   findTimelineConflicts,
   formatTimelineMinute,
@@ -29,18 +30,26 @@ import type {
   TimeBlockDraft,
 } from "../../types/planner.ts";
 import type { TermConfig } from "../../types/reminder.ts";
+import type { RoutineSuggestion } from "../../types/routine.ts";
 import { PlannerEventEditor } from "./PlannerEventEditor.tsx";
 import { TimeBlockEditor } from "./TimeBlockEditor.tsx";
 import "./workspace-schedule.css";
 
 type ScheduleEditor =
-  | { readonly kind: "event"; readonly event?: PlannerEvent }
+  | {
+      readonly kind: "event";
+      readonly event?: PlannerEvent;
+      readonly initialDraft?: PlannerEventDraft;
+      readonly routineSuggestion?: { readonly routineId: string; readonly targetDate: string };
+    }
   | { readonly kind: "timeBlock"; readonly block?: TimeBlock; readonly initialTaskId?: string };
 
 interface WorkspaceSchedulePageProps {
   readonly termConfig: TermConfig | null;
   readonly requestedTaskId: string | null;
   readonly onTaskRequestHandled: () => void;
+  readonly requestedRoutineSuggestion: RoutineSuggestion | null;
+  readonly onRoutineRequestHandled: () => void;
 }
 
 function dateLabel(date: string): string {
@@ -57,6 +66,7 @@ type TimelineMutation =
       readonly kind: "event";
       readonly draft: PlannerEventDraft;
       readonly existing?: PlannerEvent;
+      readonly routineSuggestion?: { readonly routineId: string; readonly targetDate: string };
     }
   | {
       readonly kind: "timeBlock";
@@ -335,6 +345,8 @@ export function WorkspaceSchedulePage({
   termConfig,
   requestedTaskId,
   onTaskRequestHandled,
+  requestedRoutineSuggestion,
+  onRoutineRequestHandled,
 }: WorkspaceSchedulePageProps) {
   const [date, setDate] = useState(() => localDateKey(new Date()));
   const [day, setDay] = useState<Awaited<ReturnType<typeof loadWorkspaceScheduleDay>> | null>(null);
@@ -386,6 +398,34 @@ export function WorkspaceSchedulePage({
     onTaskRequestHandled();
   }, [day, onTaskRequestHandled, requestedTaskId]);
 
+  useEffect(() => {
+    if (!requestedRoutineSuggestion) return;
+    if (date !== requestedRoutineSuggestion.targetDate) {
+      setDate(requestedRoutineSuggestion.targetDate);
+      return;
+    }
+    if (!day || day.date !== requestedRoutineSuggestion.targetDate || loading) return;
+    setEditorError("");
+    setEditor({
+      kind: "event",
+      initialDraft: {
+        title: requestedRoutineSuggestion.title,
+        description: "",
+        date: requestedRoutineSuggestion.targetDate,
+        startTime: requestedRoutineSuggestion.startTime,
+        endTime: requestedRoutineSuggestion.endTime,
+        location: "",
+        bufferBeforeMinutes: 0,
+        bufferAfterMinutes: 0,
+      },
+      routineSuggestion: {
+        routineId: requestedRoutineSuggestion.routineId,
+        targetDate: requestedRoutineSuggestion.targetDate,
+      },
+    });
+    onRoutineRequestHandled();
+  }, [date, day, loading, onRoutineRequestHandled, requestedRoutineSuggestion]);
+
   function openTimelineItem(item: TimelineItem) {
     setEditorError("");
     if (!day) return;
@@ -409,7 +449,13 @@ export function WorkspaceSchedulePage({
     if (mutation.kind === "event") {
       return mutation.existing
         ? updatePlannerEvent(mutation.existing, mutation.draft)
-        : createPlannerEvent(mutation.draft);
+        : mutation.routineSuggestion
+          ? confirmRoutineSuggestion(
+              mutation.routineSuggestion.routineId,
+              mutation.routineSuggestion.targetDate,
+              mutation.draft,
+            )
+          : createPlannerEvent(mutation.draft);
     }
     return mutation.existing
       ? updateTimeBlock(mutation.existing, mutation.draft)
@@ -509,6 +555,9 @@ export function WorkspaceSchedulePage({
       kind: "event",
       draft,
       ...(editor?.kind === "event" && editor.event ? { existing: editor.event } : {}),
+      ...(editor?.kind === "event" && editor.routineSuggestion
+        ? { routineSuggestion: editor.routineSuggestion }
+        : {}),
     });
   }
 
@@ -677,8 +726,9 @@ export function WorkspaceSchedulePage({
       )}
       {editor?.kind === "event" && (
         <PlannerEventEditor
-          key={editor.event?.id ?? `new-event:${date}`}
+          key={editor.event?.id ?? `new-event:${editor.initialDraft?.title ?? date}`}
           event={editor.event}
+          initialDraft={editor.initialDraft}
           initialDate={date}
           busy={busy}
           error={editorError}

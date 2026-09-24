@@ -391,6 +391,53 @@ impl PlannerEvent {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Routine {
+    pub id: String,
+    pub title: String,
+    pub target_duration_minutes: u16,
+    pub weekdays_mask: u8,
+    pub preferred_start_time: Option<String>,
+    pub preferred_end_time: Option<String>,
+    pub enabled: bool,
+    pub last_scheduled_date: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl Routine {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if !(5..=720).contains(&self.target_duration_minutes) {
+            return Err("日常习惯时长必须在 5–720 分钟之间".into());
+        }
+        if !(1..=127).contains(&self.weekdays_mask) {
+            return Err("至少选择一个适用星期".into());
+        }
+        validate_planner_text(
+            &self.id,
+            &self.title,
+            None,
+            None,
+            &self.created_at,
+            &self.updated_at,
+        )?;
+        match (
+            self.preferred_start_time.as_deref(),
+            self.preferred_end_time.as_deref(),
+        ) {
+            (None, None) => {}
+            (Some(start), Some(end)) if parse_time(start)? < parse_time(end)? => {}
+            (Some(_), Some(_)) => return Err("偏好时间结束时间必须晚于开始时间".into()),
+            _ => return Err("偏好时间窗口必须同时填写开始和结束时间".into()),
+        }
+        if let Some(date) = &self.last_scheduled_date {
+            parse_date(date)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TimeBlock {
     pub id: String,
     pub personal_task_id: String,
@@ -798,5 +845,40 @@ mod tests {
         .validate()
         .is_err());
         assert!(validate_planner_date_range("2026-09-25", "2026-09-24").is_err());
+    }
+
+    #[test]
+    fn routines_validate_duration_weekdays_window_and_last_date() {
+        let routine = Routine {
+            id: "run".into(),
+            title: "跑步".into(),
+            target_duration_minutes: 40,
+            weekdays_mask: 0b0010101,
+            preferred_start_time: Some("18:00".into()),
+            preferred_end_time: Some("21:00".into()),
+            enabled: true,
+            last_scheduled_date: Some("2026-09-21".into()),
+            created_at: "2026-09-23T08:00:00.000Z".into(),
+            updated_at: "2026-09-23T08:00:00.000Z".into(),
+        };
+        assert!(routine.validate().is_ok());
+        assert!(Routine {
+            weekdays_mask: 0,
+            ..routine.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(Routine {
+            preferred_end_time: Some("17:00".into()),
+            ..routine.clone()
+        }
+        .validate()
+        .is_err());
+        assert!(Routine {
+            last_scheduled_date: Some("2026-02-30".into()),
+            ..routine
+        }
+        .validate()
+        .is_err());
     }
 }

@@ -14,6 +14,7 @@ import {
 import { effectiveOccupancy } from "../timeline/planner-interactions.ts";
 import { loadPersonalTasks } from "../planner/personal-tasks.ts";
 import { loadPlannerEvents, loadTimeBlocks } from "../planner/planner-schedule.ts";
+import { loadRoutines, suggestRoutine } from "../planner/routines.ts";
 import { hasDiaryEntry } from "../../services/diary-storage.ts";
 import { countPendingInboxItems } from "../../services/inbox-storage.ts";
 import { buildWorkspaceContext } from "./workspace-context.ts";
@@ -41,6 +42,7 @@ export interface WorkspaceDashboardReader {
   loadPersonalTasks?(): ReturnType<typeof loadPersonalTasks>;
   hasDiaryEntry?(date: string): Promise<boolean>;
   countPendingInboxItems?(): Promise<number>;
+  loadRoutines?(): ReturnType<typeof loadRoutines>;
 }
 
 const defaultReader: WorkspaceDashboardReader = {
@@ -51,6 +53,7 @@ const defaultReader: WorkspaceDashboardReader = {
   loadPersonalTasks,
   hasDiaryEntry,
   countPendingInboxItems,
+  loadRoutines,
 };
 
 export function localDateKey(date: Date): string {
@@ -96,7 +99,7 @@ export async function loadWorkspaceDashboardSources(
     fallbackSemesterId: termConfig ? LEGACY_SEMESTER_ID : undefined,
   };
   const rangeEnd = dateAfter(date, 7);
-  const [schedule, hub, events, blocks, personalTasks, hasDiaryToday, pendingInboxCount] =
+  const [schedule, hub, events, blocks, personalTasks, hasDiaryToday, pendingInboxCount, routines] =
     await Promise.all([
       reader.loadScheduleData(),
       reader.loadHubData(options),
@@ -105,6 +108,7 @@ export async function loadWorkspaceDashboardSources(
       reader.loadPersonalTasks?.() ?? Promise.resolve([]),
       reader.hasDiaryEntry?.(date) ?? Promise.resolve(false),
       reader.countPendingInboxItems?.() ?? Promise.resolve(0),
+      reader.loadRoutines?.() ?? Promise.resolve([]),
     ]);
   const activeSemester =
     hub.semesters.find((semester) => semester.status === "ACTIVE") ??
@@ -144,6 +148,7 @@ export async function loadWorkspaceDashboardSources(
     hasDiaryToday,
     pendingInboxCount,
     warnings: schedule.warnings,
+    routines,
   };
 }
 
@@ -482,6 +487,12 @@ export function buildWorkspaceDashboardViewModel(
     todayItemCount: context.todayItemCount,
     nextItem: context.currentItem ?? context.nextItem,
     ...timeContext(context),
+    routineSuggestion: suggestRoutine({
+      today: sources.date,
+      now: nowTime,
+      routines: sources.routines ?? [],
+      timelineItems: sources.futureItems ?? sources.timelineItems,
+    }),
     taskSummary: buildTaskSummary(
       sources.tasks,
       sources.personalTasks ?? [],

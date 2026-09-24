@@ -12,6 +12,7 @@ import { createWorkspaceTasksTarget } from "../../navigation/navigation.ts";
 import type { AppRoute } from "../../navigation/types.ts";
 import type { TermConfig } from "../../types/reminder.ts";
 import type { WeatherSnapshot } from "../../types/weather.ts";
+import type { RoutineSuggestion } from "../../types/routine.ts";
 import "./workspace-dashboard.css";
 
 interface WorkspaceDashboardProps {
@@ -20,6 +21,7 @@ interface WorkspaceDashboardProps {
   readonly termConfig: TermConfig | null;
   readonly weatherSnapshot: WeatherSnapshot | null;
   readonly onNavigate: (route: AppRoute) => void;
+  readonly onScheduleRoutine?: (suggestion: RoutineSuggestion) => void;
 }
 
 function minuteOfDay(time: string): number {
@@ -211,8 +213,15 @@ function TimelineCard({
   );
 }
 
-function TimeContext({ model }: { readonly model: WorkspaceDashboardViewModel }) {
+function TimeContext({
+  model,
+  onScheduleRoutine,
+}: {
+  readonly model: WorkspaceDashboardViewModel;
+  readonly onScheduleRoutine?: (suggestion: RoutineSuggestion) => void;
+}) {
   const { primary, secondary } = model.timeContext;
+  const suggestion = model.routineSuggestion;
   return (
     <aside
       className="workspace-time-context"
@@ -243,6 +252,17 @@ function TimeContext({ model }: { readonly model: WorkspaceDashboardViewModel })
           </strong>
           <span>{secondary.detail}</span>
           {secondary.location && <span>{secondary.location}</span>}
+        </div>
+      )}
+      {suggestion && onScheduleRoutine && (
+        <div className="workspace-routine-suggestion" data-testid="routine-suggestion">
+          <span>可安排</span>
+          <strong>
+            {suggestion.title} · {suggestion.targetDurationMinutes} 分钟
+          </strong>
+          <button type="button" onClick={() => onScheduleRoutine(suggestion)}>
+            安排
+          </button>
         </div>
       )}
     </aside>
@@ -377,6 +397,7 @@ export function WorkspaceDashboard({
   termConfig,
   weatherSnapshot,
   onNavigate,
+  onScheduleRoutine,
 }: WorkspaceDashboardProps) {
   const now = useMinuteClock();
   const date = localDateKey(now);
@@ -435,7 +456,7 @@ export function WorkspaceDashboard({
       </section>
       <div className="workspace-dashboard" data-testid="workspace-dashboard" data-date={model.date}>
         <TimelineCard model={model} nowTime={nowTime} onNavigate={onNavigate} />
-        <TimeContext model={model} />
+        <TimeContext model={model} onScheduleRoutine={onScheduleRoutine} />
         <aside className="workspace-dashboard-rail" aria-label="工作台摘要">
           <TaskCard model={model} onNavigate={onNavigate} />
           <div className="workspace-module-pair">

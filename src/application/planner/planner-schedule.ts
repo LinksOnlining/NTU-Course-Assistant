@@ -79,7 +79,7 @@ function assertDraft<T>(errors: Partial<Record<keyof T, string>>): void {
   if (typeof first === "string") throw new Error(first);
 }
 
-function createEvent(
+export function plannerEventFromDraft(
   id: string,
   draft: PlannerEventDraft,
   now: Date,
@@ -133,7 +133,7 @@ export function createPlannerEvent(
   id = crypto.randomUUID(),
 ): Promise<PlannerEvent> {
   assertDraft<PlannerEventDraft>(validatePlannerEventDraft(draft));
-  return repository.createPlannerEvent(createEvent(id, draft, now));
+  return repository.createPlannerEvent(plannerEventFromDraft(id, draft, now));
 }
 
 export function updatePlannerEvent(
@@ -143,7 +143,7 @@ export function updatePlannerEvent(
   now = new Date(),
 ): Promise<PlannerEvent> {
   assertDraft<PlannerEventDraft>(validatePlannerEventDraft(draft));
-  return repository.updatePlannerEvent(createEvent(existing.id, draft, now, existing));
+  return repository.updatePlannerEvent(plannerEventFromDraft(existing.id, draft, now, existing));
 }
 
 export function deletePlannerEvent(

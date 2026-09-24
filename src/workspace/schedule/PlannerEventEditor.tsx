@@ -7,6 +7,7 @@ import type { PlannerEvent, PlannerEventDraft } from "../../types/planner.ts";
 
 interface PlannerEventEditorProps {
   readonly event?: PlannerEvent;
+  readonly initialDraft?: PlannerEventDraft;
   readonly initialDate: string;
   readonly busy?: boolean;
   readonly error?: string;
@@ -15,32 +16,40 @@ interface PlannerEventEditorProps {
   readonly onCancel: () => void;
 }
 
-function draftFromEvent(event: PlannerEvent | undefined, initialDate: string): PlannerEventDraft {
-  return event
-    ? {
-        title: event.title,
-        description: event.description ?? "",
-        date: event.date,
-        startTime: event.startTime,
-        endTime: event.endTime,
-        location: event.location ?? "",
-        bufferBeforeMinutes: event.bufferBeforeMinutes,
-        bufferAfterMinutes: event.bufferAfterMinutes,
-      }
-    : {
-        title: "",
-        description: "",
-        date: initialDate,
-        startTime: "09:00",
-        endTime: "10:00",
-        location: "",
-        bufferBeforeMinutes: 0,
-        bufferAfterMinutes: 0,
-      };
+function draftFromEvent(
+  event: PlannerEvent | undefined,
+  initialDate: string,
+  initialDraft?: PlannerEventDraft,
+): PlannerEventDraft {
+  return (
+    initialDraft ??
+    (event
+      ? {
+          title: event.title,
+          description: event.description ?? "",
+          date: event.date,
+          startTime: event.startTime,
+          endTime: event.endTime,
+          location: event.location ?? "",
+          bufferBeforeMinutes: event.bufferBeforeMinutes,
+          bufferAfterMinutes: event.bufferAfterMinutes,
+        }
+      : {
+          title: "",
+          description: "",
+          date: initialDate,
+          startTime: "09:00",
+          endTime: "10:00",
+          location: "",
+          bufferBeforeMinutes: 0,
+          bufferAfterMinutes: 0,
+        })
+  );
 }
 
 export function PlannerEventEditor({
   event,
+  initialDraft,
   initialDate,
   busy = false,
   error = "",
@@ -48,7 +57,7 @@ export function PlannerEventEditor({
   onDelete,
   onCancel,
 }: PlannerEventEditorProps) {
-  const [draft, setDraft] = useState(() => draftFromEvent(event, initialDate));
+  const [draft, setDraft] = useState(() => draftFromEvent(event, initialDate, initialDraft));
   const [errors, setErrors] = useState<PlannerEventDraftErrors>({});
   const update = <K extends keyof PlannerEventDraft>(field: K, value: PlannerEventDraft[K]) =>
     setDraft((current) => ({ ...current, [field]: value }));

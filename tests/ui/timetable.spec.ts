@@ -133,6 +133,7 @@ async function seedPeriodCourseRuntime(
             reminderSettings?: { enabled: boolean; advanceMinutes: number };
           },
         ) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return { courses: [course], warnings: [] };
           if (command === "load_period_times") return periods;
           if (command === "load_reminder_configuration") {
@@ -721,6 +722,7 @@ test("Windows 登录启动失败和系统状态不一致不会显示伪成功", 
       configurable: true,
       value: {
         invoke: async (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return { courses: [], warnings: [] };
           if (command === "load_period_times") return null;
           if (command === "load_widget_settings") {
@@ -808,6 +810,7 @@ test("failed schedule save keeps the old timeline", async ({ page }) => {
       configurable: true,
       value: {
         invoke: async (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return { courses: [], warnings: [] };
           if (command === "load_period_times") {
             return [
@@ -857,6 +860,7 @@ test("failed schedule save can be retried without a permanent saving state", asy
       configurable: true,
       value: {
         invoke: async (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return { courses: [], warnings: [] };
           if (command === "load_period_times") {
             return [
@@ -947,6 +951,7 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
       configurable: true,
       value: {
         invoke: (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return Promise.resolve({ courses: [], warnings: [] });
           if (command === "load_period_times") return Promise.resolve(null);
           if (command === "load_day_count") return Promise.resolve(7);
@@ -1039,6 +1044,7 @@ test("PDF dialog errors release the cancel-path operation gate", async ({ page }
       configurable: true,
       value: {
         invoke: (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return Promise.resolve({ courses: [], warnings: [] });
           if (command === "load_period_times") return Promise.resolve(null);
           if (command === "load_day_count") return Promise.resolve(7);
@@ -1096,6 +1102,7 @@ test("PDF dialog cancel result variants release the operation gate", async ({ pa
       configurable: true,
       value: {
         invoke: (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return Promise.resolve({ courses: [], warnings: [] });
           if (command === "load_period_times") return Promise.resolve(null);
           if (command === "load_day_count") return Promise.resolve(7);
@@ -1157,6 +1164,7 @@ test("canceling PDF picker returns to idle before subsequent settings saves", as
       configurable: true,
       value: {
         invoke: (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return Promise.resolve({ courses: [], warnings: [] });
           if (command === "load_period_times") return Promise.resolve(null);
           if (command === "load_day_count") return Promise.resolve(7);
@@ -1564,6 +1572,7 @@ test("storage failures keep the original UI state and show a clear error", async
       configurable: true,
       value: {
         invoke: async (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return { courses: [storedCourse], warnings: [] };
           if (command === "load_period_times") return null;
           if (command === "load_widget_settings") {
@@ -1616,6 +1625,7 @@ test("a failed insert does not create a course in the UI", async ({ page }) => {
       configurable: true,
       value: {
         invoke: async (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return { courses: [], warnings: [] };
           if (command === "load_period_times") return null;
           if (command === "load_widget_settings") {
@@ -1672,6 +1682,7 @@ test("confirmed course clearing updates the timetable without touching the setti
       configurable: true,
       value: {
         invoke: async (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return { courses: [storedCourse], warnings: [] };
           if (command === "load_period_times") return null;
           if (command === "load_widget_settings") {
@@ -1747,6 +1758,7 @@ test("failed course clearing keeps the confirmation and the existing timetable",
       configurable: true,
       value: {
         invoke: async (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return { courses: [storedCourse], warnings: [] };
           if (command === "load_period_times") return null;
           if (command === "load_widget_settings") {
@@ -1794,6 +1806,7 @@ test("manual updater failures can be retried and dismissed without blocking the 
       configurable: true,
       value: {
         invoke: async (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") return { courses: [], warnings: [] };
           if (command === "load_period_times") return null;
           if (command === "load_widget_settings") {
@@ -1902,6 +1915,7 @@ test("unsupported database version leaves the app usable but disables writes", a
       configurable: true,
       value: {
         invoke: async (command: string) => {
+          if (command === "load_routines") return [];
           if (command === "load_courses") {
             throw "本地课程数据暂时无法加载：数据库来自较新版本，请升级应用后重试。";
           }

@@ -19,6 +19,7 @@ import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings
 import type { ThemePreference } from "../theme/types.ts";
 import type { WorkspaceWeatherController } from "../workspace/weather/use-workspace-weather.ts";
 import { WeatherSettingsPanel } from "../workspace/weather/WeatherSettingsPanel.tsx";
+import { RoutineSettingsPanel } from "../workspace/routine/RoutineSettingsPanel.tsx";
 
 interface PeriodSettingsProps {
   readonly initialDomain: "workspace" | "academic";
@@ -46,6 +47,7 @@ type SettingsPage =
   | "时间轴"
   | "每日寄语"
   | "天气"
+  | "日常习惯"
   | "作息"
   | "显示"
   | "提醒"
@@ -56,7 +58,7 @@ type SettingsPage =
   | "隐私"
   | "关于";
 const SETTINGS_GROUPS = [
-  { title: "工作台", pages: ["首页", "时间轴", "每日寄语", "天气"] },
+  { title: "工作台", pages: ["首页", "时间轴", "每日寄语", "天气", "日常习惯"] },
   { title: "课表", pages: ["作息", "显示", "提醒", "Widget", "导入与数据"] },
   { title: "通用", pages: ["外观", "数据与备份", "隐私", "关于"] },
 ] as const;
@@ -421,6 +423,7 @@ export function PeriodSettings({
               <p className="settings-domain-note">每日寄语随日期更新；目前暂无可调整的选项。</p>
             )}
             {page === "天气" && <WeatherSettingsPanel weather={weather} />}
+            {page === "日常习惯" && <RoutineSettingsPanel />}
             {page === "显示" && (
               <p className="settings-domain-note">
                 课表显示选项请在课表页面使用；此处暂无独立设置。

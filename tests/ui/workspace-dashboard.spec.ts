@@ -13,10 +13,11 @@ async function seedDashboardRuntime(
   } = {},
   diaryFixture: { readonly hasEntry?: boolean; readonly failSave?: boolean } = {},
   inboxFixture: { readonly pendingCount?: number; readonly items?: readonly unknown[] } = {},
+  routineFixture: readonly Record<string, unknown>[] = [],
 ) {
   await page.clock.install({ time: currentTime });
   await page.addInitScript(
-    ({ name, plannerFixture, diaryFixture, inboxFixture }) => {
+    ({ name, plannerFixture, diaryFixture, inboxFixture, routineFixture }) => {
       const course = {
         id: "dashboard-course",
         name,
@@ -63,6 +64,8 @@ async function seedDashboardRuntime(
         ...task,
       }));
       let personalTasks = [...(plannerFixture.personalTasks ?? [])];
+      let dashboardEvents = [...(plannerFixture.events ?? [])] as Record<string, any>[];
+      let routines = [...routineFixture] as Record<string, any>[];
       const today = new Date().toISOString().slice(0, 10);
       const diaryEntries = new Map<string, Record<string, string>>();
       const inboxItems = [...(inboxFixture.items ?? [])] as Record<string, unknown>[];
@@ -192,7 +195,40 @@ async function seedDashboardRuntime(
               diaryEntries.set(incoming.entryDate, saved);
               return saved;
             }
-            if (command === "load_planner_events") return plannerFixture.events ?? [];
+            if (command === "load_planner_events") {
+              return dashboardEvents.filter(
+                (event) => event.date >= args?.startDate && event.date <= args?.endDate,
+              );
+            }
+            if (command === "create_planner_event") {
+              dashboardEvents.push(args?.event as Record<string, any>);
+              return args?.event;
+            }
+            if (command === "load_routines") return routines.map((routine) => ({ ...routine }));
+            if (command === "create_routine") {
+              const routine = args?.routine as Record<string, any>;
+              routines = [...routines, routine];
+              return routine;
+            }
+            if (command === "update_routine") {
+              const routine = args?.routine as Record<string, any>;
+              routines = routines.map((item) => (item.id === routine.id ? routine : item));
+              return routine;
+            }
+            if (command === "delete_routine") {
+              routines = routines.filter((item) => item.id !== args?.id);
+              return;
+            }
+            if (command === "confirm_routine_suggestion") {
+              const event = args?.event as Record<string, any>;
+              dashboardEvents = [...dashboardEvents, event];
+              routines = routines.map((item) =>
+                item.id === args?.routineId
+                  ? { ...item, lastScheduledDate: args?.targetDate }
+                  : item,
+              );
+              return event;
+            }
             if (command === "load_time_blocks") return plannerFixture.timeBlocks ?? [];
             if (command === "load_handled_reminder_keys") return [];
             if (
@@ -213,13 +249,16 @@ async function seedDashboardRuntime(
           getLoadCoursesCount: () => loadCoursesCount,
           getPersonalTaskCount: () => personalTasks.length,
           getDiaryBody: (date: string) => diaryEntries.get(date)?.body ?? null,
+          getRoutineScheduledDate: (id: string) =>
+            routines.find((item) => item.id === id)?.lastScheduledDate ?? null,
+          getEventCount: () => dashboardEvents.length,
           setDiarySaveFailure: (value: boolean) => {
             failDiarySave = value;
           },
         },
       });
     },
-    { name: courseName, plannerFixture, diaryFixture, inboxFixture },
+    { name: courseName, plannerFixture, diaryFixture, inboxFixture, routineFixture },
   );
   await page.goto("/");
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
@@ -938,4 +977,88 @@ test("failed Weather requests never block offline core routes", async ({ page })
   await page.locator(".workspace-inbox-breadcrumb").click();
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test("日常习惯建议取消不写入，确认后保存为日程", async ({ page }) => {
+  const routine = {
+    id: "routine-run",
+    title: "跑步",
+    targetDurationMinutes: 40,
+    weekdaysMask: 1 << 2,
+    preferredStartTime: "18:00",
+    preferredEndTime: "21:00",
+    enabled: true,
+    lastScheduledDate: null,
+    createdAt: "2026-09-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  };
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, {}, {}, [routine]);
+  const suggestion = page.getByTestId("routine-suggestion");
+  await expect(suggestion).toContainText("跑步 · 40 分钟");
+  await suggestion.getByRole("button", { name: "安排" }).click();
+
+  const editor = page.getByRole("dialog", { name: "添加日程" });
+  await expect(editor.getByLabel("标题")).toHaveValue("跑步");
+  await expect(editor.getByLabel("日期")).toHaveValue("2026-09-23");
+  await expect(editor.getByLabel("开始时间")).toHaveValue("18:00");
+  await expect(editor.getByLabel("结束时间")).toHaveValue("18:40");
+  await editor.getByRole("button", { name: "取消" }).click();
+  expect(await page.evaluate(() => (window as any).__workspaceDashboardTest.getEventCount())).toBe(
+    0,
+  );
+  expect(
+    await page.evaluate(() =>
+      (window as any).__workspaceDashboardTest.getRoutineScheduledDate("routine-run"),
+    ),
+  ).toBeNull();
+
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "工作台" })
+    .click();
+  const refreshedSuggestion = page.getByTestId("routine-suggestion");
+  await expect(refreshedSuggestion).toBeVisible();
+  await refreshedSuggestion.getByRole("button", { name: "安排" }).click();
+  const confirmedEditor = page.getByRole("dialog", { name: "添加日程" });
+  await confirmedEditor.getByRole("button", { name: "保存" }).click();
+  await expect(page.getByTestId("workspace-schedule")).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__workspaceDashboardTest.getEventCount())).toBe(
+    1,
+  );
+  expect(
+    await page.evaluate(() =>
+      (window as any).__workspaceDashboardTest.getRoutineScheduledDate("routine-run"),
+    ),
+  ).toBe("2026-09-23");
+  expect(
+    await page.evaluate(() => (window as any).__workspaceDashboardTest.getPersonalTaskCount()),
+  ).toBe(0);
+});
+
+test("设置中的日常习惯可新增、编辑、停用和删除", async ({ page }) => {
+  await seedDashboardRuntime(page);
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "日常习惯" })
+    .click();
+  const panel = settings.getByTestId("routine-settings");
+  await expect(panel).toBeVisible();
+  await panel.getByLabel("名称").fill("骑行");
+  await panel.getByLabel("目标时长（分钟）").fill("30");
+  await panel.getByRole("button", { name: "新增习惯" }).click();
+  const row = panel.getByRole("listitem").filter({ hasText: "骑行" });
+  await expect(row).toBeVisible();
+  await expect(row.getByLabel("启用骑行")).toBeChecked();
+  await row.getByLabel("启用骑行").uncheck();
+  await expect(row.getByLabel("启用骑行")).not.toBeChecked();
+  await row.getByRole("button", { name: "编辑" }).click();
+  await panel.getByLabel("名称").fill("室内骑行");
+  await panel.getByRole("button", { name: "保存修改" }).click();
+  const updated = panel.getByRole("listitem").filter({ hasText: "室内骑行" });
+  await expect(updated).toBeVisible();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await updated.getByRole("button", { name: "删除" }).click();
+  await expect(panel.getByRole("listitem")).toHaveCount(0);
 });

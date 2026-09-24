@@ -62,6 +62,7 @@ async function seedTasksRuntime(page: Page) {
           if (command === "load_academic_tasks") return academicTasks;
           if (command === "load_personal_tasks") return [...personalTasks];
           if (command === "load_planner_events" || command === "load_time_blocks") return [];
+          if (command === "load_routines") return [];
           if (command === "create_personal_task") {
             personalTasks.push(args?.task);
             return args?.task;

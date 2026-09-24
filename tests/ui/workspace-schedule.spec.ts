@@ -115,6 +115,7 @@ async function seedScheduleRuntime(page: Page) {
               (block) => block.date >= args?.startDate && block.date <= args?.endDate,
             );
           }
+          if (command === "load_routines") return [];
           if (command === "create_planner_event") {
             mutations.push({
               command,
