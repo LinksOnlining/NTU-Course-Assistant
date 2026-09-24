@@ -35,18 +35,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function isWeatherLocation(value: unknown): value is WeatherLocation {
   const precision = isRecord(value) ? value.precision : undefined;
   const source = isRecord(value) ? value.source : undefined;
-  const optionalNamesAreValid =
+  const optionalLocationMetadataIsValid =
     isRecord(value) &&
-    ["country", "admin1", "admin2", "admin3", "admin4"].every(
+    ["country", "admin1", "admin2", "admin3", "admin4", "county", "street", "providerId"].every(
       (key) => value[key] === undefined || typeof value[key] === "string",
     );
   return (
     isRecord(value) &&
-    optionalNamesAreValid &&
+    optionalLocationMetadataIsValid &&
     (precision === undefined ||
-      ["locality", "district", "city", "region", "coordinatesOnly", "unknown"].includes(
-        String(precision),
-      )) &&
+      [
+        "house",
+        "street",
+        "locality",
+        "district",
+        "city",
+        "county",
+        "state",
+        "country",
+        "other",
+        "region",
+        "coordinatesOnly",
+        "unknown",
+      ].includes(String(precision))) &&
     (source === undefined || source === "manual" || source === "device") &&
     typeof value.displayName === "string" &&
     value.displayName.trim().length > 0 &&

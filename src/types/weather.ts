@@ -3,18 +3,32 @@ export interface WeatherLocation {
   readonly latitude: number;
   readonly longitude: number;
   readonly timezone: string | null;
-  /** Provider-reported parent areas; no street address or house number is kept. */
+  /** Provider-reported hierarchy; selected street names may be retained, never house numbers. */
   readonly country?: string;
   readonly admin1?: string;
   readonly admin2?: string;
   readonly admin3?: string;
   readonly admin4?: string;
+  readonly county?: string;
+  readonly street?: string;
+  readonly providerId?: string;
   readonly precision?: WeatherLocationPrecision;
   readonly source?: "manual" | "device";
 }
 
 export type WeatherLocationPrecision =
-  "locality" | "district" | "city" | "region" | "coordinatesOnly" | "unknown";
+  | "house"
+  | "street"
+  | "locality"
+  | "district"
+  | "city"
+  | "county"
+  | "state"
+  | "country"
+  | "other"
+  | "region"
+  | "coordinatesOnly"
+  | "unknown";
 
 export interface WeatherProvider {
   searchLocation(query: string, signal?: WeatherRequestSignal): Promise<readonly WeatherLocation[]>;

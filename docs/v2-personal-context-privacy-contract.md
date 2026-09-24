@@ -75,7 +75,8 @@ Repository 最少支持按日期读取与 upsert，必要时删除。SQLite `ent
 ## 5. Weather 契约
 
 - `工作台 → 天气` 是真实设置：启用、地点、温度单位、手动刷新。默认为关闭；关闭时无网络访问，也不显示虚假天气。
-- 地点由用户搜索并选择城市，保存显示名、城市级纬度/经度及 provider 提供的时区；不使用设备定位。
+- 手动地点搜索只在用户提交搜索时将搜索文字发送给 Photon / OpenStreetMap；支持区县、街镇、道路与地点，且不保存搜索历史。只有用户选中的地点及其坐标/层级元数据会保存在天气设置中；天气预报请求将该选中地点自己的坐标发送给 Open-Meteo。
+- “使用当前位置”仅在应用内说明确认及系统定位授权后读取一次；接受系统估算精度不差于 10 公里的坐标，并在发送给 Photon 逆向解析与 Open-Meteo 前四舍五入到三位小数。只保存当前选择，不记录定位历史；解析失败时不猜测地名。
 - Presentation 不直接散落 provider fetch；通过 `searchLocation`、`fetchForecast` 等单一 adapter 返回内部 `current/hourly/daily` 模型，不让 UI 绑定 provider 原始 JSON。
 - Header 仅显示温度与简短状态；点击打开轻量 popover，显示当前、未来数小时、七日预报、地点与更新时间。
 - 缓存用 `links-workplace.weather.*` 命名空间，不进入 schema 7。≤30 分钟为 fresh，≤24 小时 stale-but-usable；过期视为不可用。网络失败时可显示 stale cache 并明确标注缓存状态/更新时间；无缓存显示天气暂不可用。

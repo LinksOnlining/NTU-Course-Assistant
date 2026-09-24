@@ -7,17 +7,26 @@ import type {
 } from "../../types/weather.ts";
 import { createOpenMeteoProvider } from "../../services/weather-provider.ts";
 import { createPhotonReverseGeocodingProvider } from "../../services/reverse-geocoding-provider.ts";
+import { createPhotonLocationSearchProvider } from "../../services/photon-location-provider.ts";
 
 /** Weather Application boundary owns the production provider selection. */
-export function createWorkspaceWeatherProvider(): WorkspaceWeatherProvider {
-  return { ...createOpenMeteoProvider(), ...createPhotonReverseGeocodingProvider() };
+export function createWorkspaceWeatherProvider(
+  fetcher: typeof fetch = fetch,
+): WorkspaceWeatherProvider {
+  return {
+    ...createOpenMeteoProvider(fetcher),
+    ...createPhotonLocationSearchProvider(fetcher),
+    ...createPhotonReverseGeocodingProvider(fetcher),
+  };
 }
 
 export function weatherLocationHierarchy(location: WeatherLocation): string[] {
   return [
     location.displayName,
+    location.street,
     location.admin4,
     location.admin3,
+    location.county,
     location.admin2,
     location.admin1,
     location.country,
@@ -36,6 +45,18 @@ export function weatherLocationPrecisionLabel(
       return "城市级";
     case "region":
       return "省/州级";
+    case "state":
+      return "省/州级";
+    case "county":
+      return "县级";
+    case "country":
+      return "国家级";
+    case "street":
+      return "道路级";
+    case "house":
+      return "门牌/建筑级";
+    case "other":
+      return "地点级";
     case "coordinatesOnly":
       return "地点名称暂不可解析";
     case "unknown":
@@ -52,6 +73,12 @@ export const WEATHER_STALE_FOR_MS = 24 * 60 * 60 * 1000;
 
 export function weatherLocationKey(location: WeatherLocation): string {
   return `${location.latitude.toFixed(4)},${location.longitude.toFixed(4)}`;
+}
+
+export function weatherLocationIdentity(location: WeatherLocation): string {
+  return location.providerId
+    ? `osm:${location.providerId}`
+    : `${location.latitude.toFixed(6)},${location.longitude.toFixed(6)}:${location.displayName}`;
 }
 
 export function classifyWeatherCache(

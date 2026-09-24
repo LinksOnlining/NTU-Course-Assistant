@@ -132,3 +132,41 @@
 - Phase 3 Overall：**COMPLETE**。
 - Phase 3.M：**COMPLETE**。
 - Phase 4：**NOT STARTED**。下一步仅为等待 Ethan / ChatGPT 确认后进入 Phase 4。
+
+## Phase 3.8.1 — Detailed Weather Location Search
+
+**状态：PASS（实现、自动回归与 production build）。Phase 4 未开始。**
+
+### 根因与修复
+
+- 根因在生产 provider 组合，而不是 Photon layer/UI 过滤：`createWorkspaceWeatherProvider()` 原先先组合 Open-Meteo provider（含 `searchLocation`），随后只覆盖 Photon 逆向地理编码；因此手动查询实际仍发送到 Open-Meteo 城市/邮编 geocoder，`崇川区` 等详细地点被该服务漏掉。结果列表没有额外 city-only 过滤。
+- 手动搜索现改用 Photon forward `/api?q=...&lang=zh&limit=12`；不发送 `layer` 或固定 `countrycode`，避免限制有效结果。Photon 官方 API 文档将 `/api` 定义为地点名称/地址 forward search，并列出 house、street、locality、district、city、county、state、country 与 other layers；`lang`、`limit` 是支持参数。[Photon API docs](https://github.com/komoot/photon/blob/master/docs/api-v1.md)
+- 只有用户提交表单时才请求；原始查询无结果时，最多尝试一次去掉末尾中文行政后缀的等价 query。候选只来自 Photon，不推测城市或地点。
+- 归一化使用 GeoJSON `[longitude, latitude]`、名称/上级层级和可用 OSM identity；接受全部列明 granularity，未知 layer 只要有可靠名称与合法坐标也保留。结果按精确名称、locality/district/street、city、其他稳定排序，并按 OSM identity 或坐标去重。
+- 搜索结果可保存街道名称及上级层级，但不保存 house number；不保存搜索历史。UI 第一行显示最具体名称，下一行显示层级；空态仅用于 provider 返回空 feature collection，损坏/不兼容响应会走错误状态。
+- Open-Meteo 保持只负责预报：请求使用用户所选 `WeatherLocation` 的原始 latitude/longitude，不再转换为城市中心。当前位置二次确认、系统定位授权、坐标模糊化、Photon reverse geocoding、精度失败回退和隐私边界保持不变。
+
+### 回归与构建
+
+- Photon fixture 覆盖：`崇川区`、`南通市崇川区`、`文峰街道`、`南通市崇川区文峰街道`、`青年中路`、`南通大学`；另覆盖缺 city 的 district、缺 district 的 locality、house/POI/street/county/state/country/unknown layer、重复 OSM identity、行政后缀 fallback 和 malformed response。
+- 定向 UI：输入期间不联网；提交后请求 Photon；选择 district 与 street 时 UI 层级准确，Open-Meteo forecast URL 逐次使用对应所选坐标；不再请求 Open-Meteo geocoding endpoint。Weather unit **12 PASS**、Weather architecture **3 PASS**、详细搜索 UI **1 PASS**。
+- `npm run verify`：最终完整重跑 **PASS**；Unit **251 PASS**，Architecture **114 PASS**，UI **795 PASS / 15 条件跳过 / 0 FAIL**；TypeScript、Lint、Prettier 与前端 production build 均 PASS。此前两轮完整回归出现少量 Playwright `beforeEach` 导航点击超时；相关失败用例分别单独重跑通过，最终完整回归无失败。
+- Rust 无源码修改；`cargo test`：**65 PASS / 0 FAIL**。
+- `npm run tauri build`：**PASS**，版本 **1.3.1**，2026-09-24。构建产物位于 `src-tauri/target/release`（该目录被忽略，不进入提交）：
+
+| 产物 | 大小（bytes） |
+| --- | ---: |
+| `ntu-course-assistant.exe` | 67,399,168 |
+| `NTU Course Assistant_1.3.1_x64-setup.exe` | 52,304,823 |
+| `NTU Course Assistant_1.3.1_x64-setup.exe.sig` | 436 |
+| `NTU Course Assistant_1.3.1_x64_en-US.msi` | 54,177,792 |
+| `NTU Course Assistant_1.3.1_x64_en-US.msi.sig` | 436 |
+
+- Live Photon diagnostic 不具结论性：本机 PowerShell 请求收到 HTTP 400，随后 `curl` 请求超时；未将其伪称为成功或 provider 能力失败。自动验收使用 fixtures，不依赖第三方实时服务。Codex 未运行 production EXE、未安装 NSIS/MSI、未触碰真实用户 DB，也未使用 Computer Use；Windows 真实界面复验需 Ethan 自行确认。
+- 无 schema、依赖、版本、Tauri/Rust、课程或其他工作区功能变更；无 tag、push 或 Release。
+
+### 阶段状态
+
+- Phase 3.8.1：**PASS（自动回归与构建门禁）**。
+- Phase 3：**COMPLETE**。
+- Phase 4：**NOT STARTED**；等待 Ethan / ChatGPT 明确确认。

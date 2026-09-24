@@ -15,10 +15,11 @@ function sourceFiles(directory) {
   });
 }
 
-test("Weather network access is centralized and uses only the two exact HTTPS provider hosts", () => {
+test("Weather network access is centralized and uses only the exact HTTPS provider hosts", () => {
   const files = sourceFiles("src");
-  const callers = files.filter((path) => /\b(?:fetch|fetcher)\s*\(/u.test(read(path)));
+  const callers = files.filter((path) => /\b(?:fetch|fetcher)\s*\(/u.test(read(path))).sort();
   assert.deepEqual(callers, [
+    "src/services/photon-location-provider.ts",
     "src/services/reverse-geocoding-provider.ts",
     "src/services/weather-provider.ts",
   ]);
@@ -29,6 +30,19 @@ test("Weather network access is centralized and uses only the two exact HTTPS pr
   const reverseProvider = read("src/services/reverse-geocoding-provider.ts");
   assert.match(reverseProvider, /https:\/\/photon\.komoot\.io\/reverse/u);
   assert.doesNotMatch(reverseProvider, /street|housenumber|postcode\s*:/iu);
+  const photonSearch = read("src/services/photon-location-provider.ts");
+  assert.match(photonSearch, /https:\/\/photon\.komoot\.io\/api/u);
+  assert.match(photonSearch, /searchParams\.set\("q"/u);
+  assert.match(photonSearch, /searchParams\.set\("lang", "zh"\)/u);
+  assert.doesNotMatch(photonSearch, /searchParams\.set\("layer"/u);
+  assert.doesNotMatch(photonSearch, /searchParams\.set\("countrycode"/u);
+  const application = read("src/application/weather/weather.ts");
+  assert.match(application, /createPhotonLocationSearchProvider/u);
+  assert.ok(
+    application.indexOf("...createOpenMeteoProvider") <
+      application.indexOf("...createPhotonLocationSearchProvider"),
+    "Photon forward search must override Open-Meteo city geocoding in production composition",
+  );
 
   const config = read("src-tauri/tauri.conf.json");
   const connectSrc = config.match(/connect-src ([^";]+)/u)?.[1] ?? "";

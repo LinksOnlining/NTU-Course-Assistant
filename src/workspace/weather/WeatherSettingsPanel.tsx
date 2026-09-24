@@ -3,6 +3,7 @@ import {
   formatTemperature,
   weatherCodeLabel,
   weatherLocationHierarchy,
+  weatherLocationIdentity,
   weatherLocationPrecisionLabel,
   weatherLocationSourceLabel,
 } from "../../application/weather/weather.ts";
@@ -41,9 +42,9 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
         <span>启用天气</span>
       </label>
       <p className="settings-domain-note">
-        天气默认关闭。手动搜索的地点名和天气坐标会发送给
-        Open-Meteo；使用当前位置前会先征求同意，坐标也会发送给 Photon / OpenStreetMap
-        解析地名。仅保存当前天气地点，不追踪位置，也不发送课程或个人内容。
+        天气默认关闭。手动搜索时，搜索文字会发送给 Photon / OpenStreetMap；选择地点后，坐标会发送给
+        Open-Meteo 查询天气。使用当前位置前会先征求同意，坐标也会发送给 Photon / OpenStreetMap
+        解析地名。仅保存当前选择，不保存搜索历史或门牌号，也不发送课程或个人内容。
       </p>
       {settings.enabled && (
         <>
@@ -105,13 +106,13 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
             )}
           </div>
           <form className="weather-location-search" onSubmit={submitSearch}>
-            <label htmlFor="weather-location-query">手动选择城市、区县或街镇</label>
+            <label htmlFor="weather-location-query">搜索城市、区县、街道或地点</label>
             <div>
               <input
                 id="weather-location-query"
                 value={query}
                 onChange={(event) => setQuery(event.currentTarget.value)}
-                placeholder="例如：崇川区或南通"
+                placeholder="例如：崇川区 / 文峰街道 / 南通大学"
                 autoComplete="off"
               />
               <button
@@ -130,8 +131,13 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
                 searchState.locations.map((location) => (
                   <button
                     type="button"
-                    key={`${location.latitude}-${location.longitude}-${location.displayName}`}
-                    aria-pressed={settings.location?.displayName === location.displayName}
+                    key={weatherLocationIdentity(location)}
+                    aria-pressed={
+                      settings.location
+                        ? weatherLocationIdentity(settings.location) ===
+                          weatherLocationIdentity(location)
+                        : false
+                    }
                     onClick={() => weather.selectLocation(location)}
                   >
                     <span>{location.displayName}</span>
@@ -143,7 +149,7 @@ export function WeatherSettingsPanel({ weather }: WeatherSettingsPanelProps) {
                   </button>
                 ))
               ) : (
-                <p>没有找到地点，请尝试搜索区县或附近城市。</p>
+                <p>没有找到匹配地点。</p>
               )}
             </div>
           )}

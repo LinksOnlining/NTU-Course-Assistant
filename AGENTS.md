@@ -45,7 +45,7 @@ Planner 领域边界：`PersonalTask` deadline 不占时间轴；Academic Course
 ## Phase 3 Personal Context 隐私边界
 
 - 细则以 `docs/v2-personal-context-privacy-contract.md` 为准：Diary、Inbox raw 和 Search 均本地化；Diary/raw 不进日志或网络；Context 是不含私人正文的纯确定性投影。
-- Weather 是本阶段唯一允许的外网能力；默认关闭，只能由用户主动选城市，不读取设备精确位置，也不携带其他工作区个人数据。
+- Weather 是本阶段唯一允许的外网能力；默认关闭。手动地点仅在用户提交搜索时请求并仅持久化最终选择；当前位置须经应用内确认与系统授权，坐标模糊化后才用于天气/地名解析。不保存位置历史，也不携带其他工作区个人数据。
 - Routine 只给建议，必须由用户明确保存后才生成 PlannerEvent；不自动创建 Task/Event/TimeBlock。Phase 3 不实现 AI、云搜索或全局快捷捕获。
 
 ## 产品方向保护

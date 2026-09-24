@@ -4,8 +4,8 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3.0–3.8 与 Phase 3.M PASS；Phase 3 Overall = COMPLETE（自动验收由 Ethan 授权）。** Phase 3.M 编译期模块扩展架构由 `f527f36` 完成；Phase 3.8 完成 Windows 11 UI/UX polish。最新 `npm run verify`：246 Unit、114 Architecture、795 UI PASS / 15 条件跳过；Rust 65 tests、fmt、clippy 与 Tauri production build 均 PASS。门禁及 Phase 3.8 构建产物见 `docs/v2-phase-3-verification.md`。Schema 为 7，且只有一次 `6→7` 生产迁移。Debug 路径 `<app_local_data_dir>/dev-v2/courses.sqlite3`，Release 路径 `<app_local_data_dir>/courses.sqlite3`。版本仍为 1.3.1；未运行 Production EXE、未安装 Installer、未访问真实用户 DB。Installer compatibility 与 Updater E2E 未验证。Phase 3 完成不代表 v2 Release Ready；下一步仅等待 Ethan / ChatGPT 确认后进入 Phase 4；当前不得自动进入 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
-- Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 为唯一外网能力且默认关闭、仅使用用户主动选择的城市；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
+- **当前状态：Phase 3.0–3.8.1 与 Phase 3.M PASS；Phase 3 Overall = COMPLETE（自动验收由 Ethan 授权）。** Phase 3.8.1 修复详细天气地点搜索。最新 `npm run verify`：251 Unit、114 Architecture、795 UI PASS / 15 条件跳过；Rust 65 tests 与当前 HEAD Tauri production build 均 PASS。完整记录及产物见 `docs/v2-phase-3-verification.md`。Schema 为 7，且只有一次 `6→7` 生产迁移。Debug 路径 `<app_local_data_dir>/dev-v2/courses.sqlite3`，Release 路径 `<app_local_data_dir>/courses.sqlite3`。版本仍为 1.3.1；未运行 Production EXE、未安装 Installer、未访问真实用户 DB。Photon live endpoint 本轮无法稳定诊断；Windows 真实界面复验未由 Codex 执行。Installer compatibility 与 Updater E2E 未验证。Phase 3 完成不代表 v2 Release Ready；下一步仅等待 Ethan / ChatGPT 确认后进入 Phase 4；当前不得自动进入 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
+- Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 是唯一外网能力且默认关闭，手动搜索仅在提交后请求 Photon 并只保存最终选中地点，当前位置需明确同意、系统授权和坐标模糊化；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 
 - 当前开发分支：`v2/workspace-rebase`，从稳定 `main` commit `3f2d580d2423bdb19d2753023db6414b5408c546` 创建；`main` 继续代表稳定 1.x 基线。
