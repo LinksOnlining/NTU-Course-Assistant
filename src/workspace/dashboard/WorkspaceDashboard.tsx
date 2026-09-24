@@ -11,12 +11,14 @@ import { layoutTimelineItems } from "../../application/timeline/index.ts";
 import { createWorkspaceTasksTarget } from "../../navigation/navigation.ts";
 import type { AppRoute } from "../../navigation/types.ts";
 import type { TermConfig } from "../../types/reminder.ts";
+import type { WeatherSnapshot } from "../../types/weather.ts";
 import "./workspace-dashboard.css";
 
 interface WorkspaceDashboardProps {
   readonly ready: boolean;
   readonly storageError: string;
   readonly termConfig: TermConfig | null;
+  readonly weatherSnapshot: WeatherSnapshot | null;
   readonly onNavigate: (route: AppRoute) => void;
 }
 
@@ -373,6 +375,7 @@ export function WorkspaceDashboard({
   ready,
   storageError,
   termConfig,
+  weatherSnapshot,
   onNavigate,
 }: WorkspaceDashboardProps) {
   const now = useMinuteClock();
@@ -381,8 +384,11 @@ export function WorkspaceDashboard({
   const [retry, setRetry] = useState(0);
   const { sources, error } = useDashboardSources(ready, date, termConfig, retry);
   const model = useMemo(
-    () => (sources?.date === date ? buildWorkspaceDashboardViewModel(sources, nowTime) : null),
-    [date, nowTime, sources],
+    () =>
+      sources?.date === date
+        ? buildWorkspaceDashboardViewModel(sources, nowTime, weatherSnapshot)
+        : null,
+    [date, nowTime, sources, weatherSnapshot],
   );
 
   if (!ready) {
@@ -433,8 +439,8 @@ export function WorkspaceDashboard({
         <aside className="workspace-dashboard-rail" aria-label="工作台摘要">
           <TaskCard model={model} onNavigate={onNavigate} />
           <div className="workspace-module-pair">
-            <DiaryCard hasEntry={model.hasDiaryToday} onNavigate={onNavigate} />
-            <InboxCard pendingCount={model.pendingInboxCount} onNavigate={onNavigate} />
+            <DiaryCard hasEntry={model.context.hasDiaryToday} onNavigate={onNavigate} />
+            <InboxCard pendingCount={model.context.pendingInboxCount} onNavigate={onNavigate} />
           </div>
           <UnavailableCard
             title="AI"

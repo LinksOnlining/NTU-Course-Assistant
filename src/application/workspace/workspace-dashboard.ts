@@ -11,11 +11,14 @@ import {
   projectPlannerEventsToTimelineItems,
   projectTimeBlocksToTimelineItems,
 } from "../timeline/planner-timeline.ts";
-import { computeFreeTimeIntervals, effectiveOccupancy } from "../timeline/planner-interactions.ts";
+import { effectiveOccupancy } from "../timeline/planner-interactions.ts";
 import { loadPersonalTasks } from "../planner/personal-tasks.ts";
 import { loadPlannerEvents, loadTimeBlocks } from "../planner/planner-schedule.ts";
 import { hasDiaryEntry } from "../../services/diary-storage.ts";
 import { countPendingInboxItems } from "../../services/inbox-storage.ts";
+import { buildWorkspaceContext } from "./workspace-context.ts";
+import type { WorkspaceContext } from "./workspace-context.ts";
+import type { WeatherSnapshot } from "../../types/weather.ts";
 import type { AcademicTask } from "../../types/academic-task.ts";
 import type { Semester } from "../../types/semester.ts";
 import type { PersonalTask } from "../../types/personal-task.ts";
@@ -327,35 +330,6 @@ function buildTaskSummary(
   };
 }
 
-function findNextItem(
-  items: WorkspaceDashboardSources["timelineItems"],
-  today: string,
-  nowTime: string,
-): WorkspaceDashboardViewModel["nextItem"] {
-  const occupied = items
-    .filter((item) => effectiveOccupancy(item) !== null)
-    .sort(
-      (left, right) =>
-        left.date.localeCompare(right.date) || left.startTime.localeCompare(right.startTime),
-    );
-  return (
-    occupied.find((item) => {
-      const interval = effectiveOccupancy(item);
-      return (
-        item.date === today &&
-        interval !== null &&
-        interval.startMinute <= minutes(nowTime) &&
-        minutes(nowTime) < interval.endMinute
-      );
-    }) ??
-    occupied.find((item) => {
-      const interval = effectiveOccupancy(item);
-      return item.date > today || (interval !== null && interval.startMinute > minutes(nowTime));
-    }) ??
-    null
-  );
-}
-
 function minutes(time: string): number {
   const [hour, minute] = time.split(":").map(Number);
   return hour * 60 + minute;
@@ -406,37 +380,16 @@ function itemSection(
   };
 }
 
-function timeContext(sources: WorkspaceDashboardSources, nowTime: string) {
-  const now = minutes(nowTime);
-  const todayItems = sources.timelineItems.filter((item) => effectiveOccupancy(item) !== null);
-  const futureItems = sources.futureItems ?? sources.timelineItems;
-  const occupied = futureItems
-    .filter((item) => effectiveOccupancy(item) !== null)
-    .sort(
-      (left, right) =>
-        left.date.localeCompare(right.date) ||
-        (effectiveOccupancy(left)?.startMinute ?? 0) -
-          (effectiveOccupancy(right)?.startMinute ?? 0),
-    );
-  const active = todayItems.find((item) => {
-    const interval = effectiveOccupancy(item);
-    return interval !== null && interval.startMinute <= now && now < interval.endMinute;
-  });
+function timeContext(context: WorkspaceContext) {
+  const now = minutes(context.localTime);
+  const active = context.currentItem ?? undefined;
   const activeInterval = active ? effectiveOccupancy(active) : null;
   const activeStart = active ? minutes(active.startTime) : 0;
   const activeEnd = active ? minutes(active.endTime) : 0;
   const activeIsStarted = active !== undefined && activeStart <= now;
   const activeIsInActualInterval = active !== undefined && activeStart <= now && now < activeEnd;
-  const next = occupied.find((item) => {
-    if (item === active) return false;
-    if (item.date > sources.date) return true;
-    const interval = effectiveOccupancy(item);
-    return interval !== null && interval.endMinute > now;
-  });
-  const freeIntervals = computeFreeTimeIntervals(todayItems);
-  const nextFree = freeIntervals.find((interval) => interval.endMinute > now);
-  const freeStart = Math.max(now, nextFree?.startMinute ?? now);
-  const freeEnd = nextFree?.endMinute ?? now;
+  const next = context.nextItem;
+  const nextFree = context.nextFreeSlot;
   const primary: WorkspaceTimeSection = active
     ? {
         label: activeIsInActualInterval
@@ -457,11 +410,11 @@ function timeContext(sources: WorkspaceDashboardSources, nowTime: string) {
         sourceLabel: timelineSourceLabel(active),
       }
     : {
-        label: todayItems.length ? "当前空闲" : "今天暂无安排",
-        value: durationLabel(Math.max(0, freeEnd - now)),
+        label: context.todayItemCount ? "当前空闲" : "今天暂无安排",
+        value: durationLabel(nextFree?.durationMinutes ?? 0),
         title: null,
         detail:
-          next && next.date === sources.date
+          next && next.date === context.date
             ? `至 ${clockLabel(effectiveOccupancy(next)?.startMinute ?? minutes(next.startTime))}`
             : "至今天结束",
         location: null,
@@ -470,40 +423,36 @@ function timeContext(sources: WorkspaceDashboardSources, nowTime: string) {
   let secondary: WorkspaceTimeSection | null = null;
   if (active) {
     if (next) {
-      secondary = itemSection(next, sources.date);
-    } else if (freeEnd > freeStart) {
+      secondary = itemSection(next, context.date);
+    } else if (nextFree) {
       secondary = {
         label: "下一段空闲",
-        value: durationLabel(freeEnd - freeStart),
+        value: durationLabel(nextFree.durationMinutes),
         title: null,
-        detail: `${clockLabel(freeStart)}–${clockLabel(freeEnd)}`,
+        detail: `${nextFree.date === context.date ? "" : `${dateContextLabel(nextFree.date, context.date)} · `}${clockLabel(nextFree.startMinute)}–${clockLabel(nextFree.endMinute)}`,
         location: null,
         sourceLabel: null,
       };
     }
   } else if (next) {
-    secondary = itemSection(next, sources.date);
+    secondary = itemSection(next, context.date);
   }
 
-  const remaining = todayItems.filter((item) => minutes(item.endTime) > now).length;
-  const openTaskCount =
-    sources.tasks.filter((task) => task.status !== "COMPLETED").length +
-    (sources.personalTasks ?? []).filter((task) => task.status !== "completed").length;
   return {
     timeContext: { primary, secondary },
     todayStatusText: activeIsInActualInterval
       ? timelineSourceLabel(active!) === "课程"
         ? "正在上课"
         : "正在进行"
-      : remaining
-        ? `今天还有 ${remaining} 项安排`
-        : todayItems.length
+      : context.remainingItemCount
+        ? `今天还有 ${context.remainingItemCount} 项安排`
+        : context.todayItemCount
           ? "今天的安排已结束"
           : "今天暂无安排",
     todaySummaryText:
       [
-        todayItems.length ? `${todayItems.length} 项安排` : null,
-        openTaskCount ? `${openTaskCount} 个待办` : null,
+        context.todayItemCount ? `${context.todayItemCount} 项安排` : null,
+        context.openTaskCount ? `${context.openTaskCount} 个待办` : null,
       ]
         .filter((part): part is string => part !== null)
         .join(" · ") || "可自由安排今天的时间",
@@ -513,14 +462,26 @@ function timeContext(sources: WorkspaceDashboardSources, nowTime: string) {
 export function buildWorkspaceDashboardViewModel(
   sources: WorkspaceDashboardSources,
   nowTime: string,
+  weatherSnapshot: WeatherSnapshot | null = null,
 ): WorkspaceDashboardViewModel {
+  const context = buildWorkspaceContext({
+    date: sources.date,
+    localTime: nowTime,
+    timelineItems: sources.timelineItems,
+    futureItems: sources.futureItems,
+    academicTasks: sources.tasks,
+    personalTasks: sources.personalTasks ?? [],
+    weatherSnapshot,
+    hasDiaryToday: sources.hasDiaryToday ?? false,
+    pendingInboxCount: sources.pendingInboxCount ?? 0,
+  });
   return {
+    context,
     date: sources.date,
     timelineItems: sources.timelineItems,
-    todayItemCount: sources.timelineItems.filter((item) => effectiveOccupancy(item) !== null)
-      .length,
-    nextItem: findNextItem(sources.futureItems ?? sources.timelineItems, sources.date, nowTime),
-    ...timeContext(sources, nowTime),
+    todayItemCount: context.todayItemCount,
+    nextItem: context.currentItem ?? context.nextItem,
+    ...timeContext(context),
     taskSummary: buildTaskSummary(
       sources.tasks,
       sources.personalTasks ?? [],

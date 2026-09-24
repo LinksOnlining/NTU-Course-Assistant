@@ -974,6 +974,11 @@ export function App() {
           ready={storageStatus === "ready"}
           storageError={storageStatus === "error" ? storageMessage : ""}
           termConfig={reminderConfiguration.termConfig}
+          weatherSnapshot={
+            weather.viewState.kind === "ready" || weather.viewState.kind === "stale"
+              ? weather.viewState.snapshot
+              : null
+          }
           onNavigate={navigateToRoute}
         />
       ) : isWorkspaceTasks && storageStatus === "ready" ? (
