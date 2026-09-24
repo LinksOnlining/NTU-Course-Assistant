@@ -14,7 +14,7 @@
       { "title": "大学课程表", "width": 1280, "height": 800, "minWidth": 720, "minHeight": 520 }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost http://tauri.localhost"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost http://tauri.localhost https://geocoding-api.open-meteo.com https://api.open-meteo.com"
     }
   },
   "bundle": {

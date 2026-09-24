@@ -17,6 +17,8 @@ import type { SaveOperationState } from "../types/save-operation.ts";
 import type { PeriodTime } from "../types/time.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
 import type { ThemePreference } from "../theme/types.ts";
+import type { WorkspaceWeatherController } from "../workspace/weather/use-workspace-weather.ts";
+import { WeatherSettingsPanel } from "../workspace/weather/WeatherSettingsPanel.tsx";
 
 interface PeriodSettingsProps {
   readonly initialDomain: "workspace" | "academic";
@@ -35,6 +37,7 @@ interface PeriodSettingsProps {
   readonly onSaveWidgetSettings: (patch: Partial<WidgetSettings>) => Promise<WidgetSettings>;
   readonly onClearAllCourses: () => Promise<void>;
   readonly onCheckUpdates: () => void;
+  readonly weather: WorkspaceWeatherController;
   readonly onCancel: () => void;
 }
 
@@ -75,6 +78,7 @@ export function PeriodSettings({
   onSaveWidgetSettings,
   onClearAllCourses,
   onCheckUpdates,
+  weather,
   onCancel,
 }: PeriodSettingsProps) {
   const [page, setPage] = useState<SettingsPage>(initialDomain === "workspace" ? "首页" : "作息");
@@ -416,7 +420,7 @@ export function PeriodSettings({
             {page === "每日寄语" && (
               <p className="settings-domain-note">每日寄语随日期更新；目前暂无可调整的选项。</p>
             )}
-            {page === "天气" && <p className="settings-domain-note">天气功能尚未开放。</p>}
+            {page === "天气" && <WeatherSettingsPanel weather={weather} />}
             {page === "显示" && (
               <p className="settings-domain-note">
                 课表显示选项请在课表页面使用；此处暂无独立设置。

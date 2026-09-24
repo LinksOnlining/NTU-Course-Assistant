@@ -87,6 +87,8 @@ import { WorkspaceTasksPage } from "./workspace/tasks/WorkspaceTasksPage.tsx";
 import { WorkspaceSchedulePage } from "./workspace/schedule/WorkspaceSchedulePage.tsx";
 import { WorkspaceDiaryPage } from "./workspace/diary/WorkspaceDiaryPage.tsx";
 import { WorkspaceInboxPage } from "./workspace/inbox/WorkspaceInboxPage.tsx";
+import { WeatherHeader } from "./workspace/weather/WeatherHeader.tsx";
+import { useWorkspaceWeather } from "./workspace/weather/use-workspace-weather.ts";
 
 interface PdfImportResult {
   readonly inserted: number;
@@ -112,6 +114,7 @@ type PdfImportState =
 
 export function App() {
   const showDevelopmentFixtures = import.meta.env.DEV && !("__TAURI_INTERNALS__" in window);
+  const weather = useWorkspaceWeather();
   const [userCourses, setUserCourses] = useState<readonly Course[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
@@ -781,6 +784,11 @@ export function App() {
       onNavigate={navigateToRoute}
       onOpenSettings={() => setIsPeriodSettingsOpen(true)}
       settingsDisabled={storageStatus !== "ready"}
+      weatherSlot={
+        weather.settings.enabled && weather.settings.location ? (
+          <WeatherHeader weather={weather} />
+        ) : undefined
+      }
       contextTitle={academicContextTitle}
       contextActions={scheduleActions}
     >
@@ -1144,6 +1152,7 @@ export function App() {
             trace("widget-notified");
           }}
           onCheckUpdates={() => void checkForUpdates(true)}
+          weather={weather}
           onCancel={() => setIsPeriodSettingsOpen(false)}
         />
       )}

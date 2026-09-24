@@ -778,3 +778,164 @@ test("Dashboard combines course, planner event and task block while keeping pers
   await expect(page.getByTestId("workspace-today-overview")).toContainText("7 个待办");
   await expect(page.locator(".workspace-task-list")).toContainText("整理项目资料");
 });
+
+test("Weather stays offline while disabled and renders only after explicit city search and selection", async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  let failForecast = false;
+  page.on("request", (request) => {
+    if (request.url().includes("open-meteo.com")) requests.push(request.url());
+  });
+  await page.route("https://geocoding-api.open-meteo.com/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        results: [
+          {
+            name: "南通",
+            admin1: "江苏",
+            country: "中国",
+            latitude: 31.98,
+            longitude: 120.89,
+            timezone: "Asia/Shanghai",
+          },
+        ],
+      }),
+    });
+  });
+  await page.route("https://api.open-meteo.com/**", async (route) => {
+    if (failForecast) {
+      await route.abort();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        timezone: "Asia/Shanghai",
+        current: {
+          time: "2026-09-23T20:00",
+          temperature_2m: 22,
+          apparent_temperature: 21,
+          weather_code: 2,
+          is_day: 1,
+          relative_humidity_2m: 65,
+        },
+        hourly: {
+          time: Array.from(
+            { length: 8 },
+            (_, index) => `2026-09-23T${String(20 + index).padStart(2, "0")}:00`,
+          ),
+          temperature_2m: Array.from({ length: 8 }, (_, index) => 22 + index),
+          weather_code: Array(8).fill(2),
+          precipitation_probability: Array(8).fill(10),
+        },
+        daily: {
+          time: Array.from(
+            { length: 7 },
+            (_, index) => `2026-09-${String(23 + index).padStart(2, "0")}`,
+          ),
+          temperature_2m_max: Array(7).fill(27),
+          temperature_2m_min: Array(7).fill(19),
+          weather_code: Array(7).fill(2),
+          precipitation_probability_max: Array(7).fill(10),
+        },
+      }),
+    });
+  });
+  await seedDashboardRuntime(page);
+  expect(requests).toEqual([]);
+
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "天气" })
+    .click();
+  await expect(settings.getByTestId("weather-settings").getByLabel("启用天气")).not.toBeChecked();
+  await settings.getByLabel("启用天气").check();
+  await settings.getByLabel("城市或地区").fill("南通");
+  expect(requests).toEqual([]);
+  await settings.getByRole("button", { name: "搜索地点" }).click();
+  await expect(settings.getByRole("button", { name: /南通 · 江苏 · 中国/u })).toBeVisible();
+  await settings.getByRole("button", { name: /南通 · 江苏 · 中国/u }).click();
+  await settings.getByLabel("温度单位").selectOption("fahrenheit");
+  await settings.getByRole("button", { name: "取消" }).click();
+  await expect(page.getByRole("button", { name: /天气：72°F/u })).toBeVisible();
+  expect(requests.some((url) => url.includes("api.open-meteo.com/v1/forecast"))).toBe(true);
+  await page.getByRole("button", { name: /天气：72°F/u }).click();
+  const popover = page.getByRole("region", { name: "天气预报" });
+  await expect(popover).toContainText("南通 · 江苏 · 中国");
+  await expect(popover).toContainText("未来 6 小时");
+  await expect(popover).toContainText("未来 7 天");
+  await expect(popover).toContainText("Open-Meteo");
+  await expect(popover.locator(".weather-daily-list .weather-forecast-item")).toHaveCount(7);
+  failForecast = true;
+  await popover.getByRole("button", { name: "刷新天气" }).click();
+  await expect(popover).toContainText("正在显示缓存天气；暂时无法更新");
+  await expect(popover).toContainText("缓存天气");
+});
+
+test("failed Weather requests never block offline core routes", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "links-workplace.weather.settings",
+      JSON.stringify({
+        enabled: true,
+        location: {
+          displayName: "南通 · 江苏 · 中国",
+          latitude: 31.98,
+          longitude: 120.89,
+          timezone: "Asia/Shanghai",
+        },
+        temperatureUnit: "celsius",
+      }),
+    );
+  });
+  await page.route("https://geocoding-api.open-meteo.com/**", (route) => route.abort());
+  await page.route("https://api.open-meteo.com/**", (route) => route.abort());
+  await seedDashboardRuntime(page);
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
+  await page.getByRole("button", { name: /天气：天气/u }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "天气服务暂时无法访问" })).toBeVisible();
+  await page.getByRole("button", { name: "关闭天气详情" }).click();
+
+  await page.getByRole("button", { name: "任务", exact: true }).click();
+  await expect(page.getByTestId("workspace-tasks")).toBeVisible();
+  await page.getByRole("button", { name: "设置" }).click();
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await settings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "天气" })
+    .click();
+  await expect(settings.getByTestId("weather-settings")).toBeVisible();
+  await settings.getByRole("button", { name: "取消" }).click();
+
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "课表" })
+    .click();
+  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "工作台" })
+    .click();
+  await page.getByRole("button", { name: /查看完整日程/u }).click();
+  await expect(page.getByTestId("workspace-schedule")).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "工作台" })
+    .click();
+  await page.getByRole("button", { name: /日记，今天还没有记录/u }).click();
+  await expect(page.getByRole("region", { name: "日记", exact: true })).toBeVisible();
+  await page.locator(".workspace-diary-breadcrumb").click();
+  await page.getByRole("button", { name: /收件箱，暂无待整理/u }).click();
+  await expect(page.getByTestId("workspace-inbox")).toBeVisible();
+  await page.locator(".workspace-inbox-breadcrumb").click();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
+  expect(errors).toEqual([]);
+});

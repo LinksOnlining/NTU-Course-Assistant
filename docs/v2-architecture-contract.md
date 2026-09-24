@@ -196,3 +196,5 @@ Phase 3 的有效隐私与领域事实以 `docs/v2-personal-context-privacy-cont
 Phase 3.1 已落地 schema 6→7：事务迁移创建 `diary_entries`、`inbox_items`、`routines` 及所需索引；仅使用隔离临时数据库验证 schema 6 备份、数据保留、校验、失败回滚和 fresh schema 7，不访问真实用户 DB。Diary 正文只通过专用 Rust repository/本地 service 读写；Workspace Dashboard 只读取当天是否有非空日记的布尔值。`workspace/diary` 使用纯文本编辑器、日期导航、近期日期提示与有序防抖自动保存；错误保留草稿并可重试。记录见 `docs/v2-phase-3-1-verification.md`。
 
 Phase 3.2 Inbox 已启用 `workspace/inbox`：Raw Capture 先写入本地 schema 7，再由纯确定性 parser 生成可编辑 Preview；未知类型要求用户显式选择，Task/Event 必须由用户确认后才创建。目标创建与 Inbox target reference 同事务、幂等；Inbox 删除不级联删除已创建目标。Dashboard 只读取待整理计数；原文不进入日志或 Rust Debug。未增加 migration、外网访问、全局捕获或 AI。记录见 `docs/v2-phase-3-2-verification.md`。
+
+Phase 3.3 Weather 通过唯一网络 adapter `src/services/weather-provider.ts` 调用 Open-Meteo HTTPS 地点搜索与预报 API；Weather 默认关闭，地点搜索须用户启用并提交城市查询，天气查询只使用用户选择的城市坐标。设置和缓存分别使用 `links-workplace.weather.settings` / `links-workplace.weather.cache` 本机 localStorage 键，不新增表或 schema migration。缓存 30 分钟内 fresh、24 小时内 stale-but-usable，超期/损坏/地点变化不复用；请求超时或失败只影响 Weather 状态，不阻断其他路由。数据 attribution 显示 Open-Meteo 与 CC BY 4.0；免费端点仅适用于非商业用途，商业分发前需替换为符合许可的服务。记录见 `docs/v2-phase-3-3-verification.md`。
