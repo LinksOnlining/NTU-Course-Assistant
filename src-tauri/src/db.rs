@@ -4,15 +4,15 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::{params, Connection, OptionalExtension, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 
 use crate::models::{
     default_widget_settings, merge_widget_settings, parse_date, parse_time, validate_period_times,
     validate_planner_date_range, validate_reminder_settings, validate_term_config,
     validate_widget_settings, AcademicTask, AcademicTaskStatus, Course, CourseOverride,
-    CourseOverrideKind, DiaryEntry, Exam, ExamStatus, PeriodTime, PersonalTask,
-    PersonalTaskPriority, PersonalTaskStatus, PlannerEvent, ReminderSettings, Semester,
-    SemesterStatus, TermConfig, TimeBlock, WidgetSettings, WidgetSettingsPatch,
+    CourseOverrideKind, DiaryEntry, Exam, ExamStatus, InboxConfirmation, InboxItem, PeriodTime,
+    PersonalTask, PersonalTaskPriority, PersonalTaskStatus, PlannerEvent, ReminderSettings,
+    Semester, SemesterStatus, TermConfig, TimeBlock, WidgetSettings, WidgetSettingsPatch,
 };
 
 const SCHEMA_SIX_VERSION: i64 = 6;
@@ -1243,6 +1243,211 @@ impl CourseDatabase {
             .map_err(StorageError::from)
     }
 
+    pub fn create_inbox_item(
+        &self,
+        id: &str,
+        raw_text: &str,
+        created_at: &str,
+    ) -> Result<InboxItem, StorageError> {
+        validate_inbox_raw(id, raw_text, created_at)?;
+        self.connection.execute(
+            "INSERT INTO inbox_items (id, raw_text, status, created_at, updated_at)
+             VALUES (?1, ?2, 'pending', ?3, ?3)",
+            params![id, raw_text, created_at],
+        )?;
+        self.load_inbox_item(id)?.ok_or(StorageError::NotFound)
+    }
+
+    pub fn load_inbox_items(&self) -> Result<Vec<InboxItem>, StorageError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, raw_text, status, parse_kind, parse_payload_json, parser_version,
+                    confirmed_target_type, confirmed_target_id, created_at, updated_at
+             FROM inbox_items
+             ORDER BY created_at DESC, id DESC",
+        )?;
+        let mut rows = statement.query([])?;
+        let mut items = Vec::new();
+        while let Some(row) = rows.next()? {
+            items.push(row_to_inbox_item(row)?);
+        }
+        Ok(items)
+    }
+
+    pub fn load_inbox_item(&self, id: &str) -> Result<Option<InboxItem>, StorageError> {
+        self.connection
+            .query_row(
+                "SELECT id, raw_text, status, parse_kind, parse_payload_json, parser_version,
+                        confirmed_target_type, confirmed_target_id, created_at, updated_at
+                 FROM inbox_items WHERE id = ?1",
+                [id],
+                row_to_inbox_item,
+            )
+            .optional()
+            .map_err(StorageError::from)
+    }
+
+    pub fn count_pending_inbox_items(&self) -> Result<u32, StorageError> {
+        self.connection
+            .query_row(
+                "SELECT count(*) FROM inbox_items
+                 WHERE status IN ('pending', 'needs_review', 'ready')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::from)
+    }
+
+    pub fn save_inbox_parse_result(
+        &self,
+        id: &str,
+        parse_kind: &str,
+        parse_payload_json: &str,
+        parser_version: &str,
+        updated_at: &str,
+    ) -> Result<InboxItem, StorageError> {
+        if !matches!(parse_kind, "task" | "event" | "unknown")
+            || parser_version.trim().is_empty()
+            || updated_at.trim().is_empty()
+            || parse_payload_json.len() > 50_000
+            || serde_json::from_str::<serde_json::Value>(parse_payload_json).is_err()
+        {
+            return Err(StorageError::InvalidData("收件箱解析结果无效".into()));
+        }
+        let status = if parse_kind == "unknown" {
+            "needs_review"
+        } else {
+            "ready"
+        };
+        if self.connection.execute(
+            "UPDATE inbox_items
+             SET status = ?2, parse_kind = ?3, parse_payload_json = ?4,
+                 parser_version = ?5, updated_at = ?6
+             WHERE id = ?1 AND status IN ('pending', 'needs_review', 'ready')",
+            params![
+                id,
+                status,
+                parse_kind,
+                parse_payload_json,
+                parser_version,
+                updated_at
+            ],
+        )? == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        self.load_inbox_item(id)?.ok_or(StorageError::NotFound)
+    }
+
+    pub fn dismiss_inbox_item(&self, id: &str, updated_at: &str) -> Result<(), StorageError> {
+        if updated_at.trim().is_empty()
+            || self.connection.execute(
+                "UPDATE inbox_items SET status = 'dismissed', updated_at = ?2
+                 WHERE id = ?1 AND status != 'confirmed'",
+                params![id, updated_at],
+            )? == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        Ok(())
+    }
+
+    pub fn delete_inbox_item(&self, id: &str) -> Result<(), StorageError> {
+        if id.trim().is_empty()
+            || self
+                .connection
+                .execute("DELETE FROM inbox_items WHERE id = ?1", [id])?
+                == 0
+        {
+            return Err(StorageError::NotFound);
+        }
+        Ok(())
+    }
+
+    pub fn confirm_inbox_as_task(
+        &self,
+        id: &str,
+        task: &PersonalTask,
+    ) -> Result<InboxConfirmation, StorageError> {
+        let transaction =
+            rusqlite::Transaction::new_unchecked(&self.connection, TransactionBehavior::Immediate)?;
+        if let Some(existing) = inbox_confirmation(&transaction, id)? {
+            transaction.commit()?;
+            return Ok(existing);
+        }
+        ensure_inbox_can_confirm(&transaction, id, "task")?;
+        validate_personal_task(task)?;
+        transaction.execute(
+            "INSERT INTO personal_tasks
+             (id, title, description, status, priority, deadline_date, deadline_time,
+              created_at, updated_at, completed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                &task.id,
+                &task.title,
+                &task.description,
+                personal_task_status_value(&task.status),
+                personal_task_priority_value(&task.priority),
+                &task.deadline_date,
+                &task.deadline_time,
+                &task.created_at,
+                &task.updated_at,
+                &task.completed_at,
+            ],
+        )?;
+        set_inbox_confirmation(&transaction, id, "personalTask", &task.id, &task.updated_at)?;
+        transaction.commit()?;
+        Ok(InboxConfirmation {
+            target_type: "personalTask".into(),
+            target_id: task.id.clone(),
+        })
+    }
+
+    pub fn confirm_inbox_as_event(
+        &self,
+        id: &str,
+        event: &PlannerEvent,
+    ) -> Result<InboxConfirmation, StorageError> {
+        let transaction =
+            rusqlite::Transaction::new_unchecked(&self.connection, TransactionBehavior::Immediate)?;
+        if let Some(existing) = inbox_confirmation(&transaction, id)? {
+            transaction.commit()?;
+            return Ok(existing);
+        }
+        ensure_inbox_can_confirm(&transaction, id, "event")?;
+        event.validate().map_err(StorageError::InvalidData)?;
+        transaction.execute(
+            "INSERT INTO planner_events
+             (id, title, description, date, start_time, end_time, location,
+              buffer_before_minutes, buffer_after_minutes, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                &event.id,
+                &event.title,
+                &event.description,
+                &event.date,
+                &event.start_time,
+                &event.end_time,
+                &event.location,
+                event.buffer_before_minutes,
+                event.buffer_after_minutes,
+                &event.created_at,
+                &event.updated_at,
+            ],
+        )?;
+        set_inbox_confirmation(
+            &transaction,
+            id,
+            "plannerEvent",
+            &event.id,
+            &event.updated_at,
+        )?;
+        transaction.commit()?;
+        Ok(InboxConfirmation {
+            target_type: "plannerEvent".into(),
+            target_id: event.id.clone(),
+        })
+    }
+
     pub fn create_personal_task(&self, task: &PersonalTask) -> Result<PersonalTask, StorageError> {
         validate_personal_task(task)?;
         self.connection.execute(
@@ -1706,6 +1911,98 @@ fn validate_diary_entry(value: &DiaryEntry) -> Result<(), StorageError> {
     Ok(())
 }
 
+fn validate_inbox_raw(id: &str, raw_text: &str, created_at: &str) -> Result<(), StorageError> {
+    if id.trim().is_empty()
+        || id.trim() != id
+        || id.len() > 128
+        || raw_text.trim().is_empty()
+        || raw_text.chars().count() > 10_000
+        || created_at.trim().is_empty()
+    {
+        return Err(StorageError::InvalidData("收件箱内容无效".into()));
+    }
+    Ok(())
+}
+
+fn inbox_confirmation(
+    connection: &Connection,
+    id: &str,
+) -> Result<Option<InboxConfirmation>, StorageError> {
+    let record = connection
+        .query_row(
+            "SELECT status, confirmed_target_type, confirmed_target_id
+             FROM inbox_items WHERE id = ?1",
+            [id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            },
+        )
+        .optional()?;
+    match record {
+        Some((status, Some(target_type), Some(target_id))) if status == "confirmed" => {
+            Ok(Some(InboxConfirmation {
+                target_type,
+                target_id,
+            }))
+        }
+        Some((status, _, _)) if status == "confirmed" => Err(StorageError::InvalidData(
+            "已确认的收件箱目标信息不完整".into(),
+        )),
+        Some(_) => Ok(None),
+        None => Err(StorageError::NotFound),
+    }
+}
+
+fn ensure_inbox_can_confirm(
+    connection: &Connection,
+    id: &str,
+    expected_kind: &str,
+) -> Result<(), StorageError> {
+    let record: (String, Option<String>) = connection
+        .query_row(
+            "SELECT status, parse_kind FROM inbox_items WHERE id = ?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?
+        .ok_or(StorageError::NotFound)?;
+    if record.0 == "dismissed" {
+        return Err(StorageError::InvalidData(
+            "已忽略的收件箱内容不能转换".into(),
+        ));
+    }
+    if record.0 != "ready" || record.1.as_deref() != Some(expected_kind) {
+        return Err(StorageError::InvalidData(
+            "收件箱内容尚未完成对应类型的预览确认".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn set_inbox_confirmation(
+    connection: &Connection,
+    inbox_id: &str,
+    target_type: &str,
+    target_id: &str,
+    updated_at: &str,
+) -> Result<(), StorageError> {
+    if connection.execute(
+        "UPDATE inbox_items
+         SET status = 'confirmed', confirmed_target_type = ?2,
+             confirmed_target_id = ?3, updated_at = ?4
+         WHERE id = ?1 AND status != 'confirmed'",
+        params![inbox_id, target_type, target_id, updated_at],
+    )? == 0
+    {
+        return Err(StorageError::NotFound);
+    }
+    Ok(())
+}
+
 fn validate_exam(value: &Exam) -> Result<(), StorageError> {
     if value.id.trim().is_empty()
         || value.semester_id.trim().is_empty()
@@ -1795,6 +2092,21 @@ fn row_to_diary_entry(row: &Row<'_>) -> rusqlite::Result<DiaryEntry> {
         body: row.get(2)?,
         created_at: row.get(3)?,
         updated_at: row.get(4)?,
+    })
+}
+
+fn row_to_inbox_item(row: &Row<'_>) -> rusqlite::Result<InboxItem> {
+    Ok(InboxItem {
+        id: row.get(0)?,
+        raw_text: row.get(1)?,
+        status: row.get(2)?,
+        parse_kind: row.get(3)?,
+        parse_payload_json: row.get(4)?,
+        parser_version: row.get(5)?,
+        confirmed_target_type: row.get(6)?,
+        confirmed_target_id: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
     })
 }
 
@@ -2745,6 +3057,203 @@ mod tests {
         );
         drop(reopened);
         remove_database_files(&path);
+    }
+
+    #[test]
+    fn inbox_preserves_raw_before_parse_and_counts_only_unresolved_items() {
+        let database = database();
+        let raw = database
+            .create_inbox_item("inbox-raw", "任务：整理材料", "2026-09-24T08:00:00Z")
+            .expect("persist raw capture first");
+        assert_eq!(raw.status, "pending");
+        assert!(raw.parse_kind.is_none());
+        assert_eq!(raw.raw_text, "任务：整理材料");
+        assert_eq!(database.count_pending_inbox_items().unwrap(), 1);
+
+        let parsed = database
+            .save_inbox_parse_result(
+                "inbox-raw",
+                "task",
+                r#"{"kind":"task","title":"整理材料"}"#,
+                "inbox-parser-v1",
+                "2026-09-24T08:00:01Z",
+            )
+            .expect("save local parse result");
+        assert_eq!(parsed.status, "ready");
+        assert_eq!(parsed.raw_text, "任务：整理材料");
+        assert_eq!(database.count_pending_inbox_items().unwrap(), 1);
+
+        database
+            .dismiss_inbox_item("inbox-raw", "2026-09-24T08:01:00Z")
+            .expect("dismiss item");
+        assert_eq!(database.count_pending_inbox_items().unwrap(), 0);
+        assert_eq!(database.load_inbox_items().unwrap()[0].status, "dismissed");
+    }
+
+    #[test]
+    fn inbox_confirm_is_transactional_idempotent_and_delete_keeps_target() {
+        let database = database();
+        database
+            .create_inbox_item("inbox-task", "任务：准备材料", "2026-09-24T08:00:00Z")
+            .unwrap();
+        database
+            .save_inbox_parse_result(
+                "inbox-task",
+                "task",
+                r#"{"kind":"task","title":"准备材料"}"#,
+                "inbox-parser-v1",
+                "2026-09-24T08:00:01Z",
+            )
+            .unwrap();
+        let task = personal_task("inbox-created-task");
+        let first = database
+            .confirm_inbox_as_task("inbox-task", &task)
+            .expect("create task and confirm inbox atomically");
+        let mut invalid_repeat = personal_task("invalid-repeat");
+        invalid_repeat.title.clear();
+        let second = database
+            .confirm_inbox_as_task("inbox-task", &invalid_repeat)
+            .expect("repeated confirmation is idempotent");
+        assert_eq!(first, second);
+        assert_eq!(first.target_type, "personalTask");
+        assert_eq!(database.load_personal_tasks().unwrap().len(), 1);
+
+        database
+            .create_inbox_item("inbox-unparsed", "raw only", "2026-09-24T08:00:00Z")
+            .unwrap();
+        assert!(database
+            .confirm_inbox_as_task("inbox-unparsed", &personal_task("unparsed-task"))
+            .is_err());
+        assert_eq!(database.load_personal_tasks().unwrap().len(), 1);
+        assert_eq!(
+            database
+                .load_inbox_item("inbox-task")
+                .unwrap()
+                .unwrap()
+                .status,
+            "confirmed"
+        );
+
+        database
+            .delete_inbox_item("inbox-task")
+            .expect("delete raw inbox row without cascading");
+        assert_eq!(database.load_personal_tasks().unwrap().len(), 1);
+
+        database
+            .create_inbox_item("inbox-event", "日程：讨论", "2026-09-24T08:00:00Z")
+            .unwrap();
+        database
+            .save_inbox_parse_result(
+                "inbox-event",
+                "event",
+                r#"{"kind":"event","title":"讨论"}"#,
+                "inbox-parser-v1",
+                "2026-09-24T08:00:01Z",
+            )
+            .unwrap();
+        database
+            .confirm_inbox_as_event(
+                "inbox-event",
+                &planner_event("inbox-event-target", "2026-09-25"),
+            )
+            .unwrap();
+        database.delete_inbox_item("inbox-event").unwrap();
+        assert_eq!(
+            database
+                .load_planner_events("2026-09-25", "2026-09-25")
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn inbox_event_confirmation_and_failed_confirmation_roll_back_target() {
+        let database = database();
+        database
+            .create_inbox_item("inbox-event", "日程：明天开会", "2026-09-24T08:00:00Z")
+            .unwrap();
+        database
+            .save_inbox_parse_result(
+                "inbox-event",
+                "event",
+                r#"{"kind":"event","title":"明天开会"}"#,
+                "inbox-parser-v1",
+                "2026-09-24T08:00:01Z",
+            )
+            .unwrap();
+        let event = planner_event("inbox-created-event", "2026-09-25");
+        let confirmed = database
+            .confirm_inbox_as_event("inbox-event", &event)
+            .expect("create event and confirm inbox");
+        assert_eq!(confirmed.target_type, "plannerEvent");
+        assert_eq!(
+            database
+                .load_planner_events("2026-09-25", "2026-09-25")
+                .unwrap()
+                .len(),
+            1
+        );
+
+        database
+            .create_inbox_item("inbox-rollback", "日程：测试", "2026-09-24T08:00:00Z")
+            .unwrap();
+        database
+            .save_inbox_parse_result(
+                "inbox-rollback",
+                "task",
+                r#"{"kind":"task","title":"测试"}"#,
+                "inbox-parser-v1",
+                "2026-09-24T08:00:01Z",
+            )
+            .unwrap();
+        database
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER fail_inbox_confirm
+                 BEFORE UPDATE OF status ON inbox_items
+                 WHEN NEW.status = 'confirmed'
+                 BEGIN SELECT RAISE(ABORT, 'test rollback'); END;",
+            )
+            .unwrap();
+        assert!(database
+            .confirm_inbox_as_task("inbox-rollback", &personal_task("rollback-task"))
+            .is_err());
+        let task_count: i64 = database
+            .connection
+            .query_row(
+                "SELECT count(*) FROM personal_tasks WHERE id = 'rollback-task'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(task_count, 0);
+        assert_eq!(
+            database
+                .load_inbox_item("inbox-rollback")
+                .unwrap()
+                .unwrap()
+                .status,
+            "ready"
+        );
+    }
+
+    #[test]
+    fn inbox_rejects_invalid_parse_and_cannot_confirm_dismissed_item() {
+        let database = database();
+        database
+            .create_inbox_item("inbox-invalid", "some raw", "2026-09-24T08:00:00Z")
+            .unwrap();
+        assert!(database
+            .save_inbox_parse_result("inbox-invalid", "unknown", "not json", "v1", "now")
+            .is_err());
+        database
+            .dismiss_inbox_item("inbox-invalid", "2026-09-24T08:01:00Z")
+            .unwrap();
+        assert!(database
+            .confirm_inbox_as_task("inbox-invalid", &personal_task("dismissed-task"))
+            .is_err());
+        assert!(database.load_personal_tasks().unwrap().is_empty());
     }
 
     #[test]

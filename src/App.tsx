@@ -86,6 +86,7 @@ import { WorkspaceDashboard } from "./workspace/dashboard/WorkspaceDashboard.tsx
 import { WorkspaceTasksPage } from "./workspace/tasks/WorkspaceTasksPage.tsx";
 import { WorkspaceSchedulePage } from "./workspace/schedule/WorkspaceSchedulePage.tsx";
 import { WorkspaceDiaryPage } from "./workspace/diary/WorkspaceDiaryPage.tsx";
+import { WorkspaceInboxPage } from "./workspace/inbox/WorkspaceInboxPage.tsx";
 
 interface PdfImportResult {
   readonly inserted: number;
@@ -156,6 +157,7 @@ export function App() {
   const isWorkspaceSchedule = routeView === "workspace-schedule";
   const isWorkspaceTasks = routeView === "workspace-tasks";
   const isWorkspaceDiary = routeView === "workspace-diary";
+  const isWorkspaceInbox = routeView === "workspace-inbox";
   const isUnsupportedRoute = routeView === "unsupported";
   const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
   const [dayCount, setDayCount] = useState<5 | 7>(7);
@@ -977,6 +979,8 @@ export function App() {
         />
       ) : isWorkspaceDiary && storageStatus === "ready" ? (
         <WorkspaceDiaryPage onNavigate={navigateToRoute} registerFlush={registerDiaryFlush} />
+      ) : isWorkspaceInbox && storageStatus === "ready" ? (
+        <WorkspaceInboxPage onNavigate={navigateToRoute} />
       ) : isWorkspaceSchedule && storageStatus === "ready" ? (
         <WorkspaceSchedulePage
           termConfig={reminderConfiguration.termConfig}

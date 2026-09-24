@@ -29,6 +29,29 @@ pub struct DiaryEntry {
     pub updated_at: String,
 }
 
+/// Inbox raw text is intentionally not `Debug` so it cannot leak through diagnostics.
+#[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxItem {
+    pub id: String,
+    pub raw_text: String,
+    pub status: String,
+    pub parse_kind: Option<String>,
+    pub parse_payload_json: Option<String>,
+    pub parser_version: Option<String>,
+    pub confirmed_target_type: Option<String>,
+    pub confirmed_target_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxConfirmation {
+    pub target_type: String,
+    pub target_id: String,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WidgetSettings {

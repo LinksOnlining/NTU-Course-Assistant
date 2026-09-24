@@ -1,0 +1,254 @@
+.workspace-inbox-page {
+  display: flex;
+  width: min(100%, 1120px);
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-self: center;
+  gap: var(--space-4);
+  overflow: auto;
+  padding: var(--space-4) var(--space-2) var(--space-6);
+}
+
+.workspace-inbox-heading,
+.workspace-inbox-item-heading,
+.workspace-inbox-capture-footer,
+.workspace-inbox-fields,
+.workspace-inbox-actions,
+.workspace-inbox-delete-confirm {
+  display: flex;
+  align-items: center;
+}
+
+.workspace-inbox-heading,
+.workspace-inbox-item-heading,
+.workspace-inbox-capture-footer {
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.workspace-inbox-heading h2,
+.workspace-inbox-heading p,
+.workspace-inbox-preview h3,
+.workspace-inbox-raw {
+  margin: 0;
+}
+
+.workspace-inbox-heading h2,
+.workspace-inbox-preview h3 {
+  color: var(--text-heading);
+}
+
+.workspace-inbox-heading p,
+.workspace-inbox-item-heading time,
+.workspace-inbox-capture-footer span,
+.workspace-inbox-hint,
+.workspace-inbox-count {
+  color: var(--text-secondary);
+}
+
+.workspace-inbox-heading p {
+  margin-top: var(--space-1);
+}
+
+.workspace-inbox-breadcrumb,
+.workspace-inbox-delete-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.workspace-inbox-count {
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--surface-inset);
+}
+
+.workspace-inbox-capture,
+.workspace-inbox-item {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-small);
+}
+
+.workspace-inbox-capture label,
+.workspace-inbox-preview label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--text-heading);
+  font-weight: 600;
+}
+
+.workspace-inbox-capture textarea,
+.workspace-inbox-preview input,
+.workspace-inbox-preview select {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.workspace-inbox-capture textarea {
+  resize: vertical;
+}
+
+.workspace-inbox-capture-footer span,
+.workspace-inbox-item-heading time,
+.workspace-inbox-hint {
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-inbox-capture-footer button,
+.workspace-inbox-actions button,
+.workspace-inbox-delete-confirm button {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-control);
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.workspace-inbox-capture-footer button:disabled,
+.workspace-inbox-actions button:disabled,
+.workspace-inbox-delete-confirm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.workspace-inbox-item-heading {
+  justify-content: flex-start;
+}
+
+.workspace-inbox-status {
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  background: var(--surface-inset);
+  color: var(--text-secondary);
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-inbox-raw {
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--surface-inset);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.workspace-inbox-preview {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.workspace-inbox-preview h3 {
+  font-size: var(--font-size-body);
+}
+
+.workspace-inbox-fields {
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.workspace-inbox-fields > label {
+  flex: 1 1 0;
+}
+
+.workspace-inbox-hint {
+  margin: 0;
+}
+
+.workspace-inbox-extra-fields {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-inbox-extra-fields p {
+  margin: 0;
+}
+
+.workspace-inbox-extra-fields button {
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  color: var(--text-button);
+  font: inherit;
+}
+
+.workspace-inbox-actions,
+.workspace-inbox-delete-confirm {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.workspace-inbox-actions button:not(:first-child),
+.workspace-inbox-delete-confirm button {
+  border-color: var(--border-default);
+  background: var(--surface-elevated);
+  color: var(--text-button);
+}
+
+.workspace-inbox-delete-link {
+  justify-self: start;
+  font-size: var(--font-size-secondary);
+}
+
+.workspace-inbox-delete-confirm span {
+  color: var(--text-secondary);
+}
+
+.workspace-inbox-state,
+.workspace-inbox-message {
+  margin: 0;
+  padding: var(--space-3);
+  color: var(--text-secondary);
+}
+
+.workspace-inbox-message--error {
+  color: var(--danger);
+}
+
+.workspace-inbox-list {
+  display: grid;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+}
+
+@media (max-width: 720px) {
+  .workspace-inbox-heading,
+  .workspace-inbox-capture-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workspace-inbox-fields {
+    flex-direction: column;
+  }
+
+  .workspace-inbox-fields > label {
+    width: 100%;
+  }
+}

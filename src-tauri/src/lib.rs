@@ -14,8 +14,9 @@ use std::{
 
 use db::CourseDatabase;
 use models::{
-    AcademicTask, Course, CourseOverride, DiaryEntry, Exam, PeriodTime, PersonalTask, PlannerEvent,
-    ReminderSettings, Semester, TermConfig, TimeBlock, WidgetSettings, WidgetSettingsPatch,
+    AcademicTask, Course, CourseOverride, DiaryEntry, Exam, InboxConfirmation, InboxItem,
+    PeriodTime, PersonalTask, PlannerEvent, ReminderSettings, Semester, TermConfig, TimeBlock,
+    WidgetSettings, WidgetSettingsPatch,
 };
 use serde::Serialize;
 use tauri::{
@@ -499,6 +500,104 @@ async fn has_diary_entry(state: State<'_, CourseState>, date: String) -> Result<
     state
         .run_in_background("检查日记状态", move |database| {
             database.has_diary_entry(&date)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn create_inbox_item(
+    state: State<'_, CourseState>,
+    id: String,
+    raw_text: String,
+    created_at: String,
+) -> Result<InboxItem, String> {
+    state
+        .run_in_background("保存收件箱原文", move |database| {
+            database.create_inbox_item(&id, &raw_text, &created_at)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn load_inbox_items(state: State<'_, CourseState>) -> Result<Vec<InboxItem>, String> {
+    state
+        .run_in_background("读取收件箱", CourseDatabase::load_inbox_items)
+        .await
+}
+
+#[tauri::command]
+async fn count_pending_inbox_items(state: State<'_, CourseState>) -> Result<u32, String> {
+    state
+        .run_in_background("读取待整理数量", CourseDatabase::count_pending_inbox_items)
+        .await
+}
+
+#[tauri::command]
+async fn save_inbox_parse_result(
+    state: State<'_, CourseState>,
+    id: String,
+    parse_kind: String,
+    parse_payload_json: String,
+    parser_version: String,
+    updated_at: String,
+) -> Result<InboxItem, String> {
+    state
+        .run_in_background("保存本地解析结果", move |database| {
+            database.save_inbox_parse_result(
+                &id,
+                &parse_kind,
+                &parse_payload_json,
+                &parser_version,
+                &updated_at,
+            )
+        })
+        .await
+}
+
+#[tauri::command]
+async fn dismiss_inbox_item(
+    state: State<'_, CourseState>,
+    id: String,
+    updated_at: String,
+) -> Result<(), String> {
+    state
+        .run_in_background("忽略收件箱内容", move |database| {
+            database.dismiss_inbox_item(&id, &updated_at)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn delete_inbox_item(state: State<'_, CourseState>, id: String) -> Result<(), String> {
+    state
+        .run_in_background("删除收件箱内容", move |database| {
+            database.delete_inbox_item(&id)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn confirm_inbox_as_task(
+    state: State<'_, CourseState>,
+    id: String,
+    task: PersonalTask,
+) -> Result<InboxConfirmation, String> {
+    state
+        .run_in_background("确认收件箱任务", move |database| {
+            database.confirm_inbox_as_task(&id, &task)
+        })
+        .await
+}
+
+#[tauri::command]
+async fn confirm_inbox_as_event(
+    state: State<'_, CourseState>,
+    id: String,
+    event: PlannerEvent,
+) -> Result<InboxConfirmation, String> {
+    state
+        .run_in_background("确认收件箱日程", move |database| {
+            database.confirm_inbox_as_event(&id, &event)
         })
         .await
 }
@@ -1051,6 +1150,14 @@ pub fn run() {
             save_diary_entry,
             load_diary_content_dates,
             has_diary_entry,
+            create_inbox_item,
+            load_inbox_items,
+            count_pending_inbox_items,
+            save_inbox_parse_result,
+            dismiss_inbox_item,
+            delete_inbox_item,
+            confirm_inbox_as_task,
+            confirm_inbox_as_event,
             load_planner_events,
             create_planner_event,
             update_planner_event,

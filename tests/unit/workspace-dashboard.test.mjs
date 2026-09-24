@@ -399,6 +399,10 @@ test("workspace loader reuses Academic application reads and canonical occurrenc
       calls.push(`diary-status:${checkDate}`);
       return true;
     },
+    async countPendingInboxItems() {
+      calls.push("inbox-count");
+      return 3;
+    },
   });
 
   assert.deepEqual(calls, [
@@ -408,6 +412,7 @@ test("workspace loader reuses Academic application reads and canonical occurrenc
     "blocks:2026-09-23:2026-09-30",
     "personal-tasks",
     "diary-status:2026-09-23",
+    "inbox-count",
   ]);
   assert.equal(sources.timelineItems.length, 1);
   assert.equal(sources.timelineItems[0].title, "星期三课程");
@@ -416,7 +421,9 @@ test("workspace loader reuses Academic application reads and canonical occurrenc
   assert.deepEqual(sources.futureItems, sources.timelineItems);
   assert.deepEqual(sources.personalTasks, []);
   assert.equal(sources.hasDiaryToday, true);
+  assert.equal(sources.pendingInboxCount, 3);
   assert.equal(buildWorkspaceDashboardViewModel(sources, "08:00").hasDiaryToday, true);
+  assert.equal(buildWorkspaceDashboardViewModel(sources, "08:00").pendingInboxCount, 3);
   assert.deepEqual(sources.warnings, ["课程结构警告"]);
 });
 

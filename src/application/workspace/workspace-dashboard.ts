@@ -15,6 +15,7 @@ import { computeFreeTimeIntervals, effectiveOccupancy } from "../timeline/planne
 import { loadPersonalTasks } from "../planner/personal-tasks.ts";
 import { loadPlannerEvents, loadTimeBlocks } from "../planner/planner-schedule.ts";
 import { hasDiaryEntry } from "../../services/diary-storage.ts";
+import { countPendingInboxItems } from "../../services/inbox-storage.ts";
 import type { AcademicTask } from "../../types/academic-task.ts";
 import type { Semester } from "../../types/semester.ts";
 import type { PersonalTask } from "../../types/personal-task.ts";
@@ -36,6 +37,7 @@ export interface WorkspaceDashboardReader {
   loadTimeBlocks?(startDate: string, endDate: string): ReturnType<typeof loadTimeBlocks>;
   loadPersonalTasks?(): ReturnType<typeof loadPersonalTasks>;
   hasDiaryEntry?(date: string): Promise<boolean>;
+  countPendingInboxItems?(): Promise<number>;
 }
 
 const defaultReader: WorkspaceDashboardReader = {
@@ -45,6 +47,7 @@ const defaultReader: WorkspaceDashboardReader = {
   loadTimeBlocks,
   loadPersonalTasks,
   hasDiaryEntry,
+  countPendingInboxItems,
 };
 
 export function localDateKey(date: Date): string {
@@ -90,14 +93,16 @@ export async function loadWorkspaceDashboardSources(
     fallbackSemesterId: termConfig ? LEGACY_SEMESTER_ID : undefined,
   };
   const rangeEnd = dateAfter(date, 7);
-  const [schedule, hub, events, blocks, personalTasks, hasDiaryToday] = await Promise.all([
-    reader.loadScheduleData(),
-    reader.loadHubData(options),
-    reader.loadPlannerEvents?.(date, rangeEnd) ?? Promise.resolve([]),
-    reader.loadTimeBlocks?.(date, rangeEnd) ?? Promise.resolve([]),
-    reader.loadPersonalTasks?.() ?? Promise.resolve([]),
-    reader.hasDiaryEntry?.(date) ?? Promise.resolve(false),
-  ]);
+  const [schedule, hub, events, blocks, personalTasks, hasDiaryToday, pendingInboxCount] =
+    await Promise.all([
+      reader.loadScheduleData(),
+      reader.loadHubData(options),
+      reader.loadPlannerEvents?.(date, rangeEnd) ?? Promise.resolve([]),
+      reader.loadTimeBlocks?.(date, rangeEnd) ?? Promise.resolve([]),
+      reader.loadPersonalTasks?.() ?? Promise.resolve([]),
+      reader.hasDiaryEntry?.(date) ?? Promise.resolve(false),
+      reader.countPendingInboxItems?.() ?? Promise.resolve(0),
+    ]);
   const activeSemester =
     hub.semesters.find((semester) => semester.status === "ACTIVE") ??
     (hub.semesters.length === 0 ? legacySemester(termConfig) : null);
@@ -134,6 +139,7 @@ export async function loadWorkspaceDashboardSources(
     tasks: hub.tasks,
     personalTasks,
     hasDiaryToday,
+    pendingInboxCount,
     warnings: schedule.warnings,
   };
 }
@@ -527,6 +533,7 @@ export function buildWorkspaceDashboardViewModel(
       ai: "unavailable",
     },
     hasDiaryToday: sources.hasDiaryToday ?? false,
+    pendingInboxCount: sources.pendingInboxCount ?? 0,
     warnings: sources.warnings,
   };
 }

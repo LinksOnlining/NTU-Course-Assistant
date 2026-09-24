@@ -347,6 +347,28 @@ function DiaryCard({
   );
 }
 
+function InboxCard({
+  pendingCount,
+  onNavigate,
+}: {
+  readonly pendingCount: number;
+  readonly onNavigate: (route: AppRoute) => void;
+}) {
+  const status = pendingCount > 0 ? `待整理 ${pendingCount} 条` : "暂无待整理";
+  return (
+    <button
+      type="button"
+      className="workspace-dashboard-card workspace-module-card"
+      onClick={() => onNavigate({ area: "workspace", page: "inbox" })}
+      aria-label={`收件箱，${status}`}
+    >
+      <span className="workspace-module-title">收件箱</span>
+      <span className="workspace-module-status">{status}</span>
+      <span className="workspace-module-description">整理暂存的任务和日程想法</span>
+    </button>
+  );
+}
+
 export function WorkspaceDashboard({
   ready,
   storageError,
@@ -412,12 +434,7 @@ export function WorkspaceDashboard({
           <TaskCard model={model} onNavigate={onNavigate} />
           <div className="workspace-module-pair">
             <DiaryCard hasEntry={model.hasDiaryToday} onNavigate={onNavigate} />
-            <UnavailableCard
-              title="收件箱"
-              description="收件箱将在后续阶段开放"
-              route={{ area: "workspace", page: "inbox" }}
-              onNavigate={onNavigate}
-            />
+            <InboxCard pendingCount={model.pendingInboxCount} onNavigate={onNavigate} />
           </div>
           <UnavailableCard
             title="AI"

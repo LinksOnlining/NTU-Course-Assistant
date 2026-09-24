@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3.0 PASS；Phase 3.1 PASS；Phase 3.2 下一步。** 本阶段实际生产迁移仅 schema `6→7`；Debug 路径保持 `<app_local_data_dir>/dev-v2/courses.sqlite3`，Release 路径保持 `<app_local_data_dir>/courses.sqlite3`。Phase 3.1 已提供本地 Diary 存储、自动保存/重试、日期导航和 Dashboard 私密状态；详细记录见 `docs/v2-phase-3-1-verification.md`。全量 `npm run verify` PASS：204 unit、93 architecture、732 UI PASS / 15 条件跳过；Rust 58 tests、fmt、clippy PASS。版本仍为 1.3.1；未运行 Production EXE、未安装 Installer、未访问真实用户 DB。Phase 3 连续授权仍为 3.0–3.7；不得开始 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
+- **当前状态：Phase 3.0 PASS；Phase 3.1 PASS；Phase 3.2 PASS；正在进入 Phase 3.3。** 本阶段实际生产迁移仅 schema `6→7`；Debug 路径保持 `<app_local_data_dir>/dev-v2/courses.sqlite3`，Release 路径保持 `<app_local_data_dir>/courses.sqlite3`。Phase 3.1 提供本地 Diary 存储、自动保存/重试、日期导航和 Dashboard 私密状态；Phase 3.2 提供 Inbox 原文先保存、本地确定性解析、可编辑预览和用户确认后创建目标。记录见 `docs/v2-phase-3-1-verification.md`、`docs/v2-phase-3-2-verification.md`。Phase 3.2 全量 `npm run verify` PASS：211 unit、97 architecture、741 UI PASS / 15 条件跳过；Rust 62 tests、fmt、clippy PASS。版本仍为 1.3.1；未运行 Production EXE、未安装 Installer、未访问真实用户 DB。Phase 3 连续授权仍为 3.0–3.7；不得开始 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 为唯一外网能力且默认关闭、仅使用用户主动选择的城市；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 

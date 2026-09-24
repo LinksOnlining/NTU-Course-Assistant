@@ -12,10 +12,11 @@ async function seedDashboardRuntime(
     readonly personalTasks?: readonly unknown[];
   } = {},
   diaryFixture: { readonly hasEntry?: boolean; readonly failSave?: boolean } = {},
+  inboxFixture: { readonly pendingCount?: number; readonly items?: readonly unknown[] } = {},
 ) {
   await page.clock.install({ time: currentTime });
   await page.addInitScript(
-    ({ name, plannerFixture, diaryFixture }) => {
+    ({ name, plannerFixture, diaryFixture, inboxFixture }) => {
       const course = {
         id: "dashboard-course",
         name,
@@ -64,6 +65,7 @@ async function seedDashboardRuntime(
       let personalTasks = [...(plannerFixture.personalTasks ?? [])];
       const today = new Date().toISOString().slice(0, 10);
       const diaryEntries = new Map<string, Record<string, string>>();
+      const inboxItems = [...(inboxFixture.items ?? [])] as Record<string, unknown>[];
       if (diaryFixture.hasEntry) {
         diaryEntries.set(today, {
           id: "diary-fixture",
@@ -118,6 +120,66 @@ async function seedDashboardRuntime(
             if (command === "has_diary_entry") {
               return Boolean(diaryEntries.get(String(args?.date))?.body.trim());
             }
+            if (command === "count_pending_inbox_items")
+              return inboxItems.filter((item) =>
+                ["pending", "needs_review", "ready"].includes(String(item.status)),
+              ).length;
+            if (command === "load_inbox_items") return inboxItems.map((item) => ({ ...item }));
+            if (command === "create_inbox_item") {
+              const item = {
+                id: args?.id,
+                rawText: args?.rawText,
+                status: "pending",
+                parseKind: null,
+                parsePayloadJson: null,
+                parserVersion: null,
+                confirmedTargetType: null,
+                confirmedTargetId: null,
+                createdAt: args?.createdAt,
+                updatedAt: args?.createdAt,
+              };
+              inboxItems.unshift(item);
+              return item;
+            }
+            if (command === "save_inbox_parse_result") {
+              const item = inboxItems.find((candidate) => candidate.id === args?.id);
+              if (!item) throw new Error("收件箱内容不存在");
+              Object.assign(item, {
+                status: args?.parseKind === "unknown" ? "needs_review" : "ready",
+                parseKind: args?.parseKind,
+                parsePayloadJson: args?.parsePayloadJson,
+                parserVersion: args?.parserVersion,
+                updatedAt: args?.updatedAt,
+              });
+              return { ...item };
+            }
+            if (command === "dismiss_inbox_item") {
+              const item = inboxItems.find((candidate) => candidate.id === args?.id);
+              if (!item) throw new Error("收件箱内容不存在");
+              Object.assign(item, { status: "dismissed", updatedAt: args?.updatedAt });
+              return;
+            }
+            if (command === "delete_inbox_item") {
+              const index = inboxItems.findIndex((candidate) => candidate.id === args?.id);
+              if (index < 0) throw new Error("收件箱内容不存在");
+              inboxItems.splice(index, 1);
+              return;
+            }
+            if (command === "confirm_inbox_as_task" || command === "confirm_inbox_as_event") {
+              const item = inboxItems.find((candidate) => candidate.id === args?.id);
+              if (!item) throw new Error("收件箱内容不存在");
+              if (item.status === "confirmed")
+                return { targetType: item.confirmedTargetType, targetId: item.confirmedTargetId };
+              const isTask = command === "confirm_inbox_as_task";
+              const target = args?.[isTask ? "task" : "event"] as Record<string, unknown>;
+              if (isTask) personalTasks.push(target);
+              Object.assign(item, {
+                status: "confirmed",
+                confirmedTargetType: isTask ? "personalTask" : "plannerEvent",
+                confirmedTargetId: target.id,
+              });
+              return { targetType: item.confirmedTargetType, targetId: target.id };
+            }
             if (command === "save_diary_entry" && args?.entry) {
               if (failDiarySave) throw new Error("save failed");
               const incoming = args.entry as Record<string, string>;
@@ -149,6 +211,7 @@ async function seedDashboardRuntime(
       Object.assign(window, {
         __workspaceDashboardTest: {
           getLoadCoursesCount: () => loadCoursesCount,
+          getPersonalTaskCount: () => personalTasks.length,
           getDiaryBody: (date: string) => diaryEntries.get(date)?.body ?? null,
           setDiarySaveFailure: (value: boolean) => {
             failDiarySave = value;
@@ -156,12 +219,98 @@ async function seedDashboardRuntime(
         },
       });
     },
-    { name: courseName, plannerFixture, diaryFixture },
+    { name: courseName, plannerFixture, diaryFixture, inboxFixture },
   );
   await page.goto("/");
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
   await expect(page.getByRole("heading", { name: "今日日程" })).toBeVisible();
 }
+
+test("Dashboard Inbox count opens the local raw-first review and confirms user-edited targets", async ({
+  page,
+}) => {
+  const initialInbox = ["inbox-seed-a", "inbox-seed-b"].map((id, index) => ({
+    id,
+    rawText: `待整理内容 ${index + 1}`,
+    status: "ready",
+    parseKind: "task",
+    parsePayloadJson: JSON.stringify({
+      kind: "task",
+      title: `待整理内容 ${index + 1}`,
+      date: null,
+      startTime: null,
+      endTime: null,
+      deadlineDate: null,
+      deadlineTime: null,
+    }),
+    parserVersion: "inbox-parser-v1",
+    confirmedTargetType: null,
+    confirmedTargetId: null,
+    createdAt: `2026-09-23T11:0${index}:00.000Z`,
+    updatedAt: `2026-09-23T11:0${index}:00.000Z`,
+  }));
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, {}, { items: initialInbox });
+  const inboxCard = page.getByRole("button", { name: "收件箱，待整理 2 条" });
+  await expect(inboxCard).toBeVisible();
+  await inboxCard.click();
+  await expect(page.getByTestId("workspace-inbox")).toBeVisible();
+
+  await page.getByLabel("记录一条想法").fill("任务：整理材料 截止明天 18:00");
+  await page.getByRole("button", { name: "添加到收件箱" }).click();
+  await expect(page.locator(".workspace-inbox-count")).toContainText("待整理 3");
+  const taskItem = page
+    .getByTestId("inbox-item")
+    .filter({ hasText: "任务：整理材料 截止明天 18:00" });
+  await expect(taskItem.getByLabel("标题")).toHaveValue("整理材料");
+  await taskItem.getByLabel("标题").fill("用户确认后的材料任务");
+  await taskItem.getByRole("button", { name: "确认创建任务" }).click();
+  await expect(taskItem.getByText("已转为任务")).toBeVisible();
+  await taskItem.getByRole("button", { name: "打开任务" }).click();
+  await expect(page.getByTestId("workspace-tasks")).toBeVisible();
+  await expect(page.getByRole("button", { name: /收件箱，待整理 2 条/u })).toHaveCount(0);
+
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "工作台" })
+    .click();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
+  await page.getByRole("button", { name: /收件箱，待整理 2 条/u }).click();
+  await expect(page.getByTestId("workspace-inbox")).toBeVisible();
+  const confirmedTask = page
+    .getByTestId("inbox-item")
+    .filter({ hasText: "任务：整理材料 截止明天 18:00" });
+  await confirmedTask.getByRole("button", { name: "删除记录" }).click();
+  await confirmedTask.getByRole("button", { name: "确认删除" }).click();
+  const runtime = await page.evaluate(() =>
+    (
+      window as Window & { __workspaceDashboardTest: { getPersonalTaskCount: () => number } }
+    ).__workspaceDashboardTest.getPersonalTaskCount(),
+  );
+  expect(runtime).toBe(1);
+
+  await page.getByLabel("记录一条想法").fill("明天下午去图书馆");
+  await page.getByRole("button", { name: "添加到收件箱" }).click();
+  const eventItem = page.getByTestId("inbox-item").filter({ hasText: "明天下午去图书馆" });
+  await expect(eventItem.getByRole("button", { name: "请先选择类型" })).toBeDisabled();
+  await eventItem.getByLabel("整理为").selectOption("event");
+  const confirmEvent = eventItem.getByRole("button", { name: "确认创建日程" });
+  await expect(confirmEvent).toBeDisabled();
+  await eventItem.getByLabel(/日期/u).fill("2026-09-24");
+  await eventItem.getByLabel(/开始时间/u).fill("14:00");
+  await eventItem.getByLabel(/结束时间/u).fill("15:00");
+  await expect(confirmEvent).toBeEnabled();
+  await confirmEvent.click();
+  await expect(eventItem.getByText("已转为日程")).toBeVisible();
+
+  await page.getByLabel("记录一条想法").fill("暂时保留的想法");
+  await page.getByRole("button", { name: "添加到收件箱" }).click();
+  const dismissedItem = page.getByTestId("inbox-item").filter({ hasText: "暂时保留的想法" });
+  await dismissedItem.getByRole("button", { name: "暂不处理" }).click();
+  await expect(dismissedItem.getByText("已忽略")).toBeVisible();
+  await expect(dismissedItem.getByText("暂时保留的想法")).toBeVisible();
+  await page.locator(".workspace-inbox-breadcrumb").click();
+  await expect(page.getByRole("button", { name: "收件箱，待整理 2 条" })).toBeVisible();
+});
 
 test("Workspace dashboard fits target windows, keeps only Timeline internally scrollable, and places now near 40%", async ({
   page,
@@ -171,7 +320,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
     page.getByTestId("timeline-item").getByText("数学基础", { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
-  await expect(page.getByRole("button", { name: /收件箱，尚未开放/u })).toBeVisible();
+  await expect(page.getByRole("button", { name: /收件箱，暂无待整理/u })).toBeVisible();
   await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
   await expect(page.getByText("已完成事项", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("workspace-today-overview")).toBeVisible();
@@ -271,7 +420,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
       await expect(page.getByRole("button", { name: "设置" })).toBeVisible();
       await expect(page.getByRole("button", { name: /任务/u })).toBeVisible();
       await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
-      await expect(page.getByRole("button", { name: /收件箱，尚未开放/u })).toBeVisible();
+      await expect(page.getByRole("button", { name: /收件箱，暂无待整理/u })).toBeVisible();
       await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
     }
   }
@@ -452,7 +601,7 @@ test("crossing local midnight reloads the current day's Academic data once", asy
   await expect(page.getByText("今天暂无日程", { exact: true }).last()).toBeVisible();
 });
 
-test("Diary and schedule routes remain explicit, and returning to Workspace reloads Academic data", async ({
+test("Diary, Inbox and schedule routes remain explicit, and returning to Workspace reloads Academic data", async ({
   page,
 }) => {
   await seedDashboardRuntime(page);
@@ -463,7 +612,14 @@ test("Diary and schedule routes remain explicit, and returning to Workspace relo
       ).__workspaceDashboardTest.getLoadCoursesCount(),
     );
   let previousLoads = await getLoads();
-  for (const name of ["收件箱，尚未开放", "AI，尚未开放"]) {
+  await page.getByRole("button", { name: /收件箱，暂无待整理/u }).click();
+  await expect(page.getByTestId("workspace-inbox")).toBeVisible();
+  await page.locator(".workspace-inbox-breadcrumb").click();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
+  await expect.poll(getLoads).toBeGreaterThan(previousLoads);
+  previousLoads = await getLoads();
+
+  for (const name of ["AI，尚未开放"]) {
     await page.getByRole("button", { name: new RegExp(name, "u") }).click();
     await expect(page.getByRole("heading", { name: "该模块尚未开放" })).toBeVisible();
     await page.getByRole("button", { name: "返回工作台" }).click();
@@ -499,7 +655,7 @@ test("Dashboard cards remain visible in both light and dark themes", async ({ pa
     await expect(page.getByRole("heading", { name: "今日日程" })).toBeVisible();
     await expect(page.getByRole("button", { name: /任务/u })).toBeVisible();
     await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
-    await expect(page.getByRole("button", { name: /收件箱，尚未开放/u })).toBeVisible();
+    await expect(page.getByRole("button", { name: /收件箱，暂无待整理/u })).toBeVisible();
     await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
   };
   await visibleModules();

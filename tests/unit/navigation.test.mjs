@@ -109,5 +109,6 @@ test("implemented workspace routes resolve to page content; future routes stay u
   assert.equal(getShellRouteView({ area: "academic", page: "exams" }), "academic-hub");
   assert.equal(getShellRouteView({ area: "academic", page: "tasks-legacy" }), "academic-hub");
   assert.equal(getShellRouteView({ area: "workspace", page: "diary" }), "workspace-diary");
+  assert.equal(getShellRouteView({ area: "workspace", page: "inbox" }), "workspace-inbox");
   assert.equal(getShellRouteView({ area: "settings", page: "main" }), "unsupported");
 });
