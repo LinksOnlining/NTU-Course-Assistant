@@ -16,7 +16,8 @@ use crate::models::{
 };
 
 const SCHEMA_SIX_VERSION: i64 = 6;
-const CURRENT_SCHEMA_VERSION: i64 = 7;
+const SCHEMA_SEVEN_VERSION: i64 = 7;
+const CURRENT_SCHEMA_VERSION: i64 = SCHEMA_SEVEN_VERSION;
 const HANDLED_REMINDER_RETENTION_MILLISECONDS: i64 = 400 * 24 * 60 * 60 * 1_000;
 
 #[derive(Debug)]
@@ -294,6 +295,7 @@ fn migrate_schema_six_to_seven_with_hook(
     before_validation: impl FnOnce() -> Result<(), StorageError>,
 ) -> Result<(), StorageError> {
     let transaction = connection.transaction()?;
+    reject_preexisting_schema_seven_objects(&transaction)?;
     transaction.execute_batch(
         "CREATE TABLE diary_entries (
             id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) BETWEEN 1 AND 128),
@@ -349,6 +351,27 @@ fn migrate_schema_six_to_seven_with_hook(
     Ok(())
 }
 
+fn reject_preexisting_schema_seven_objects(connection: &Connection) -> Result<(), StorageError> {
+    let existing: Option<(String, String)> = connection
+        .query_row(
+            "SELECT type, name FROM sqlite_master
+             WHERE (type = 'table' AND name IN ('diary_entries', 'inbox_items', 'routines'))
+                OR (type = 'index' AND name IN (
+                    'inbox_items_status_created_at', 'routines_enabled'
+                ))
+             ORDER BY type, name LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    if let Some((kind, name)) = existing {
+        return Err(StorageError::InvalidData(format!(
+            "schema 6 与已存在的 Phase 3 {kind} `{name}` 不一致；为避免覆盖或猜测，已拒绝自动恢复。"
+        )));
+    }
+    Ok(())
+}
+
 fn validate_schema_seven(connection: &Connection) -> Result<(), StorageError> {
     const REQUIRED_TABLES: &[&str] = &["diary_entries", "inbox_items", "routines"];
     const REQUIRED_INDEXES: &[&str] = &["inbox_items_status_created_at", "routines_enabled"];
@@ -396,7 +419,7 @@ fn validate_schema_seven(connection: &Connection) -> Result<(), StorageError> {
     }
 
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version != CURRENT_SCHEMA_VERSION {
+    if version != SCHEMA_SEVEN_VERSION {
         return Err(StorageError::InvalidData("schema 7 版本校验失败。".into()));
     }
     validate_integrity(connection)
@@ -628,10 +651,12 @@ impl CourseDatabase {
         let version: i64 = self
             .connection
             .pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version < CURRENT_SCHEMA_VERSION {
+        // Gate this step on its target version, not CURRENT_SCHEMA_VERSION, so
+        // future migrations cannot cause the 6→7 DDL to run again.
+        if version < SCHEMA_SEVEN_VERSION {
             migrate_schema_six_to_seven(&mut self.connection)?;
         }
-        Ok(())
+        validate_schema_seven(&self.connection)
     }
 
     pub fn schema_version(&self) -> Result<i64, StorageError> {
@@ -3037,6 +3062,37 @@ mod tests {
             .expect("mark fixture as schema six");
     }
 
+    fn create_schema_six_database_with_phase_three_objects(path: &Path, retained: &[&str]) {
+        create_populated_schema_six_database(path);
+        let mut connection = Connection::open(path).expect("open schema six drift fixture");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")
+            .expect("configure schema six drift fixture");
+        migrate_schema_six_to_seven(&mut connection).expect("create canonical schema seven");
+        connection
+            .execute_batch(
+                "INSERT INTO diary_entries
+                    (id, entry_date, body, created_at, updated_at)
+                 VALUES ('drift-diary', '2026-09-24', 'sentinel', 'now', 'now');
+                 INSERT INTO inbox_items (id, raw_text, status, created_at, updated_at)
+                 VALUES ('drift-inbox', 'sentinel', 'pending', 'now', 'now');
+                 INSERT INTO routines
+                    (id, title, target_duration_minutes, weekdays_mask, enabled, created_at, updated_at)
+                 VALUES ('drift-routine', 'sentinel', 30, 1, 1, 'now', 'now');",
+            )
+            .expect("seed Phase 3 sentinel records");
+        for table in ["routines", "inbox_items", "diary_entries"] {
+            if !retained.contains(&table) {
+                connection
+                    .execute_batch(&format!("DROP TABLE {table};"))
+                    .expect("remove unretained drift table");
+            }
+        }
+        connection
+            .pragma_update(None, "user_version", SCHEMA_SIX_VERSION)
+            .expect("mark fixture with stale schema version");
+    }
+
     fn migration_backups(root: &Path) -> Vec<PathBuf> {
         let directory = root.join("backups").join("migrations");
         if !directory.is_dir() {
@@ -3182,6 +3238,163 @@ mod tests {
         }
         assert!(migration_backups(&root).is_empty());
         fs::remove_dir_all(root).expect("remove fresh database fixture");
+    }
+
+    #[test]
+    fn valid_schema_seven_reopens_without_reapplying_phase_three_migration() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        {
+            let database = CourseDatabase::open(&path).expect("create schema seven database");
+            database
+                .save_diary_entry(&diary_entry("kept-diary", "2026-09-24", "kept", "now"))
+                .expect("seed schema seven diary");
+            database
+                .create_inbox_item("kept-inbox", "kept", "now")
+                .expect("seed schema seven inbox");
+        }
+        let reopened = CourseDatabase::open(&path).expect("reopen schema seven database");
+        assert_eq!(reopened.schema_version().expect("schema version"), 7);
+        assert_eq!(
+            reopened
+                .load_diary_entry("2026-09-24")
+                .expect("load schema seven diary")
+                .expect("diary retained")
+                .id,
+            "kept-diary"
+        );
+        assert_eq!(
+            reopened
+                .load_inbox_items()
+                .expect("load schema seven inbox")[0]
+                .id,
+            "kept-inbox"
+        );
+        assert!(migration_backups(&root).is_empty());
+        drop(reopened);
+        fs::remove_dir_all(root).expect("remove schema seven reopen fixture");
+    }
+
+    #[test]
+    fn schema_six_with_preexisting_phase_three_objects_is_rejected_without_data_loss() {
+        for retained in [
+            vec!["diary_entries"],
+            vec!["diary_entries", "inbox_items"],
+            vec!["diary_entries", "inbox_items", "routines"],
+        ] {
+            let root = isolated_database_root();
+            let path = root.join("courses.sqlite3");
+            create_schema_six_database_with_phase_three_objects(&path, &retained);
+
+            let error = match CourseDatabase::open(&path) {
+                Ok(_) => panic!("unverified Phase 3 schema drift must be rejected"),
+                Err(error) => error,
+            };
+            let message = error.to_string();
+            assert!(message.contains("schema 6 与已存在的 Phase 3"), "{message}");
+            assert!(message.contains("拒绝自动恢复"), "{message}");
+
+            let connection = Connection::open(&path).expect("reopen rejected drift fixture");
+            assert_eq!(
+                connection
+                    .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                    .expect("drift version remains"),
+                SCHEMA_SIX_VERSION
+            );
+            validate_schema_six(&connection).expect("source schema six remains valid");
+            for table in ["diary_entries", "inbox_items", "routines"] {
+                let exists: bool = connection
+                    .query_row(
+                        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
+                        [table],
+                        |row| row.get(0),
+                    )
+                    .expect("check existing drift table");
+                assert_eq!(exists, retained.contains(&table), "{table}");
+                if exists {
+                    assert_eq!(
+                        connection
+                            .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row
+                                .get::<_, i64>(0))
+                            .expect("Phase 3 sentinel preserved"),
+                        1,
+                        "{table} data must remain untouched"
+                    );
+                }
+            }
+            for table in ["personal_tasks", "planner_events", "time_blocks"] {
+                assert_eq!(
+                    connection
+                        .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| row
+                            .get::<_, i64>(0))
+                        .expect("Phase 2 data remains"),
+                    1,
+                    "{table} data must remain untouched"
+                );
+            }
+            drop(connection);
+
+            let backups = migration_backups(&root);
+            assert_eq!(backups.len(), 1);
+            let backup = Connection::open(&backups[0]).expect("open preserved source backup");
+            assert_eq!(
+                backup
+                    .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                    .expect("backup version"),
+                SCHEMA_SIX_VERSION
+            );
+            validate_integrity(&backup).expect("backup is reopenable and valid");
+            drop(backup);
+            fs::remove_dir_all(root).expect("remove drift fixture");
+        }
+    }
+
+    #[test]
+    fn schema_six_with_mismatched_preexisting_diary_table_is_rejected_unchanged() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        create_populated_schema_six_database(&path);
+        let connection = Connection::open(&path).expect("open mismatched drift fixture");
+        connection
+            .execute_batch(
+                "CREATE TABLE diary_entries (id TEXT PRIMARY KEY, body TEXT NOT NULL);
+                 INSERT INTO diary_entries VALUES ('mismatched-diary', 'keep');",
+            )
+            .expect("create mismatched preexisting table");
+        drop(connection);
+
+        assert!(CourseDatabase::open(&path).is_err());
+        let connection = Connection::open(&path).expect("reopen rejected mismatch");
+        assert_eq!(
+            connection
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                .expect("version remains six"),
+            SCHEMA_SIX_VERSION
+        );
+        let sql: String = connection
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='diary_entries'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("mismatched schema remains untouched");
+        assert_eq!(
+            sql,
+            "CREATE TABLE diary_entries (id TEXT PRIMARY KEY, body TEXT NOT NULL)"
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT body FROM diary_entries WHERE id='mismatched-diary'",
+                    [],
+                    |row| row.get::<_, String>(0)
+                )
+                .expect("mismatched table data remains"),
+            "keep"
+        );
+        drop(connection);
+        assert_eq!(migration_backups(&root).len(), 1);
+        fs::remove_dir_all(root).expect("remove mismatched fixture");
     }
 
     #[test]

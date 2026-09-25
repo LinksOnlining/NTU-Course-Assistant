@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3.8.2 COMPLETE；Phase 4.0 AI Operation Layer 架构与安全契约 COMPLETE。** Ethan 于 2026-09-25 确认 Windows 11 实机的手动地点搜索、当前位置、离线/Provider 失败降级、来源说明/隐私/后台请求行为均 PASS。Phase 4.0 已建立安全/权限/工具/Proposal/Provider 与 schema 8 提案契约；`npm run verify` PASS，未进行真实 Provider 调用、运行时 AI UI 或 schema migration。当前 schema 仍为 7、应用版本仍为 1.3.1。下一阶段：Phase 4.1 — schema 7→8、安全凭据存储与 Provider Native Transport。Phase 3.8.2 记录见 `docs/v2-phase-3-verification.md`；Phase 4.0 契约见 `docs/v2-ai-operation-contract.md`。
+- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4 NOT STARTED。** Ethan 于 2026-09-25 确认 Phase 3.8.2 Windows 11 人工验收全部 PASS。Phase 3.9 修复了开发态 schema 7 被错误地重复执行 6→7 migration 的启动阻断；实际 Debug DB 已验证为完整、可启动的 schema 7，schema 仍为 7。`docs/v2-ai-operation-contract.md` 仅作为未来安全设计材料保留；未实现 AI runtime、Provider、schema 8，也未访问/迁移 Release DB。详情见 `docs/v2-phase-3-9-verification.md`。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 是唯一外网能力且默认关闭，手动搜索仅在提交后请求 Photon 并只保存最终选中地点，当前位置需明确同意、系统授权和坐标模糊化；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 

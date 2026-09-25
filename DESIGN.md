@@ -6,7 +6,7 @@
 
 - 当前 v2 产品需求单一事实来源：[`PROJECT_BRIEF.md`](PROJECT_BRIEF.md)。
 - 当前 v2 架构及依赖方向契约：[`docs/v2-architecture-contract.md`](docs/v2-architecture-contract.md)。
-- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS。Phase 4.0 只建立 [`docs/v2-ai-operation-contract.md`](docs/v2-ai-operation-contract.md) 安全与权限契约；当前 schema 7、没有 Provider 调用或 AI runtime。
+- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4 尚未开始；[`docs/v2-ai-operation-contract.md`](docs/v2-ai-operation-contract.md) 是未来设计参考，不代表 Phase 4 已执行。当前 schema 为 7，没有 Provider 调用或 AI runtime。
 - 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。此引用不表示 v2 runtime 已实现。
 
 ## 技术方案
