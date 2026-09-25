@@ -1,6 +1,7 @@
 import type { AppRoute } from "../navigation/types.ts";
 import { BUILT_IN_MODULES } from "./built-in-modules.ts";
 import type {
+  AICapabilityContribution,
   AIToolContribution,
   CapabilityContribution,
   ModuleId,
@@ -20,6 +21,7 @@ export interface WorkplaceModuleRegistry {
   readonly searchProviders: readonly CapabilityContribution[];
   readonly contextProviders: readonly CapabilityContribution[];
   readonly permissions: readonly PermissionDefinition[];
+  readonly aiCapabilities: readonly AICapabilityContribution[];
   readonly aiTools: readonly AIToolContribution[];
   getModule(id: ModuleId): WorkplaceModule | undefined;
   getRoute(route: AppRoute): RouteContribution | undefined;
@@ -65,6 +67,9 @@ function freezeItems<T extends object>(items: readonly T[]): readonly T[] {
       if ("permissionIds" in copy && Array.isArray(copy.permissionIds)) {
         Object.assign(copy, { permissionIds: Object.freeze([...copy.permissionIds]) });
       }
+      if ("requiredPermissions" in copy && Array.isArray(copy.requiredPermissions)) {
+        Object.assign(copy, { requiredPermissions: Object.freeze([...copy.requiredPermissions]) });
+      }
       return Object.freeze(copy);
     }),
   );
@@ -81,6 +86,7 @@ export function createWorkplaceModuleRegistry(
     validateOwnership(module, module.searchProviders, "search provider");
     validateOwnership(module, module.contextProviders, "context provider");
     validateOwnership(module, module.permissions, "permission");
+    validateOwnership(module, module.aiCapabilities, "AI capability");
     validateOwnership(module, module.aiTools, "AI tool");
   }
 
@@ -94,6 +100,7 @@ export function createWorkplaceModuleRegistry(
       searchProviders: freezeItems(module.searchProviders ?? []),
       contextProviders: freezeItems(module.contextProviders ?? []),
       permissions: freezeItems(module.permissions ?? []),
+      aiCapabilities: freezeItems(module.aiCapabilities ?? []),
       aiTools: freezeItems(module.aiTools ?? []),
     }),
   );
@@ -118,6 +125,9 @@ export function createWorkplaceModuleRegistry(
   const aiTools = freezeItems(
     modules.flatMap((module) => module.aiTools ?? []).sort(compareOrdered),
   );
+  const aiCapabilities = freezeItems(
+    modules.flatMap((module) => module.aiCapabilities ?? []).sort(compareOrdered),
+  );
 
   assertUnique(routes, (route) => route.id, "route id");
   assertUnique(routes, (route) => routeKey(route.route), "route");
@@ -127,6 +137,7 @@ export function createWorkplaceModuleRegistry(
   assertUnique(searchProviders, (provider) => provider.id, "search provider id");
   assertUnique(contextProviders, (provider) => provider.id, "context provider id");
   assertUnique(permissions, (permission) => permission.id, "permission id");
+  assertUnique(aiCapabilities, (capability) => capability.id, "AI capability id");
   assertUnique(aiTools, (tool) => tool.id, "AI tool id");
 
   const routeOwners = new Map(routes.map((route) => [routeKey(route.route), route.moduleId]));
@@ -151,6 +162,15 @@ export function createWorkplaceModuleRegistry(
       }
     }
   }
+  for (const capability of aiCapabilities) {
+    for (const permissionId of capability.requiredPermissions) {
+      if (!permissionIds.has(permissionId)) {
+        throw new Error(
+          `AI capability ${capability.id} references unknown permission ${permissionId}`,
+        );
+      }
+    }
+  }
 
   const byId = new Map(modules.map((module) => [module.id, module]));
   const routesByKey = new Map(routes.map((route) => [routeKey(route.route), route]));
@@ -162,6 +182,7 @@ export function createWorkplaceModuleRegistry(
     searchProviders,
     contextProviders,
     permissions,
+    aiCapabilities,
     aiTools,
     getModule: (id: ModuleId) => byId.get(id),
     getRoute: (route: AppRoute) => routesByKey.get(routeKey(route)),

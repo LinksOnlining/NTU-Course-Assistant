@@ -208,6 +208,47 @@ test("内置模块通过统一 registry 贡献 route、navigation、settings、s
   assert.deepEqual(workplaceModuleRegistry.aiTools, []);
 });
 
+test("AI capability 权限引用必须存在且注册数据不可变", () => {
+  assert.throws(
+    () =>
+      createWorkplaceModuleRegistry([
+        moduleDefinition({
+          aiCapabilities: [
+            {
+              id: "ai.invalid",
+              moduleId: "workspace",
+              order: 1,
+              name: "无效能力",
+              description: "引用未注册的权限。",
+              requiredPermissions: ["workspace.read"],
+            },
+          ],
+        }),
+      ]),
+    /AI capability ai\.invalid references unknown permission workspace\.read/u,
+  );
+
+  const capabilities = workplaceModuleRegistry.aiCapabilities;
+  assert.deepEqual(
+    capabilities.map(({ id }) => id),
+    ["ai.summary", "ai.planning", "ai.suggestion", "ai.classification"],
+  );
+  assert.ok(Object.isFrozen(capabilities));
+  assert.ok(capabilities.every(({ requiredPermissions }) => Object.isFrozen(requiredPermissions)));
+  const knownPermissions = new Set(workplaceModuleRegistry.permissions.map(({ id }) => id));
+  assert.ok(
+    capabilities.every((capability) =>
+      capability.requiredPermissions.every((permissionId) => knownPermissions.has(permissionId)),
+    ),
+  );
+  assert.deepEqual(
+    workplaceModuleRegistry.navigation.filter(({ moduleId }) => moduleId === "ai"),
+    [],
+  );
+  assert.equal(workplaceModuleRegistry.getModuleState("ai")?.available, false);
+  assert.deepEqual(workplaceModuleRegistry.aiTools, []);
+});
+
 test("不可用模块保留 unsupported route 语义，不会执行隐藏 renderer", () => {
   const route = { area: "workspace", page: "ai" };
   assert.equal(getShellRouteView(route), "unsupported");

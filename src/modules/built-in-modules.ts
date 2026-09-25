@@ -278,6 +278,13 @@ export const BUILT_IN_MODULES = [
         label: "修改规划",
         description: "通过 Planner 应用用例修改个人规划。",
       },
+      {
+        id: "planner.propose",
+        moduleId: "planner",
+        action: "propose",
+        label: "生成规划建议",
+        description: "允许 AI 生成任务、日程或时间块提案；不直接写入，仍需用户确认。",
+      },
     ],
   },
   {
@@ -502,10 +509,44 @@ export const BUILT_IN_MODULES = [
   },
   {
     id: "ai",
-    metadata: { name: "AI", description: "计划能力尚未实现。" },
+    metadata: { name: "AI", description: "AI 运行能力尚未开放。" },
     order: 100,
     available: false,
     enabledByDefault: false,
+    aiCapabilities: [
+      {
+        id: "ai.summary",
+        moduleId: "ai",
+        order: 10,
+        name: "摘要",
+        description: "仅基于本次明确提供且已授权的上下文生成摘要。",
+        requiredPermissions: ["academic.read", "planner.read"],
+      },
+      {
+        id: "ai.planning",
+        moduleId: "ai",
+        order: 20,
+        name: "规划",
+        description: "基于已授权的课表和规划上下文生成待审建议。",
+        requiredPermissions: ["academic.read", "planner.read", "planner.propose"],
+      },
+      {
+        id: "ai.suggestion",
+        moduleId: "ai",
+        order: 30,
+        name: "建议",
+        description: "生成不直接写入业务数据的规划提案。",
+        requiredPermissions: ["planner.read", "planner.propose"],
+      },
+      {
+        id: "ai.classification",
+        moduleId: "ai",
+        order: 40,
+        name: "分类",
+        description: "仅基于已授权的收件箱上下文提供分类建议。",
+        requiredPermissions: ["inbox.read"],
+      },
+    ],
     routes: [
       {
         id: "ai.page",

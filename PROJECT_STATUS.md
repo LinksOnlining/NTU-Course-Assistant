@@ -1,10 +1,10 @@
 # 当前项目状态
 
-- 最后更新：2026-09-25
+- 最后更新：2026-09-26
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4 NOT STARTED。** Ethan 于 2026-09-25 确认 Phase 3.8.2 Windows 11 人工验收全部 PASS。Phase 3.9 修复了开发态 schema 7 被错误地重复执行 6→7 migration 的启动阻断；实际 Debug DB 已验证为完整、可启动的 schema 7，schema 仍为 7。`docs/v2-ai-operation-contract.md` 仅作为未来安全设计材料保留；未实现 AI runtime、Provider、schema 8，也未访问/迁移 Release DB。详情见 `docs/v2-phase-3-9-verification.md`。
+- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4.0 AI Operation Layer Architecture Foundation COMPLETE；Phase 4.1 NOT STARTED。** Ethan 于 2026-09-25 确认 Phase 3.8.2 Windows 11 人工验收全部 PASS。Phase 3.9 修复了开发态 schema 7 被错误地重复执行 6→7 migration 的启动阻断；实际 Debug DB 已验证为完整、可启动的 schema 7，schema 仍为 7。Phase 4.0 建立仅含契约的 AI Application 类型、可替换 Provider 接口、离线 Mock、权限/Context/Proposal/Tool 模型和静态 Registry capability 元数据；AI 模块仍不可用，无真实 Provider/runtime/UI/tool 执行，schema 仍为 7、migration 0。`npm run verify` PASS：259 unit、118 architecture、813 UI PASS / 15 skipped；typecheck、lint、format、frontend build 均通过。未修改 Rust/Tauri/数据库，未运行 Rust 检查或 production build。详情见 `docs/v2-ai-architecture-contract.md` 与 `docs/v2-phase-3-9-verification.md`。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 是唯一外网能力且默认关闭，手动搜索仅在提交后请求 Photon 并只保存最终选中地点，当前位置需明确同意、系统授权和坐标模糊化；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 

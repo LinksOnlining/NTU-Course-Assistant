@@ -1,6 +1,6 @@
 # Links Workplace v2 — AI Operation 安全与权限契约
 
-状态：Phase 4.0 架构契约。当前 SQLite schema 为 7；本文只定义后续实现边界，不代表 AI runtime、Provider 调用、AI 界面或 schema 8 已实现。
+状态：Phase 4.0 安全与权限契约。当前 SQLite schema 为 7；Phase 4.0 已落地类型契约、Mock Provider 与静态 Registry 元数据，但不代表真实 Provider 调用、AI 界面或 schema 8 已实现。
 
 ## 1. 目标与依赖边界
 
@@ -27,7 +27,7 @@ AI 及 Provider 永远不得直接访问 SQLite、raw SQL、Tauri 数据库命�
 - **read**：在每次调用时验证输入、模块可用状态和所需权限，只通过对应模块公开的 Application read API 返回最小必要数据；不得产生副作用。
 - **proposal**：验证输入并生成结构化 `AIProposal`，不得执行任何业务写入。Tool 返回成功不表示 Proposal 已确认或已应用。
 
-Tool contribution 的实现契约至少要能明确表达稳定 ID（`module.action`）、`moduleId`、kind、用途、所需 permission IDs、输入/输出 schema、受校验的 handler 或 proposal builder，以及独立于权限判断的 `riskLevel`。具体 TypeScript 类型在后续实现阶段扩展现有 contribution；Phase 4.0 不改运行时代码。
+Tool contribution 的实现契约至少要能明确表达稳定 ID（`module.action`）、`moduleId`、kind、用途、所需 permission IDs、输入/输出 schema、受校验的 handler 或 proposal builder，以及独立于权限判断的 `riskLevel`。Phase 4.0 在 `src/application/ai/tool.ts` 建立无执行器的类型契约，并在现有 Registry 增加静态 AI capability 元数据；Registry 的 `aiTools` 仍为空，不执行工具。
 
 注册必须拒绝重复 Tool ID、未知模块、未知权限、跨模块错属、无效 schema / contribution 或静默覆盖。Tool ID 稳定且有序；Provider 不能自行声明或注入注册表外的 Tool。
 
@@ -58,7 +58,7 @@ Course、CourseOverride、Exam deadline、Task deadline、Diary body、Inbox raw
 
 ## 5. Proposal 生命周期与确认
 
-建议状态：`pending → stale | rejected | applied | failed`；必要时允许 `expired`。状态转移由应用层管理。Proposal 只是待审建议，不是事实，也不是授权。
+Phase 4.0 的状态模型为 `draft → reviewRequired → approved → applied`，并允许 `rejected`、`failed` 与 `stale` 终态。状态转移由应用层管理；这些状态不表示当前已经有 Proposal 持久化或执行能力。Proposal 只是待审建议，不是事实，也不是授权。
 
 任何写操作必须按以下顺序：
 
@@ -99,4 +99,4 @@ Diary、Inbox、Search result、Task / Planner 描述、Course 内容均是 `Unt
 
 ## 9. Phase 4.0 验收边界
 
-此阶段只交付本契约和必要文档索引更新；不做真实 Provider 请求、AI 页面/运行时、Tool 执行器、权限持久化或 UI，也不修改 SQLite schema。Phase 4.1 才可在隔离测试数据库上依照本契约评审并实施唯一的 schema 7→8 migration 与安全凭据基础；必须保留既有 migration 前备份、单事务、校验、回滚和 future-schema 拒绝门禁，禁止触碰真实 Release 用户数据库。
+Phase 4.0 交付 AI Application 类型契约、可替换 Provider 接口、确定性 Mock、权限策略模型、显式 Context 边界、Proposal 状态模型、无执行器的 Tool 合约、现有 ModuleRegistry 的静态 AI capability 元数据、架构测试及文档。不做真实 Provider 请求、AI 页面/运行时、Tool 执行器、权限持久化或授权 UI，也不修改 SQLite schema。Phase 4.1 尚未开始；以后如评审并实施 schema 7→8 migration，仍须使用隔离测试数据库，并保留既有 migration 前备份、单事务、校验、回滚和 future-schema 拒绝门禁，禁止触碰真实 Release 用户数据库。

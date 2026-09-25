@@ -104,6 +104,13 @@ export interface AIToolContribution {
   readonly permissionIds: readonly string[];
 }
 
+/** 仅描述 AI 能力及其所需模块权限；不绑定实现或执行器。 */
+export interface AICapabilityContribution extends CapabilityContribution {
+  readonly name: string;
+  readonly description: string;
+  readonly requiredPermissions: readonly string[];
+}
+
 export interface WorkplaceModule {
   readonly id: ModuleId;
   readonly metadata: ModuleMetadata;
@@ -116,6 +123,7 @@ export interface WorkplaceModule {
   readonly searchProviders?: readonly CapabilityContribution[];
   readonly contextProviders?: readonly CapabilityContribution[];
   readonly permissions?: readonly PermissionDefinition[];
+  readonly aiCapabilities?: readonly AICapabilityContribution[];
   readonly aiTools?: readonly AIToolContribution[];
 }
 
