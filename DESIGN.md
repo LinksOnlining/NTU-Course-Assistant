@@ -6,6 +6,7 @@
 
 - 当前 v2 产品需求单一事实来源：[`PROJECT_BRIEF.md`](PROJECT_BRIEF.md)。
 - 当前 v2 架构及依赖方向契约：[`docs/v2-architecture-contract.md`](docs/v2-architecture-contract.md)。
+- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS。Phase 4.0 只建立 [`docs/v2-ai-operation-contract.md`](docs/v2-ai-operation-contract.md) 安全与权限契约；当前 schema 7、没有 Provider 调用或 AI runtime。
 - 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。此引用不表示 v2 runtime 已实现。
 
 ## 技术方案
@@ -119,7 +120,7 @@ Phase 7.4 将 geometry 统一为 Tauri physical pixels：Widget WebView 保存 `
 
 Phase 8 使用官方 Tauri 2 Tray API。在 setup 中只创建一个 `main-tray`，它与唯一 scheduler、主窗口和最多一个 widget 同属一个进程。Tray 与 single-instance、Widget“打开课程表”复用 `show_main_window`，统一执行 unminimize、show、focus；主窗口 CloseRequested 只 hide，Tray 的显式退出调用 app exit，因此不会被窗口 close 拦截。Tray widget 切换读取和保存既有 `WidgetSettings`，不引入第二份状态或新 schema。正式图标源保留在 `assets/branding/app-icon-source.png`，应用 ICO 保留 16、24、32、48、64、128、256 像素图层；Tray 使用同品牌的小尺寸日历/铃铛 PNG。提醒设置中的测试通知只调用正式 Windows notification adapter，不参与 scheduler、Course、SQLite 或 handled 状态。
 
-Phase 4（教务系统导入）已由用户取消，不继续实现相关功能。
+历史路线中的 Phase 4（教务系统直接导入）已由用户取消，不继续实现该功能；这与 Links Workplace v2.0 的 Phase 4 AI Operation Layer 不同，后者按当前单独授权执行并受 AI 安全契约约束。
 
 ## 选型依据（2026-09-08 核查）
 

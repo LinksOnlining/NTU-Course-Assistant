@@ -208,3 +208,7 @@ Phase 3.6 启用 `workspace/search` 本机统一搜索，覆盖 Course、Academi
 ## 7.40 Phase 3.M Module Extension Architecture
 
 内部模块采用源码编译期 `WorkplaceModuleRegistry`：稳定 Module ID 声明模块 metadata、typed Route、Navigation、Settings、Search/Context provider 与 Permission/AITool 元数据。注册只负责验证、能力发现和稳定排序，不访问业务数据或 SQLite；启动后不可变，且区分 registered、available、enabled。Shell / 设置消费统一 registration；Search Core 通过各模块公开 Application API 的 provider 聚合结果并隔离失败；Context provider 按 ID 只获得自己的结构化输入（Diary boolean、Inbox count、Weather-only snapshot、Routine suggestion inputs）。Permission 与未来 AI Tool 目前仅为元数据契约，不实现权限界面、AI 或执行器。数据库迁移仍由中央基础设施负责；不开放任意 Dashboard / Timeline contributions。运行时第三方插件系统 NOT IMPLEMENTED BY DESIGN。详见 `docs/v2-module-extension-contract.md`。
+
+## 7.41 Phase 4.0 AI Operation Security Contract
+
+Phase 3.8.2 的 Windows 11 人工验收于 2026-09-25 由 Ethan 确认 PASS（地点搜索、当前位置、离线/Provider 失败降级、来源说明/隐私/后台请求行为）；记录见 `docs/v2-phase-3-verification.md`。当前 SQLite schema 为 7。Phase 4.0 仅定义 AI Provider、Tool、PermissionGate、Proposal、隐私、提示注入与 schema 8 提案，详见 `docs/v2-ai-operation-contract.md`；AI 不得直达 Repository/DB，所有写入须经 Proposal、Preview、Revalidation、用户明确确认与 Application UseCase。Phase 4.0 不调用 Provider、不提供 runtime AI UI、不执行 schema migration；Phase 4 后续如确需迁移，只允许单次 `7 → 8`，并遵循隔离数据库与既有备份/事务/回滚门禁。

@@ -86,7 +86,7 @@ Clean Minimal Desktop Workspace：清晰、安静、高信息密度、不拥挤�
 
 - 继续使用现有 Tauri 2 + React + TypeScript + Rust + SQLite 应用和同一用户数据，不创建第二个 Academic DB。
 - 技术 identifier `com.ntu-course-assistant.desktop` 和 `courses.sqlite3` 保持不变；GitHub repo / updater source 在专门迁移任务前保持不变。品牌名与技术身份不得混为一谈。
-- 当前 schema 为 5。未来 Workspace tables 复用同一 DB；任何 schema bump 必须先完成 migration backup/recovery gate。UI 不直连 DB，Workspace 不绕过 Application API 访问 Academic 内部表。
+- 当前 SQLite schema 为 7。未来 Workspace tables 复用同一 DB；任何 schema bump 必须先完成 migration backup/recovery gate。Phase 4 AI 设计只允许评审一次 `7 → 8` migration，API Key 必须在系统安全凭据存储中，绝不进入 SQLite 或备份。UI 不直连 DB，Workspace 不绕过 Application API 访问 Academic 内部表。
 - Weather 可访问外部服务，但离线或服务故障不能破坏本地核心功能。AI 网络不可用不能妨碍 Academic、Planner、Tasks、Diary、Inbox、Timeline、Reminder 或本地 Search。
 - AI key 必须放系统安全凭据存储，不入 DB、不入 backup。
 

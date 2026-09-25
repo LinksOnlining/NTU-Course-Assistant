@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3.8.2 Weather Geocoding Reliability Fix 已实现，自动验证及 Tauri production build PASS；Windows 11 Tauri 实际界面验收 PENDING。** 修正 Photon 不支持 `lang=zh` 导致的 HTTP 400，改为 `lang=default`；Photon / Nominatim 地理编码改走 Rust Native HTTP，天气预报仍独立使用 Open-Meteo；前向搜索 HTTP 200 空结果不再偷偷改写 query 重试。最终 `npm run verify`：253 Unit、114 Architecture、804 UI PASS / 15 条件跳过；Rust 74 tests、fmt、clippy PASS。完整诊断与产物见 `docs/v2-phase-3-verification.md`。Schema 仍为 7、应用版本仍为 1.3.1；没有运行 production EXE、安装包或访问真实用户 DB。真实 Windows 天气界面验收仍待 Ethan 执行，故 Phase 3.8.2 还不能标为人工验收 PASS；Phase 4 保持 NOT STARTED。不得自动进入 Phase 4、品牌迁移、版本升级、安装/updater E2E、push、tag 或 Release。
+- **当前状态：Phase 3.8.2 COMPLETE；Phase 4.0 AI Operation Layer 架构与安全契约 COMPLETE。** Ethan 于 2026-09-25 确认 Windows 11 实机的手动地点搜索、当前位置、离线/Provider 失败降级、来源说明/隐私/后台请求行为均 PASS。Phase 4.0 已建立安全/权限/工具/Proposal/Provider 与 schema 8 提案契约；`npm run verify` PASS，未进行真实 Provider 调用、运行时 AI UI 或 schema migration。当前 schema 仍为 7、应用版本仍为 1.3.1。下一阶段：Phase 4.1 — schema 7→8、安全凭据存储与 Provider Native Transport。Phase 3.8.2 记录见 `docs/v2-phase-3-verification.md`；Phase 4.0 契约见 `docs/v2-ai-operation-contract.md`。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 是唯一外网能力且默认关闭，手动搜索仅在提交后请求 Photon 并只保存最终选中地点，当前位置需明确同意、系统授权和坐标模糊化；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 

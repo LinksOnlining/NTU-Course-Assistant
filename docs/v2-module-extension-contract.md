@@ -28,7 +28,7 @@
 | Search | 每个实际提供搜索能力的模块通过自己的 Application SearchProvider 读取数据；Search Core 只并行调用 provider、隔离失败、合并索引并做确定性排序。 | Search Core 不读取模块 SQLite 表、不依赖模块 Repository；TimeBlock 不单独重复搜索。Diary / Inbox 正文只用于本机匹配与短摘要。搜索类别可由新模块声明扩展。 |
 | Context | `WorkspaceContextProvider` 按 provider ID 绑定，只有其自己的结构化输入；片段字段可由模块声明扩展，单个 provider 异常被隔离。 | Diary 仅 `hasDiaryToday`；Inbox 仅待整理数量；Weather 只拿天气快照，不拿个人模块输入；Routine provider 复用既有建议用例。不得传入日记正文、Inbox 原文或跨模块个人内容。 |
 | Permission | `PermissionDefinition` 只定义稳定的 `module.action` 元数据，当前用于架构扩展准备。 | 目前没有权限 UI、授权持久化或执行 Gate；Diary 权限域始终独立，不存在覆盖它的 `workspace.read`。 |
-| Future AI Tool | `AIToolContribution` 只描述工具 ID、所属模块和所需权限。 | 当前注册为空；不调用 LLM、不执行工具。将来执行路径必须经 AITool Registry → Permission Gate → Application UseCase → Repository，绝不直达 SQLite。 |
+| Future AI Tool | `AIToolContribution` 只描述工具 ID、所属模块和所需权限。 | 当前注册为空；不调用 LLM、不执行工具。Phase 4 继续复用本 registry 与 `module.action` 权限元数据，不创建第二套 Module Registry / scope；执行路径必须经 AITool Registry → Permission Gate → Application UseCase → Repository，绝不直达 SQLite。安全、Proposal、Provider 与 schema 8 边界见 `docs/v2-ai-operation-contract.md`。 |
 
 ## 依赖与隐私规则
 

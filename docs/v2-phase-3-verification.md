@@ -173,7 +173,7 @@
 
 ## Phase 3.8.2 — Weather Geocoding Reliability Fix
 
-**状态：实现、自动回归、live provider 诊断与 Tauri production build PASS；Windows 11 实际界面验收 PENDING。不得据此进入 Phase 4。**
+**状态：实现、自动回归、live provider 诊断、Tauri production build 与 Windows 11 人工验收均 PASS；Phase 3.8.2 COMPLETE。**
 
 ### 根因与边界
 
@@ -212,17 +212,19 @@ Production artifacts（2026-09-25，临时构建目录 `%TEMP%\links-workplace-p
 | `NTU Course Assistant_1.3.1_x64_en-US.msi` | 54,267,904 |
 | `NTU Course Assistant_1.3.1_x64_en-US.msi.sig` | 436 |
 
-### 尚待 Ethan 执行：Windows 11 Tauri 人工验收
+### Windows 11 Tauri 人工验收
 
-Codex 未使用 Computer Use，未启动 production EXE、未安装构建产物，也未打开或触碰真实用户数据库。以下实机项目必须由 Ethan 在 Windows 11 的真实 Tauri 窗口确认；当前均为 **PENDING（不是 PASS）**：
+Ethan 于 **2026-09-25** 确认以下真实 Windows 11 人工结果；此记录来自用户报告，Codex 未代替用户操作桌面：
 
-1. 打开天气设置并启用天气，搜索 `南通大学`、`崇川区`；结果应能显示/选择，选择后天气预报使用所选坐标。
-2. 使用当前位置：依次看到“正在定位 / 正在解析地点 / 正在获取天气”；若无法解析名称，仍可用模糊坐标获取天气，不伪造地点名。
-3. 断网或制造 provider 错误后，天气显示对应错误且可重试；Dashboard、Settings 与课表仍保持可操作。
-4. 确认地点 / 天气 attribution 可见，关闭天气后没有 geocoding/forecast 后台请求。
+| 项目 | 结果 |
+| --- | --- |
+| 手动地点搜索 | PASS |
+| 使用当前位置 | PASS |
+| 离线 / Provider 失败降级 | PASS |
+| 来源说明、隐私与后台请求行为 | PASS |
 
 ### 阶段状态
 
-- Phase 3.8.2 自动验证与 production build：**PASS**；Windows 11 Tauri 人工验收：**PENDING**。
-- Phase 4：**NOT STARTED**，等待 Ethan / ChatGPT 明确确认。
+- Phase 3.8.2 自动验证、production build 与 Windows 11 Tauri 人工验收：**PASS**；Phase 3.8.2：**COMPLETE**。
+- Phase 4.0 起始硬门禁：branch `v2/workspace-rebase`、HEAD `3838cb807975b3937805a9a0fc2f74dbc19cfc93`、工作区 clean、`git diff --check` PASS；按 Ethan 授权进入 Phase 4.0。Phase 4.0 完成前不执行 schema 变更或 Provider 请求。
 - 未运行 production EXE / installer、未访问真实用户 DB；未 push、未创建 tag、未发布 Release。

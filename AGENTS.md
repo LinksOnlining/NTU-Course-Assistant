@@ -39,8 +39,8 @@ Planner 领域边界：`PersonalTask` deadline 不占时间轴；Academic Course
 
 - Tauri identifier `com.ntu-course-assistant.desktop`、`courses.sqlite3` 文件名、GitHub 仓库及 updater 来源在专门迁移任务前保持不变。不得仅为品牌整洁而更改；identifier 变更须先有数据迁移设计、Windows installer/updater E2E 和 Ethan 明确批准。
 - React 界面品牌与 Tauri `productName`、系统窗口标题、Tray、安装器和 updater 身份分开迁移；系统级品牌变更必须经过独立兼容任务。
-- 当前 SQLite schema 为 6。Phase 2 已建立 migration 前 `VACUUM INTO` 备份、事务迁移、数据校验和失败回滚；Phase 3 只允许在其上新增一条 `6 → 7` 迁移，不得访问真实用户数据库。
-- Presentation 不直接访问 SQLite；Workspace 不绕过 Application API 读取 Academic 内部表；AI 不直接访问 Repository 或 DB。
+- 当前 SQLite schema 为 7。Phase 2/3 migration 使用 migration 前 `VACUUM INTO` 备份、事务迁移、数据校验和失败回滚；Phase 3 的 `6 → 7` 已完成。Phase 4 若实施数据库变更，只允许依照 `docs/v2-ai-operation-contract.md` 评审的一次 `7 → 8` migration，并在隔离测试数据库验证，禁止触碰真实 Release 用户数据库。
+- Presentation 不直接访问 SQLite；Workspace 不绕过 Application API 读取 Academic 内部表；AI 不直接访问 Repository、raw SQL、Tauri DB command 或 SQLite。AI 读写、权限与 Proposal 边界以 `docs/v2-ai-operation-contract.md` 为准；所有写入必须经过 Proposal、Preview、Revalidation、真实用户确认和 Application UseCase。
 
 ## Phase 3 Personal Context 隐私边界
 
