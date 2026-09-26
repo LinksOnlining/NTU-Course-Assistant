@@ -1,24 +1,20 @@
 # Links Workplace v2 — AI Operation 安全与权限契约
 
-状态：Phase 4.0 安全与权限契约。当前 SQLite schema 为 7；Phase 4.0 已落地类型契约、Mock Provider 与静态 Registry 元数据，但不代表真实 Provider 调用、AI 界面或 schema 8 已实现。
+状态：Phase 4.0 安全与权限契约；Phase 4.1 Provider 基础与 Phase 4.2 读取权限 / Context Runtime 已完成。SQLite schema 仍为 7。AI Tool 执行、Proposal 应用、AI 对话与 schema 8 均未实现。
 
 ## 1. 目标与依赖边界
 
 AI 是可选能力，默认关闭、未配置。AI 不属于启动依赖，不能影响 Academic、Planner、Task、Diary、Inbox、Weather、Reminder、Search 或离线工作。
 
-唯一允许的执行方向：
+数据读取方向：
 
 ```text
-Presentation → AI Application → AIProvider / AIToolRegistry
-                                      ↓
-                               PermissionGate
-                                      ↓
-                               Application UseCase
-                                      ↓
-                               Repository / SQLite
+显式请求 → AiPermissionGate → 已授权模块 Application Query
+          → 固定 Context Projector → 脱敏 / 预算 → AiContextBundle
+          → 未来由用户显式触发的 AIProvider
 ```
 
-AI 及 Provider 永远不得直接访问 SQLite、raw SQL、Tauri 数据库命令或 Repository 实现。业务写入只能通过已有模块公开的 Application UseCase 完成。复用 `WorkplaceModuleRegistry`、`AIToolContribution` 与 `PermissionDefinition`；不得另建第二套 Module Registry 或权限 scope 字符串体系。模块注册层只描述和校验静态 contribution，不持有用户授权或业务状态。
+AI 与 Provider 永远不得直接访问 SQLite、raw SQL、Tauri 数据库命令或 Repository 实现。Phase 4.2 的 Context Builder 只消费由模块公开 Application Query / UseCase 提供的 Snapshot，且只将处理完成的 Bundle 交给 Provider。业务写入仍只能通过模块公开 Application UseCase；本阶段没有写入路径。复用 `WorkplaceModuleRegistry` 与 `PermissionDefinition`，不另建 Module Registry 或 Provider-defined permission scope。模块注册层只描述和校验静态 contribution，不持有用户授权或业务状态。
 
 ## 2. Tool 类型与注册
 
@@ -31,15 +27,15 @@ Tool contribution 的实现契约至少要能明确表达稳定 ID（`module.act
 
 注册必须拒绝重复 Tool ID、未知模块、未知权限、跨模块错属、无效 schema / contribution 或静默覆盖。Tool ID 稳定且有序；Provider 不能自行声明或注入注册表外的 Tool。
 
-## 3. PermissionGate
+## 3. Runtime PermissionGate（Phase 4.2）
 
-权限标识沿用已有 `module.action`，不使用 Provider 自定义的 scope。新权限默认 DENY；只有用户在应用真实 UI 中主动授予后才可读取。每次 Tool 调用以及 Proposal 确认时都必须重新检查授权，撤销后立即生效。
+权限沿用稳定 `module.action` ID，不接受 Provider 自定义 scope。运行时 Gate 默认拒绝未知 scope、空 scope、未授权 scope、敏感 scope 无有效 request grant，以及所有尚未启用的 mutation scope。
 
-- 不存在 `workspace.read` 一键读取全部模块的授权。
-- `diary.read` 与 `inbox.read` 分别授权，默认关闭；任何通用授权都不能隐含授权这两项。授权 Diary 读取时必须显示额外隐私说明。
-- `search.read` 不能越过来源模块权限；未获 `diary.read` 时不得通过 Search 返回日记内容，Inbox 同理。
-- `context.read` 仅能取得 Phase 3 已定义的非敏感结构化 Context；不得加入 Diary 正文、Inbox 原文、精确 GPS 或宽泛跨模块个人资料。
-- `riskLevel` 用于确认 UI 和风险提示，不能替代 permission check，也不能提升授权。
+持久读取白名单为 `workspace.read`、`academic.read`、`planner.read`、`routine.read`、`weather.read`；Settings → AI → 数据访问中均默认关闭。`workspace.read` 仅给有限聚合摘要，不含 Diary 正文、Inbox raw、Task/Event 隐藏备注或任意完整模块实体。各模块 scope 独立，不存在超级权限。
+
+`diary.body.read` 与 `inbox.raw.read` 只允许由可信 Application orchestration 在当前请求明确选择具体对象、显示相应隐私说明并征得用户同意后发放一次性 grant。grant 绑定 request ID 和一个对象，只在内存中使用一次；不能写入 settings、localStorage 或其他持久化。当前没有 Diary AI / Inbox AI 工作流，所以尚未实现真正 consent dialog，也不会产生实际敏感读取请求。旧的 `diary.read` / `inbox.read` 兼容定义不授权正文或原文。
+
+Mutation / proposal / apply scope 保留为契约，但在 Phase 4.2 不活动并一律 DENY。Phase 4.3+ 的 Tool 调用或 Proposal 确认仍须在执行时重新检查授权；本节不代表那些运行时已经存在。
 
 ## 4. 数据能力边界
 
@@ -49,8 +45,8 @@ Tool contribution 的实现契约至少要能明确表达稳定 ID（`module.act
 | Exam | 有对应读取权限时只读；禁止修改考试或截止日期。 |
 | PersonalTask | 可按权限读取；允许生成 Task 创建/截止日期修改 Proposal，必须展示旧值与新值；禁止直接写入。 |
 | PlannerEvent / TimeBlock | 只能依据已授权的 Planner Application API 读取；任何创建或修改只能生成 Proposal，不得直接写入。 |
-| Diary | `diary.read` 独立授权后才可读；Phase 4 不提供 Diary 写 Tool。聊天建议文本不自动写回日记。 |
-| Inbox | `inbox.read` 独立授权后才可读；Phase 4 不开放 Inbox 写入，尤其不得修改 rawText。 |
+| Diary | 普通摘要仅允许 `workspace.read` 的 `hasDiaryToday` / 日期状态；正文 `diary.body.read` 必须是当前请求、当前对象的一次性授权。Phase 4.2 不提供 Diary AI 工作流或写入。 |
+| Inbox | 普通摘要仅允许 `workspace.read` 的 pending 数量；原文 `inbox.raw.read` 必须是当前请求、当前对象的一次性授权。Phase 4.2 不提供 Inbox AI 工作流或写入。 |
 | Weather / Routine | 仅通过各自授权的公开 Application API 读取有限结果；不扩展精确位置或其他个人数据。后续确需变更时仍走 Proposal。 |
 | Workspace Context / Search | 只提供用户已授权且当前请求必要的最小结果；不能成为模块权限旁路。 |
 
@@ -99,4 +95,10 @@ Diary、Inbox、Search result、Task / Planner 描述、Course 内容均是 `Unt
 
 ## 9. Phase 4.0 验收边界
 
-Phase 4.0 交付 AI Application 类型契约、可替换 Provider 接口、确定性 Mock、权限策略模型、显式 Context 边界、Proposal 状态模型、无执行器的 Tool 合约、现有 ModuleRegistry 的静态 AI capability 元数据、架构测试及文档。不做真实 Provider 请求、AI 页面/运行时、Tool 执行器、权限持久化或授权 UI，也不修改 SQLite schema。Phase 4.1 尚未开始；以后如评审并实施 schema 7→8 migration，仍须使用隔离测试数据库，并保留既有 migration 前备份、单事务、校验、回滚和 future-schema 拒绝门禁，禁止触碰真实 Release 用户数据库。
+Phase 4.0 的历史交付范围包括 AI Application 类型契约、可替换 Provider 接口、确定性 Mock、静态权限策略、Proposal 状态模型、无执行器 Tool 合约与 Registry 元数据。当前 Phase 4.1 Provider 基础和 Phase 4.2 runtime read permissions / Context Builder 已另行完成；SQLite schema 仍为 7。未来如评审并实施 schema migration，仍须使用隔离测试数据库，并保留备份、事务、验证、回滚与 future-schema 拒绝门禁，禁止触碰真实 Release 用户数据库。
+
+## 10. Phase 4.2 Runtime Read / Context
+
+Context permission 使用 `workspace.read`、`academic.read`、`planner.read`、`routine.read`、`weather.read` 五个默认关闭的持久读取项。受限范围、敏感字段和 one-shot grant 以 `docs/v2-ai-architecture-contract.md` 及 `docs/v2-phase-4-2-verification.md` 为准。Gate → module source → allowlist projection → budget/redaction → Bundle 的流水线完成后，未来才可由明确调用者把 Bundle 传给 Provider；Phase 4.2 本身不触发 Provider 网络。
+
+`diary.body.read` / `inbox.raw.read` grant 只能通过不从公开 AI barrel 导出的内部 Application grant issuer 创建，并由 WeakSet 一次性校验；grant 本身不进入 settings。所有写操作、Tool Runtime、Proposal Apply 仍未启用。Context source 失败被单独隔离并只记安全类别，不影响应用其它模块。

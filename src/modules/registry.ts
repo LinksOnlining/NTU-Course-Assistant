@@ -2,6 +2,7 @@ import type { AppRoute } from "../navigation/types.ts";
 import { BUILT_IN_MODULES } from "./built-in-modules.ts";
 import type {
   AICapabilityContribution,
+  AIContextContribution,
   AIToolContribution,
   CapabilityContribution,
   ModuleId,
@@ -22,6 +23,7 @@ export interface WorkplaceModuleRegistry {
   readonly contextProviders: readonly CapabilityContribution[];
   readonly permissions: readonly PermissionDefinition[];
   readonly aiCapabilities: readonly AICapabilityContribution[];
+  readonly aiContextProviders: readonly AIContextContribution[];
   readonly aiTools: readonly AIToolContribution[];
   getModule(id: ModuleId): WorkplaceModule | undefined;
   getRoute(route: AppRoute): RouteContribution | undefined;
@@ -87,6 +89,7 @@ export function createWorkplaceModuleRegistry(
     validateOwnership(module, module.contextProviders, "context provider");
     validateOwnership(module, module.permissions, "permission");
     validateOwnership(module, module.aiCapabilities, "AI capability");
+    validateOwnership(module, module.aiContextProviders, "AI context provider");
     validateOwnership(module, module.aiTools, "AI tool");
   }
 
@@ -101,6 +104,7 @@ export function createWorkplaceModuleRegistry(
       contextProviders: freezeItems(module.contextProviders ?? []),
       permissions: freezeItems(module.permissions ?? []),
       aiCapabilities: freezeItems(module.aiCapabilities ?? []),
+      aiContextProviders: freezeItems(module.aiContextProviders ?? []),
       aiTools: freezeItems(module.aiTools ?? []),
     }),
   );
@@ -128,6 +132,9 @@ export function createWorkplaceModuleRegistry(
   const aiCapabilities = freezeItems(
     modules.flatMap((module) => module.aiCapabilities ?? []).sort(compareOrdered),
   );
+  const aiContextProviders = freezeItems(
+    modules.flatMap((module) => module.aiContextProviders ?? []).sort(compareOrdered),
+  );
 
   assertUnique(routes, (route) => route.id, "route id");
   assertUnique(routes, (route) => routeKey(route.route), "route");
@@ -138,6 +145,7 @@ export function createWorkplaceModuleRegistry(
   assertUnique(contextProviders, (provider) => provider.id, "context provider id");
   assertUnique(permissions, (permission) => permission.id, "permission id");
   assertUnique(aiCapabilities, (capability) => capability.id, "AI capability id");
+  assertUnique(aiContextProviders, (provider) => provider.id, "AI context provider id");
   assertUnique(aiTools, (tool) => tool.id, "AI tool id");
 
   const routeOwners = new Map(routes.map((route) => [routeKey(route.route), route.moduleId]));
@@ -150,6 +158,7 @@ export function createWorkplaceModuleRegistry(
   }
 
   const permissionIds = new Set(permissions.map((permission) => permission.id));
+  const permissionsById = new Map(permissions.map((permission) => [permission.id, permission]));
   for (const permission of permissions) {
     if (permission.id !== `${permission.moduleId}.${permission.action}`) {
       throw new Error(`Invalid permission id: ${permission.id}`);
@@ -171,6 +180,33 @@ export function createWorkplaceModuleRegistry(
       }
     }
   }
+  for (const provider of aiContextProviders) {
+    const permission = permissionsById.get(provider.permissionId);
+    if (!permission || permission.moduleId !== provider.moduleId) {
+      throw new Error(
+        `AI context provider ${provider.id} references an unknown or foreign permission ${provider.permissionId}`,
+      );
+    }
+    if (provider.sensitivity === "standard") {
+      if (permission.id !== `${provider.moduleId}.read` || permission.action !== "read") {
+        throw new Error(
+          `Standard AI context provider ${provider.id} must use its module read permission`,
+        );
+      }
+    } else {
+      const expectedSensitivePermission =
+        provider.moduleId === "diary"
+          ? "diary.body.read"
+          : provider.moduleId === "inbox"
+            ? "inbox.raw.read"
+            : null;
+      if (permission.id !== expectedSensitivePermission) {
+        throw new Error(
+          `Sensitive AI context provider ${provider.id} must use a supported item-scoped permission`,
+        );
+      }
+    }
+  }
 
   const byId = new Map(modules.map((module) => [module.id, module]));
   const routesByKey = new Map(routes.map((route) => [routeKey(route.route), route]));
@@ -183,6 +219,7 @@ export function createWorkplaceModuleRegistry(
     contextProviders,
     permissions,
     aiCapabilities,
+    aiContextProviders,
     aiTools,
     getModule: (id: ModuleId) => byId.get(id),
     getRoute: (route: AppRoute) => routesByKey.get(routeKey(route)),

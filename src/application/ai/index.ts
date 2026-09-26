@@ -1,5 +1,6 @@
 export * from "./capability.ts";
 export * from "./context.ts";
+export * from "./context-builder.ts";
 export * from "./deepseek-provider.ts";
 export * from "./mock-provider.ts";
 export * from "./permission.ts";

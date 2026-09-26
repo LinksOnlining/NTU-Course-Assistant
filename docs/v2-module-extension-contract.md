@@ -1,12 +1,12 @@
 # Links Workplace v2.0 — Module Extension Contract
 
-状态：Phase 3.M 基础契约；Phase 4.0 仅扩展静态 AI capability 元数据。仍为编译期内部模块扩展，不改变产品版本、SQLite schema 或模块业务事实。
+状态：Phase 3.M 基础契约；Phase 4.0 扩展静态 AI capability 元数据；Phase 4.2 增加 AI Context source 元数据与 Application-level runtime permission/context builder。模块仍为编译期内部扩展，不改变 SQLite schema 或模块业务事实。
 
 ## 目的与非目标
 
 通过稳定的 Module ID 和统一 contributions，让内置模块逐步接入 Route、Navigation、Settings、Search、Context、权限与 AI capability 元数据。Academic / Planner 继续沿用已稳定的页面与 Application API；Diary、Inbox、Weather、Routine、Search 通过轻量注册适配器接入，不要求一次性全面插件化。
 
-本契约只支持源码编译时注册的内部模块。它不支持第三方运行时插件、DLL、远程代码、JS eval、插件安装包、插件商店或运行时增删模块；也不实现 AI runtime、工具执行、权限 UI、任意 Dashboard 卡片或 Timeline 插件。
+本契约只支持源码编译时注册的内部模块。它不支持第三方运行时插件、DLL、远程代码、JS eval、插件安装包、插件商店或运行时增删模块；不实现 AI Tool 执行、Proposal 应用、任意 Dashboard 卡片或 Timeline 插件。Phase 4.2 的权限设置与只读 Context Runtime 不是可安装插件系统。
 
 ## ModuleRegistry 与声明
 
@@ -26,8 +26,8 @@
 | Navigation | Shell 按 `placement`、`order` 和注册 metadata 生成产品模式、课表子导航及 Header 操作。 | 入口必须指向本模块已注册的 typed route；无模块名分支表。 |
 | Settings | 设置分组和页面顺序由 `SettingsContribution` 生成；可选静态页面 renderer 由统一设置呈现边界消费。 | 新页面以自身 contribution 注册；既有作息、提醒等稳定设置继续使用当前实现，不进行大规模迁移。 |
 | Search | 每个实际提供搜索能力的模块通过自己的 Application SearchProvider 读取数据；Search Core 只并行调用 provider、隔离失败、合并索引并做确定性排序。 | Search Core 不读取模块 SQLite 表、不依赖模块 Repository；TimeBlock 不单独重复搜索。Diary / Inbox 正文只用于本机匹配与短摘要。搜索类别可由新模块声明扩展。 |
-| Context | `WorkspaceContextProvider` 按 provider ID 绑定，只有其自己的结构化输入；片段字段可由模块声明扩展，单个 provider 异常被隔离。 | Diary 仅 `hasDiaryToday`；Inbox 仅待整理数量；Weather 只拿天气快照，不拿个人模块输入；Routine provider 复用既有建议用例。不得传入日记正文、Inbox 原文或跨模块个人内容。 |
-| Permission | `PermissionDefinition` 只定义稳定的 `module.action` 元数据，当前用于架构扩展准备。 | 目前没有权限 UI、授权持久化或执行 Gate；Diary 权限域始终独立，不存在覆盖它的 `workspace.read`。 |
+| Context | Phase 3 `WorkspaceContextProvider` 仍是确定性工作台 Context；Phase 4.2 AI Context 经 registry 的 `aiContextProviders` 元数据 + `AiContextBuilder` 单独组装，只调用被 Gate 允许的模块 source。 | 两条 Context 边界不互相替代。AI DTO 经过固定 projector 与预算；Diary body / Inbox raw 只允许当前请求、所选对象的一次性授权，不进入普通 Workspace 摘要。 |
+| Permission | `PermissionDefinition` 描述稳定的 `module.action`；Phase 4.2 `AiPermissionGate` 对运行请求默认拒绝，AI 数据访问 UI 只保存白名单中的稳定读取 ID。 | 普通 scope 默认关闭；不存在全模块超级授权。`diary.body.read` / `inbox.raw.read` 不可长期保存，仅可信 orchestration 可签发一次性 grant。注册能力不等于授权；mutation 始终 inactive。 |
 | AI Capability | Phase 4.0 的 AI 能力描述以静态 `AICapabilityContribution` 接入现有 Registry，并验证所需权限引用。 | 只描述摘要、规划、建议和分类能力；不启用 AI 模块，不新增导航或页面，不绑定 Provider 或执行逻辑。 |
 | Future AI Tool | `AIToolContribution` 只描述工具 ID、所属模块和所需权限。 | `aiTools` 当前仍为空；不调用 LLM、不执行工具。继续复用本 Registry 与 `module.action` 权限元数据，不创建第二套 Module Registry / scope；执行路径必须经 AITool Registry → Permission Gate → Application UseCase → Repository，绝不直达 SQLite。安全、Proposal、Provider 与 schema 8 边界见 `docs/v2-ai-operation-contract.md`。 |
 

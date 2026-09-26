@@ -111,6 +111,13 @@ export interface AICapabilityContribution extends CapabilityContribution {
   readonly requiredPermissions: readonly string[];
 }
 
+/** 只声明 AI 可请求的最小模块快照边界，不绑定查询实现或授权状态。 */
+export interface AIContextContribution extends CapabilityContribution {
+  readonly permissionId: string;
+  readonly sensitivity: "standard" | "sensitive";
+  readonly priority: number;
+}
+
 export interface WorkplaceModule {
   readonly id: ModuleId;
   readonly metadata: ModuleMetadata;
@@ -124,6 +131,7 @@ export interface WorkplaceModule {
   readonly contextProviders?: readonly CapabilityContribution[];
   readonly permissions?: readonly PermissionDefinition[];
   readonly aiCapabilities?: readonly AICapabilityContribution[];
+  readonly aiContextProviders?: readonly AIContextContribution[];
   readonly aiTools?: readonly AIToolContribution[];
 }
 

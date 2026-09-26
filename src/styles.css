@@ -1008,6 +1008,71 @@ select:focus-visible {
 .ai-settings-save-timeout {
   justify-self: start;
 }
+.ai-data-access-disclosure {
+  margin: 0;
+  padding: 9px 11px;
+  border-left: 3px solid var(--accent-border);
+  border-radius: 5px;
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ai-data-access-list {
+  display: grid;
+  gap: 7px;
+}
+.ai-data-access-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--surface-primary);
+  cursor: pointer;
+}
+.ai-data-access-option input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--accent-primary);
+}
+.ai-data-access-option span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.ai-data-access-option strong,
+.ai-data-access-sensitive strong {
+  color: var(--text-label);
+  font-size: 12px;
+}
+.ai-data-access-option small,
+.ai-data-access-sensitive p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.ai-data-access-sensitive {
+  padding: 10px 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--surface-secondary);
+}
+.ai-data-access-sensitive-list {
+  display: grid;
+  gap: 7px;
+}
+.ai-data-access-sensitive p {
+  margin-top: 4px;
+}
+.ai-data-access-option:focus-within {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 @media (max-width: 650px) {
   .settings-domain-layout {
     grid-template-columns: 112px minmax(0, 1fr);

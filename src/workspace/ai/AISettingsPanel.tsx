@@ -11,6 +11,11 @@ import {
   type AiProviderSettings,
   type AiReasoningEffort,
 } from "../../application/ai/settings.ts";
+import {
+  AI_PERSISTENT_READ_PERMISSION_IDS,
+  type AiPersistentReadPermissionId,
+} from "../../application/ai/permission.ts";
+import { workplaceModuleRegistry } from "../../modules/registry.ts";
 import { aiSettingsService } from "./ai-settings-service.ts";
 
 const MODEL_LABELS: Record<(typeof AI_MODEL_IDS)[number], string> = {
@@ -61,6 +66,10 @@ export function AISettingsPanel() {
   const [activeDiscovery, setActiveDiscovery] = useState<"test" | "refresh" | null>(null);
   const [models, setModels] = useState<readonly DeepSeekModel[] | null>(null);
   const [settingsMessage, setSettingsMessage] = useState("");
+  const [dataAccessSettings, setDataAccessSettings] = useState(() =>
+    aiSettingsService.loadDataAccessSettings(),
+  );
+  const [dataAccessMessage, setDataAccessMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -92,6 +101,20 @@ export function AISettingsPanel() {
     setTimeoutDraft(String(next.requestTimeoutSeconds));
     setSettingsMessage("设置已保存到此设备。");
     return true;
+  }
+
+  function setPersistentReadAccess(permissionId: AiPersistentReadPermissionId, allowed: boolean) {
+    const grants = new Set(dataAccessSettings.persistentGrants);
+    if (allowed) grants.add(permissionId);
+    else grants.delete(permissionId);
+    const persistentGrants = AI_PERSISTENT_READ_PERMISSION_IDS.filter((id) => grants.has(id));
+    const next = { persistentGrants };
+    if (!aiSettingsService.saveDataAccessSettings(next)) {
+      setDataAccessMessage("此设备的本地存储不可用，数据访问权限未保存。");
+      return;
+    }
+    setDataAccessSettings(next);
+    setDataAccessMessage("数据访问权限已保存在此设备；关闭后不会发送未授权数据。");
   }
 
   async function saveKey() {
@@ -321,6 +344,74 @@ export function AISettingsPanel() {
             aria-live="polite"
           >
             {connectionMessage}
+          </p>
+        )}
+      </section>
+
+      <section
+        className="settings-section ai-settings-section ai-data-access"
+        aria-labelledby="ai-data-access-title"
+        data-testid="ai-data-access"
+      >
+        <div>
+          <h3 id="ai-data-access-title">AI 数据访问</h3>
+          <p>
+            Links 只会将你明确允许的数据加入 AI 请求。未勾选时默认不发送；配置 DeepSeek API Key
+            不会自动授予数据权限。
+          </p>
+        </div>
+        <p className="ai-data-access-disclosure">
+          仅发送当前功能所需且已授权的数据。权限仅保存在本机，不会发送给 DeepSeek。
+        </p>
+        <div className="ai-data-access-list">
+          {workplaceModuleRegistry.aiContextProviders
+            .filter((provider) => provider.sensitivity === "standard")
+            .filter((provider) =>
+              AI_PERSISTENT_READ_PERMISSION_IDS.includes(
+                provider.permissionId as AiPersistentReadPermissionId,
+              ),
+            )
+            .map((provider) => {
+              const permission = workplaceModuleRegistry.permissions.find(
+                (item) => item.id === provider.permissionId,
+              );
+              const permissionId = provider.permissionId as AiPersistentReadPermissionId;
+              const descriptionId = `ai-access-description-${provider.id}`;
+              return (
+                <label className="ai-data-access-option" key={provider.id}>
+                  <input
+                    type="checkbox"
+                    checked={dataAccessSettings.persistentGrants.includes(permissionId)}
+                    onChange={(event) =>
+                      setPersistentReadAccess(permissionId, event.currentTarget.checked)
+                    }
+                    aria-label={permission?.label ?? provider.moduleId}
+                    aria-describedby={descriptionId}
+                    data-testid={`ai-access-${permissionId}`}
+                  />
+                  <span>
+                    <strong>{permission?.label ?? provider.moduleId}</strong>
+                    <small id={descriptionId}>
+                      {permission?.description ?? "允许 AI 在请求中使用此模块的安全摘要。"}
+                    </small>
+                  </span>
+                </label>
+              );
+            })}
+        </div>
+        <div className="ai-data-access-sensitive-list" aria-label="敏感数据权限说明">
+          <aside className="ai-data-access-sensitive" aria-label="日记内容：仅单次授权">
+            <strong>日记内容：仅在具体操作中单次授权</strong>
+            <p>不会长期授权。未来只有在你明确选择日记并同意后，才会加入单次 AI 请求。</p>
+          </aside>
+          <aside className="ai-data-access-sensitive" aria-label="Inbox 原文：仅单次授权">
+            <strong>Inbox 原文：仅在具体操作中单次授权</strong>
+            <p>不会长期授权。未来只有在你明确选择内容并同意后，才会加入单次 AI 请求。</p>
+          </aside>
+        </div>
+        {dataAccessMessage && (
+          <p className="settings-domain-note" role="status" aria-live="polite">
+            {dataAccessMessage}
           </p>
         )}
       </section>

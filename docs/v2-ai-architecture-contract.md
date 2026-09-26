@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0 COMPLETE；Phase 4.1 实现、自动验证及 Windows Live Manual 均 COMPLETE / PASS。** `POST /responses` 真实文本与结构化生成尚未执行，待首次正式 AI 工作流进行 smoke test。本文件不表示权限 Runtime、AI 工具或业务数据操作已经实现。
+状态：**Phase 4.0、Phase 4.1 与 Phase 4.2 均 COMPLETE。** Phase 4.2 已建立默认拒绝的运行时读取权限、数据访问设置、请求级敏感授权契约与最小化 Context Builder；AI Tool Runtime、Proposal 应用及业务写入仍未实现。`POST /responses` 真实文本与结构化生成尚未执行，待首次正式 AI 工作流进行 smoke test。
 
 ## 1. 产品定位
 
@@ -9,13 +9,17 @@ AI 是可选辅助层，不是业务数据来源。Academic、Planner、Diary、
 ## 2. 安全与依赖边界
 
 ```text
-显式选择与授权
+显式请求 + 已授权的模块读取
        ↓
-AiContextProvider
+各模块公开 Application Query
        ↓
-AIProvider
+AiPermissionGate → AiContextProjector
        ↓
-AiProposal / 已校验结果
+预算 / 脱敏 → AiContextBundle
+       ↓
+未来由调用方显式触发的 AIProvider
+       ↓
+不可信 Provider 输出 / 未来 Proposal
        ↓
 Preview → Revalidation → 用户确认
        ↓
@@ -28,7 +32,8 @@ Repository / SQLite
 - 模型输入、Provider 输出和 Proposal payload 均是不可信数据；结构化输出经调用方 `AiValueSchema.parse` 校验。
 - AI 不拥有业务事实；不得直接创建或修改 Course、CourseOverride、Exam deadline、Task、Event、TimeBlock、Diary 或 Inbox 数据。
 - 缺少明确授权时默认拒绝。`propose` / `apply` 权限即使已授权，也始终要求独立用户确认。
-- 不存在 `workspace.read`；Diary 与 Inbox 使用各自独立的权限。AI Context 只能来自调用方显式选择的对象、模块、时间与 permission scope，不得自行扫描数据库。
+- `workspace.read` 仅允许有限工作台汇总，不是跨模块超级权限；Academic、Planner、Routine、Weather 分别授权。Diary 正文与 Inbox 原文使用独立的一次性请求授权。
+- AI Context 只能从调用方显式指定的 scope、时间窗口和对象引用，以及已授权模块公开的 Application Query 构造；不得自行扫描数据库。Provider 只接收已完成权限筛选、投影和预算处理的 `AiContextBundle`。
 
 ## 3. Provider 架构
 
@@ -44,15 +49,19 @@ Planner 增加 `planner.propose` 描述性权限。能力只声明所需权限�
 
 ## 5. Permission 模型
 
-AI 权限使用来源模块的 `module.action` 标识。当前模型支持 `read`、`propose`、`apply`：未提供明确 grant 时 `allowed=false`；所有非 `read` action 的 `requiresConfirmation=true`。本阶段不存储 grants、不提供权限 UI，也不把纯策略模型作为真实运行时安全 Gate。
+AI 权限使用来源模块的 `module.action` 稳定标识。运行时 `AiPermissionGate` 默认拒绝未知、未授予、空及不受支持的权限。长期读取白名单为 `workspace.read`、`academic.read`、`planner.read`、`routine.read`、`weather.read`，均在 Settings → AI → 数据访问中默认关闭；只保存稳定 ID，不保存显示文案。损坏或被篡改的设置会规范化为允许列表，敏感权限不能进入持久设置。
 
-Planner 的任务、日程和时间块提案共用当前真实模块 `planner` 的权限域；不虚构尚未存在的 `task`、`event` 或 `timeBlock` module ID。Diary / Inbox 仍须独立授权。未来 apply 权限只作为类型边界，不代表当前存在 apply action 或工具。
+Diary 正文 `diary.body.read` 与 Inbox 原文 `inbox.raw.read` 只能使用受信任 Application orchestration 在用户针对特定对象明确同意后签发的一次性 grant；grant 绑定单个 request ID 与对象、只在内存中消费一次，不存在“以后都允许”开关。当前没有对应 AI 工作流/同意弹窗，因此并未授权任何实际敏感数据请求。
+
+`propose` / `apply` 权限及所有 mutation 请求在 Phase 4.2 仍为 inactive / DENY；本阶段不启用 Tool、Proposal 执行或业务写入。旧的宽泛 `diary.read` / `inbox.read` 元数据不会授权 Diary body / Inbox raw。
 
 ## 6. Context Boundary
 
-`AiContextRequest` 要求显式传入 `selectedItems`、`requestedModules`、`permissionScope` 与可选时间上下文；`AiContextBundle` 只承载 workspace 摘要、所选对象引用和按模块隔离的结构化 JSON context。Context provider 不得自行扫描、打开数据库或读取未授权模块；未来实现只能调用相应模块公开的 Application API，并只返回当前请求所需的最小数据。
+`AiContextRequest` 明确包含 request ID、intent、requested scopes、selected items、上游本地时间上下文、可选日期范围、受信任的一次性 grant 与 budget。缺省范围为本地日期起 7 天；无效的对象引用、日期、scope 与超量输入会被拒绝、限制或记录为 omission。
 
-Diary 正文、Inbox 原文及其他个人内容不得由通用 workspace scope 隐式携带。任何敏感模块上下文都必须与其独立 permission 对应。调用者负责在构造请求前确认授权及数据最小化。
+`buildAiContext` 先运行 Permission Gate，只为明确请求且通过授权的模块调用各自 source；各 source 仅接收自身模块的时间范围和对象引用。之后固定 allowlist projector 将安全 Snapshot 投影为只读 Context DTO，再执行预算、脱敏和稳定序列化。Snapshot source 是模块公开 Application Query / UseCase 的注入端口；Context Builder 不访问 Repository、SQLite、Tauri DB command 或 Provider。
+
+Workspace 仅包含本地日期/时间、安排与任务计数、下一空闲时段、当日日记存在状态及 Inbox pending 数等摘要。Academic 仅包含 occurrence、考试、截止事项的必要字段；Planner 仅包含任务、事件、时间块及已计算的 buffer 占用范围；Routine 仅含当前规划需要的简化目标信息；Weather 仅含已选择地点标签、当前天气和当日小时摘要，不含坐标/定位历史。Diary body 与 Inbox raw 只允许来自本次用户选择对象并且有对应 request grant 的投影。字段采用固定 allowlist，额外 Domain Entity 字段不会被序列化。
 
 ## 7. Proposal 与 Tool Contract
 
@@ -82,4 +91,13 @@ approved ─────────→ failed / stale
 
 SQLite schema 保持 **7**，migration **0**；Phase 4.1 未增加或读取任何 AI 数据库表，也未访问 Release 用户数据库。非敏感 AI provider settings 使用本地浏览器设置存储；API Key 仅在 Windows Credential Manager。
 
-Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久化与删除、断网处理验收。真实 `POST /responses` 文本与结构化生成尚未执行，待首次正式 AI 工作流验收。Phase 4.2 仍未开始；任何 Context Runtime、权限授权 Runtime、Tool 执行、Proposal 应用或 schema 7→8 工作均须单独授权与验证。
+Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久化与删除、断网处理验收。真实 `POST /responses` 文本与结构化生成尚未执行，待首次正式 AI 工作流验收。Phase 4.2 已完成 Context Runtime 与读取权限基础；没有 schema 变更、AI Tool 执行或 Proposal 应用。
+
+## 10. Phase 4.2 运行时实施边界
+
+- 数据访问记录只持久化五个稳定、非敏感读取 scope，默认全部关闭；API Key 配置状态与数据读取授权彼此独立。
+- Context Builder 只通过注入的模块 source 取得 Snapshot；source 错误按模块隔离，不暴露异常正文、凭据或本机路径。
+- 总预算默认 32 KiB UTF-8、每模块 8 KiB、每字符串 512 字符、每模块最多 50 项、最多 20 个所选对象。超限会确定性裁剪，并在 budget 元数据中报告已用字节、省略数与受截断模块。
+- Windows 绝对路径和常见 secret/token 形态在投影中替换为安全占位符；Context 序列化前完成处理。
+- 关闭全部读取授权时，Builder 不调用模块 sources，且不改变 Phase 4.1 Provider 的既有行为。
+- 完整实现及验证结果记录于 [`v2-phase-4-2-verification.md`](v2-phase-4-2-verification.md)。Phase 4.3 仍未开始。

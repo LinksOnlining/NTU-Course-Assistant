@@ -127,7 +127,55 @@ test("Context providers receive only safe summary inputs and Weather failure is 
   assert.match(contract, /catch \{/u);
   assert.match(contract, /continue.*provider|继续.*provider/u);
   assert.match(source("src/modules/built-in-modules.ts"), /id: "diary.read"/u);
-  assert.doesNotMatch(source("src/modules/built-in-modules.ts"), /id: "workspace\.read"/u);
+  assert.match(source("src/modules/built-in-modules.ts"), /id: "workspace\.read"/u);
+});
+
+test("AI Context contributions are owned by modules and separate persistent from sensitive scopes", () => {
+  const providers = workplaceModuleRegistry.aiContextProviders;
+  const permissions = new Map(
+    workplaceModuleRegistry.permissions.map((permission) => [permission.id, permission]),
+  );
+  assert.deepEqual(
+    providers.map(({ moduleId }) => moduleId),
+    ["workspace", "academic", "planner", "routine", "weather", "diary", "inbox"],
+  );
+  for (const provider of providers) {
+    const permission = permissions.get(provider.permissionId);
+    assert.ok(permission);
+    assert.equal(permission.moduleId, provider.moduleId);
+    assert.equal(
+      provider.sensitivity === "standard"
+        ? permission.action === "read"
+        : permission.action !== "read",
+      true,
+    );
+  }
+  assert.equal(
+    providers.find(({ moduleId }) => moduleId === "diary")?.permissionId,
+    "diary.body.read",
+  );
+  assert.equal(
+    providers.find(({ moduleId }) => moduleId === "inbox")?.permissionId,
+    "inbox.raw.read",
+  );
+});
+
+test("AI Context registry rejects broad or unrelated sensitive permissions", () => {
+  const diaryLegacyGrant = BUILT_IN_MODULES.map((module) =>
+    module.id === "diary"
+      ? {
+          ...module,
+          aiContextProviders: module.aiContextProviders.map((provider) => ({
+            ...provider,
+            permissionId: "diary.read",
+          })),
+        }
+      : module,
+  );
+  assert.throws(
+    () => createWorkplaceModuleRegistry(diaryLegacyGrant),
+    /supported item-scoped permission/u,
+  );
 });
 
 test("内置模块与 Presentation 不启用动态第三方执行，也不绕过新增模块 Application APIs", () => {

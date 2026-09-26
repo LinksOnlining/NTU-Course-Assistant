@@ -10,6 +10,10 @@ const aiFiles = [
   "src/application/ai/capability.ts",
   "src/application/ai/permission.ts",
   "src/application/ai/context.ts",
+  "src/application/ai/context-builder.ts",
+  "src/application/ai/context-projector.ts",
+  "src/application/ai/context-budget.ts",
+  "src/application/ai/request-grant.ts",
   "src/application/ai/proposal.ts",
   "src/application/ai/tool.ts",
   "src/application/ai/mock-provider.ts",
@@ -49,13 +53,41 @@ test("Provider 通过可替换接口约束，接口层不绑定 Mock 实现", ()
   assert.match(mock, /implements AIProvider/u);
 });
 
-test("Context 只接受显式选中的模块、对象与权限 scope", () => {
+test("Context 只接受显式 scope、对象、时间与一次性授权；默认预算有限", () => {
   const context = source("src/application/ai/context.ts");
   assert.match(context, /selectedItems: readonly ObjectRef\[\]/u);
-  assert.match(context, /requestedModules: readonly AiPermissionModuleId\[\]/u);
-  assert.match(context, /permissionScope: readonly AiPermissionId\[\]/u);
-  assert.match(context, /buildContext\(request: AiContextRequest\)/u);
-  assert.doesNotMatch(context, /workspace\.read/u);
+  assert.match(context, /requestedScopes: readonly string\[\]/u);
+  assert.match(context, /requestGrants\?: readonly AiRequestGrant\[\]/u);
+  assert.match(context, /timeRange\?: AiContextDateRange/u);
+  assert.match(context, /maxTotalBytes: 32 \* 1024/u);
+  assert.match(source("src/application/ai/permission.ts"), /workspace\.read/u);
+  assert.match(source("src/application/ai/context-builder.ts"), /new AiPermissionGate/u);
+  assert.match(source("src/application/ai/context-builder.ts"), /await source\(/u);
+  assert.match(source("src/application/ai/context-projector.ts"), /AI_CONTEXT_PROJECTORS/u);
+  assert.match(source("src/application/ai/context-budget.ts"), /enforceAiContextBudget/u);
+});
+
+test("AI Context 不可访问持久化，敏感授权工厂不可由 UI 调用", () => {
+  const gate = source("src/application/ai/permission.ts");
+  const builder = source("src/application/ai/context-builder.ts");
+  const projector = source("src/application/ai/context-projector.ts");
+  assert.doesNotMatch(
+    `${gate}\n${builder}\n${projector}`,
+    /from ["'][^"']*(?:services|database|repository|storage)\//u,
+  );
+  assert.match(gate, /inactiveMutation/u);
+  assert.match(gate, /requestGrantRequired/u);
+  assert.match(source("src/application/ai/request-grant.ts"), /WeakSet/u);
+  assert.match(source("src/application/ai/request-grant.ts"), /issuedGrants\.delete/u);
+  assert.doesNotMatch(
+    source("src/workspace/ai/AISettingsPanel.tsx"),
+    /grantSensitiveContextAfterUserConsent|request-grant\.ts/u,
+  );
+  assert.match(
+    source("src/services/ai-data-access-storage.ts"),
+    /links-workplace\.ai\.data-access/u,
+  );
+  assert.doesNotMatch(source("src/services/ai-data-access-storage.ts"), /deepseek|apiKey|secret/iu);
 });
 
 test("AI Registry 仅有静态能力声明，不启用页面、导航或工具执行", () => {

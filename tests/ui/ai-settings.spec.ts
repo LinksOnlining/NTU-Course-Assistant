@@ -291,3 +291,111 @@ test("错误分类、不可用已存模型、高级设置及小窗口可用性",
   await settings.getByLabel("主题").selectOption("light");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 });
+
+test("数据访问默认关闭、敏感权限不提供长期开关且设置只写本地", async ({ page }) => {
+  const settings = await openAISettings(page, { viewport: { width: 720, height: 520 } });
+  const panel = settings.getByTestId("ai-settings");
+  const access = panel.getByTestId("ai-data-access");
+
+  for (const permission of [
+    "workspace.read",
+    "academic.read",
+    "planner.read",
+    "routine.read",
+    "weather.read",
+  ]) {
+    await expect(access.getByTestId(`ai-access-${permission}`)).not.toBeChecked();
+  }
+  await expect(access.getByText("Links 只会将你明确允许的数据加入 AI 请求。")).toBeVisible();
+  await expect(access.getByText(/配置 DeepSeek API Key 不会自动授予数据权限/u)).toBeVisible();
+  await expect(access.getByText("日记内容：仅在具体操作中单次授权")).toBeVisible();
+  await expect(access.getByText("Inbox 原文：仅在具体操作中单次授权")).toBeVisible();
+  await expect(access.getByText(/不会长期授权。未来只有在你明确选择日记并同意后/u)).toBeVisible();
+  await expect(access.getByText(/不会长期授权。未来只有在你明确选择内容并同意后/u)).toBeVisible();
+  await expect(access.getByRole("checkbox", { name: /日记|收件箱/u })).toHaveCount(0);
+
+  const commandCountBefore = await page.evaluate(
+    () =>
+      (window as Window & { __aiSettingsTest: { calls: { command: string }[] } }).__aiSettingsTest
+        .calls.length,
+  );
+  const plannerPermission = access.getByTestId("ai-access-planner.read");
+  await expect(plannerPermission).toHaveAttribute(
+    "aria-describedby",
+    "ai-access-description-planner.ai-context",
+  );
+  await plannerPermission.check();
+  await expect(plannerPermission).toBeChecked();
+  expect(
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("links-workplace.ai.data-access") ?? "{}"),
+    ),
+  ).toEqual({ persistentGrants: ["planner.read"] });
+
+  const commandCountAfter = await page.evaluate(
+    () =>
+      (window as Window & { __aiSettingsTest: { calls: { command: string }[] } }).__aiSettingsTest
+        .calls.length,
+  );
+  expect(commandCountAfter).toBe(commandCountBefore);
+
+  const nav = settings.getByRole("navigation", { name: "设置分类" });
+  await nav.getByRole("button", { name: "外观" }).click();
+  await nav.getByRole("button", { name: "AI" }).click();
+  const remounted = settings.getByTestId("ai-data-access");
+  await expect(remounted.getByTestId("ai-access-planner.read")).toBeChecked();
+
+  const key = panel.getByTestId("deepseek-api-key");
+  await key.fill("provider-key-test-only");
+  await panel.getByRole("button", { name: "保存 API Key" }).click();
+  await panel.getByRole("button", { name: "删除 API Key" }).click();
+  await expect(panel.getByText("未配置", { exact: true })).toBeVisible();
+  await expect(remounted.getByTestId("ai-access-planner.read")).toBeChecked();
+  const storedDataAccess = await page.evaluate(() =>
+    localStorage.getItem("links-workplace.ai.data-access"),
+  );
+  expect(storedDataAccess).not.toContain("provider-key-test-only");
+  const storedToggle = remounted.getByTestId("ai-access-planner.read");
+  await storedToggle.uncheck();
+  await expect(storedToggle).not.toBeChecked();
+  expect(
+    await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("links-workplace.ai.data-access") ?? "{}"),
+    ),
+  ).toEqual({ persistentGrants: [] });
+  expect(
+    await remounted.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+  ).toBe(true);
+
+  await settings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "外观" })
+    .click();
+  await settings.getByLabel("主题").selectOption("dark");
+  await settings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "AI" })
+    .click();
+  await expect(settings.getByText("日记内容：仅在具体操作中单次授权")).toBeVisible();
+  await settings
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "外观" })
+    .click();
+  await settings.getByLabel("主题").selectOption("light");
+});
+
+test("损坏或篡改的权限记录仅保留允许的持久读取项", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "links-workplace.ai.data-access",
+      JSON.stringify({
+        persistentGrants: ["workspace.read", "diary.body.read", "inbox.raw.read", "planner.write"],
+      }),
+    );
+  });
+  const settings = await openAISettings(page);
+  const access = settings.getByTestId("ai-settings").getByTestId("ai-data-access");
+  await expect(access.getByTestId("ai-access-workspace.read")).toBeChecked();
+  await expect(access.getByTestId("ai-access-planner.read")).not.toBeChecked();
+  await expect(access.getByRole("checkbox", { name: /日记|收件箱/u })).toHaveCount(0);
+});
