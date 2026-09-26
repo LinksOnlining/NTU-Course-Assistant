@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4.0 COMPLETE；Phase 4.1 Implementation COMPLETE / Automated PASS / Windows Live Manual PENDING；Phase 4.2 NOT STARTED。** Phase 4.1 新增 DeepSeek Native Responses API adapter、Windows Credential Manager 专用凭据边界、仅用户触发的模型发现和通用 Settings 下的 AI 配置页；Mock Provider 保留。仅非敏感设置保存在设备本地，API Key 不进入 SQLite、浏览器存储或日志。SQLite schema 维持 7、migration 0；未访问 Release 用户数据库。自动验证、Windows production build 和 artifacts 结果见 `docs/v2-phase-4-1-verification.md`。真实 DeepSeek Key/在线 Windows 手动验收尚待 Ethan；Phase 4.2 未开始。
+- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4.0 COMPLETE；Phase 4.1 Implementation COMPLETE / Automated PASS / Windows Live Manual PASS / Overall COMPLETE；Phase 4.2 NOT STARTED。** Phase 4.1 新增 DeepSeek Native Responses API adapter、Windows Credential Manager 专用凭据边界、仅用户触发的模型发现和通用 Settings 下的 AI 配置页；Mock Provider 保留。仅非敏感设置保存在设备本地，API Key 不进入 SQLite、浏览器存储或日志。SQLite schema 维持 7、migration 0；未访问 Release 用户数据库。真实 `GET /models`、凭据持久化/删除和断网处理均经 Ethan Windows 11 验收通过。`POST /responses` 文本及结构化真实生成待首次正式 AI 工作流验收。详情见 `docs/v2-phase-4-1-verification.md`；Phase 4.2 未开始。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 是唯一外网能力且默认关闭，手动搜索仅在提交后请求 Photon 并只保存最终选中地点，当前位置需明确同意、系统授权和坐标模糊化；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 

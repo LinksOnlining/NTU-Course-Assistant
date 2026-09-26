@@ -1,13 +1,13 @@
 # Links Workplace v2.0 — Phase 4.1 验证记录
 
-状态：**实现完成；自动验证通过；Windows 真实 DeepSeek 验收待 Ethan。** 本记录不表示真实 API 已调用、软件已发布或 Phase 4.1 整体已完成。
+状态：**Phase 4.1 Implementation COMPLETE；Automated PASS；Windows Live Manual PASS；Overall COMPLETE。** 本阶段未执行生成 API 的真实在线 smoke test，也未发布软件。
 
 ## 一、基线
 
 - 项目：`D:\AI_Workspace\Projects\NTU-Course-Assistant`
 - Branch：`v2/workspace-rebase`
 - 起始 HEAD：`82e1d712a2a82156201411103e84a6eefa1b057e`
-- 最终 HEAD：包含本验证记录的本阶段实现提交；未推送，具体 hash 见最终 Git 执行记录。
+- 实施验收基线 HEAD：`41d39671077f0aa5a7da40efd8d1a9c54c1d11a1`；本次仅补充人工验收记录。
 - 产品配置版本：`1.3.1`（沿用仓库版本，本阶段未做版本发布或升级）
 - SQLite schema：7；AI migration：0
 
@@ -42,7 +42,7 @@
 - Account：`deepseek.default`
 - Raw Key 返回 frontend：NO。仅保存 API 的瞬时 Tauri invoke payload 含输入值；状态命令只返回 configured 布尔值。
 - SQLite / localStorage / 普通 Settings / logs / backup：均不存储 API Key。
-- Windows Credential Manager 未在自动测试中写入真实用户凭据；需由 Ethan 在本机手动验收。
+- Windows 11 人工确认：API Key 保存后输入框清空；应用重启后仍显示已配置；显式删除成功。真实凭据值未提供给 Codex。
 
 ## 五、AI Settings
 
@@ -97,14 +97,14 @@
 
 ## 十、Live / Manual 验收
 
-- DeepSeek 真实 API：**NOT EXECUTED**；本次未使用用户 API Key。
-- Windows 真实 Credential Manager / 应用内设置：**PENDING**。
-- 建议一次性手动清单：
-  1. 在 Windows 11 开发态 Settings → AI 输入自己的 DeepSeek API Key 并保存（不要把 Key 发给 Codex）；确认输入框清空且只显示“已配置”。
-  2. 点击“测试连接”，确认只进行模型列表查询；再点“刷新模型”，检查 Flash / V4 Pro 与已保存选择。
-  3. 重启开发态应用后确认密钥状态仍为已配置；从设置显式删除后确认显示未配置。
-  4. 如要验证 Text / Structured Transport 的真实在线行为，须在 Phase 4.1 的无 UI Provider 测试入口之外另行明确授权；本阶段不提供聊天或生成测试按钮。
-- 真实在线检查期间可能发生的外部服务访问应仅发送请求内容，不发送课程、任务、日记、Inbox、天气或搜索数据；Connection Test / Refresh 不发送任何用户文本。
+- DeepSeek real `GET /models`：**PASS**；连接测试成功，界面显示“连接正常，已读取 2 个模型”。模型刷新：PASS；确认 `deepseek-flash` 与 `deepseek-v4-pro`。
+- Windows Credential Manager real persistence：**PASS**；保存后输入框清空，应用重启后仍显示已配置。
+- Credential delete：**PASS**。
+- Offline / network failure handling：**PASS**；断网测试通过。
+- DeepSeek `POST /responses` real text generation：**NOT EXECUTED**。
+- DeepSeek `POST /responses` real structured generation：**NOT EXECUTED**。
+- 未执行生成请求是有意范围边界：Phase 4.1 没有用户 Prompt / generation UI 入口；未增加临时 AI 输入框，也未绕过正式 Application Layer。两项不构成 Phase 4.1 blocker，标记为 **PENDING FIRST REAL AI WORKFLOW**。
+- Connection Test / Model Refresh 只请求模型列表，不发送 prompt 或 Workspace 用户数据。
 
 ## 十一、Git 与阶段状态
 
@@ -113,6 +113,8 @@
 - Phase 4.0：COMPLETE。
 - Phase 4.1 Implementation：COMPLETE。
 - Phase 4.1 Automated：PASS。
-- Phase 4.1 Live Manual：PENDING。
-- Phase 4.1 Overall：PENDING。
+- Phase 4.1 Windows Live Manual：PASS。
+- Phase 4.1 Overall：COMPLETE。
+- `POST /responses` text live smoke：PENDING FIRST REAL AI WORKFLOW。
+- `POST /responses` structured live smoke：PENDING FIRST REAL AI WORKFLOW。
 - Phase 4.2：NOT STARTED。

@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0 COMPLETE；Phase 4.1 实现及自动验证 COMPLETE / PASS；Windows 真实 DeepSeek 人工验收 PENDING。** 本文件记录架构契约与 Phase 4.1 Provider adapter，不代表权限 Runtime、AI 工具或业务数据操作已经实现。
+状态：**Phase 4.0 COMPLETE；Phase 4.1 实现、自动验证及 Windows Live Manual 均 COMPLETE / PASS。** `POST /responses` 真实文本与结构化生成尚未执行，待首次正式 AI 工作流进行 smoke test。本文件不表示权限 Runtime、AI 工具或业务数据操作已经实现。
 
 ## 1. 产品定位
 
@@ -82,4 +82,4 @@ approved ─────────→ failed / stale
 
 SQLite schema 保持 **7**，migration **0**；Phase 4.1 未增加或读取任何 AI 数据库表，也未访问 Release 用户数据库。非敏感 AI provider settings 使用本地浏览器设置存储；API Key 仅在 Windows Credential Manager。
 
-Phase 4.1 的自动验证通过后，Windows 真实 DeepSeek Key、在线连接、应用关闭重开后的凭据确认仍由用户人工完成。Phase 4.2 仍未开始；任何 Context Runtime、权限授权 Runtime、Tool 执行、Proposal 应用或 schema 7→8 工作均须单独授权与验证。
+Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久化与删除、断网处理验收。真实 `POST /responses` 文本与结构化生成尚未执行，待首次正式 AI 工作流验收。Phase 4.2 仍未开始；任何 Context Runtime、权限授权 Runtime、Tool 执行、Proposal 应用或 schema 7→8 工作均须单独授权与验证。
