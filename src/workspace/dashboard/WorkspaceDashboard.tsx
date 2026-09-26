@@ -386,7 +386,6 @@ export function WorkspaceDashboard({
   const nowTime = localTimeKey(now);
   const [retry, setRetry] = useState(0);
   const [showTodayDetails, setShowTodayDetails] = useState(false);
-  const [showTodayAssistant, setShowTodayAssistant] = useState(false);
   const todayOverviewRef = useRef<HTMLElement>(null);
   const todayTriggerRef = useRef<HTMLButtonElement>(null);
   const todayPopoverRef = useRef<HTMLElement>(null);
@@ -531,40 +530,24 @@ export function WorkspaceDashboard({
             <DiaryCard hasEntry={model.context.hasDiaryToday} onNavigate={onNavigate} />
             <InboxCard pendingCount={model.context.pendingInboxCount} onNavigate={onNavigate} />
           </div>
-          <button
-            type="button"
-            className="workspace-dashboard-card workspace-module-card workspace-ai-entry"
-            onClick={() => setShowTodayAssistant(true)}
-            aria-label="打开今日助手"
-            data-testid="workspace-ai-entry"
-          >
-            <span className="workspace-module-title">AI 助手</span>
-            <span className="workspace-module-status">按需分析</span>
-            <span className="workspace-module-description">
-              分析今天，或生成一项待确认的安排建议
-            </span>
-          </button>
+          <TodayAssistantPanel
+            service={todayAssistantService}
+            onOpenSettings={() => onOpenAISettings?.()}
+            onConfirmProposal={(proposal: AiPlannerProposal): Promise<AiProposalApplyResult> =>
+              aiPlannerProposalRuntime.apply({
+                id: proposal.id,
+                confirmed: true,
+                expectedPreviewRevision: proposal.preview.revision,
+                permissionIds: ["planner.propose"],
+              })
+            }
+            onCancelProposal={(proposal) => {
+              aiPlannerProposalRuntime.cancel(proposal.id);
+            }}
+            onApplied={() => setRetry((value) => value + 1)}
+          />
         </aside>
       </div>
-      {showTodayAssistant && (
-        <TodayAssistantPanel
-          service={todayAssistantService}
-          onOpenSettings={() => onOpenAISettings?.()}
-          onConfirmProposal={(proposal: AiPlannerProposal): Promise<AiProposalApplyResult> =>
-            aiPlannerProposalRuntime.apply({
-              id: proposal.id,
-              confirmed: true,
-              expectedPreviewRevision: proposal.preview.revision,
-              permissionIds: ["planner.propose"],
-            })
-          }
-          onCancelProposal={(proposal) => {
-            aiPlannerProposalRuntime.cancel(proposal.id);
-          }}
-          onApplied={() => setRetry((value) => value + 1)}
-          onClose={() => setShowTodayAssistant(false)}
-        />
-      )}
     </div>
   );
 }

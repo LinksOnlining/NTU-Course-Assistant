@@ -6,7 +6,7 @@
 
 - 当前 v2 产品需求单一事实来源：[`PROJECT_BRIEF.md`](PROJECT_BRIEF.md)。
 - 当前 v2 架构及依赖方向契约：[`docs/v2-architecture-contract.md`](docs/v2-architecture-contract.md)。
-- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0–4.4 COMPLETE；Phase 4.5 Implementation 与自动验证完成，DeepSeek Live 与 Overall 仍 PENDING。工作台新增用户主动触发的一次性“今日助手”：只读分析或最多一个待审时间块建议；复用 Context Engine、AIToolRegistry 与 Phase 4.4 Proposal Review，提案只有经本地预览、重校验和用户确认才调用现有 Planner Application UseCase。无 Apply Tool、聊天历史或持久化 AI 状态；Diary 正文、Inbox 原始内容和 Search 不进入工作流。DeepSeek `POST /responses` 文本、结构化、Tool Calling 与 Proposal live smoke 待首次人工验收。SQLite schema 仍为 7、migration 0。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md) 与 [`docs/v2-phase-4-5-verification.md`](docs/v2-phase-4-5-verification.md)。
+- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0–4.4 COMPLETE；Phase 4.5 一次性“今日助手”实现与自动验证完成，DeepSeek Live 与 Overall 仍 PENDING。当前工作台 Rail 内联呈现一次性输入、结构化结果和提案审阅；明确安排请求经本地安全路由进入 `today.plan`，最多暴露一个 `planner_propose_time_block`，且系统提示明确允许调用本请求实际提供的提案函数。Proposal 只有经本地预览、重校验和用户确认才调用现有 Planner Application UseCase。无 Apply Tool、聊天历史或持久化 AI 状态；Diary 正文、Inbox 原始内容和 Search 不进入工作流。DeepSeek `POST /responses` 文本、结构化、Tool Calling 与 Proposal live smoke 待首次人工验收。SQLite schema 仍为 7、migration 0。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md) 与 [`docs/v2-phase-4-5-verification.md`](docs/v2-phase-4-5-verification.md)。
 - 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。Phase 4.5 不开放独立 AI 一级导航，不代表 Phase 4.5 live smoke 已完成。
 
 ## 技术方案

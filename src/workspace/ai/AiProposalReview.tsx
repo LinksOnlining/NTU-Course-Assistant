@@ -7,9 +7,15 @@ interface AiProposalReviewProps {
   readonly proposal: AiPlannerProposal;
   readonly onConfirm: (proposal: AiPlannerProposal) => Promise<AiProposalApplyResult>;
   readonly onCancel: (proposal: AiPlannerProposal) => void;
+  readonly inline?: boolean;
 }
 
-export function AiProposalReview({ proposal, onConfirm, onCancel }: AiProposalReviewProps) {
+export function AiProposalReview({
+  proposal,
+  onConfirm,
+  onCancel,
+  inline = false,
+}: AiProposalReviewProps) {
   const [current, setCurrent] = useState(proposal);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<AiProposalApplyResult | null>(null);
@@ -23,6 +29,15 @@ export function AiProposalReview({ proposal, onConfirm, onCancel }: AiProposalRe
   closeAllowedRef.current = closeAllowed;
 
   useEffect(() => {
+    if (inline) {
+      function onInlineKeyDown(event: KeyboardEvent) {
+        if (event.key !== "Escape" || !closeAllowedRef.current) return;
+        event.preventDefault();
+        cancelRef.current(currentRef.current);
+      }
+      document.addEventListener("keydown", onInlineKeyDown);
+      return () => document.removeEventListener("keydown", onInlineKeyDown);
+    }
     const previousFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = dialogRef.current;
@@ -55,7 +70,7 @@ export function AiProposalReview({ proposal, onConfirm, onCancel }: AiProposalRe
       document.removeEventListener("keydown", onKeyDown);
       previousFocus?.focus();
     };
-  }, []);
+  }, [inline]);
 
   async function confirm() {
     if (busy || result?.status === "applied") return;
@@ -84,28 +99,22 @@ export function AiProposalReview({ proposal, onConfirm, onCancel }: AiProposalRe
             : "提案已不可用，请关闭后重试。"
       : "";
 
-  return (
-    <div
-      className="ai-proposal-backdrop"
-      data-testid="ai-proposal-backdrop"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && closeAllowed) onCancel(current);
-      }}
+  const review = (
+    <section
+      ref={dialogRef}
+      className={inline ? "ai-proposal-inline" : "ai-proposal-dialog"}
+      role={inline ? "region" : "dialog"}
+      aria-modal={inline ? undefined : true}
+      aria-labelledby="ai-proposal-title"
+      tabIndex={inline ? undefined : -1}
+      data-testid="ai-proposal-review"
     >
-      <section
-        ref={dialogRef}
-        className="ai-proposal-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="ai-proposal-title"
-        tabIndex={-1}
-        data-testid="ai-proposal-review"
-      >
-        <header>
-          <div>
-            <p className="ai-proposal-eyebrow">AI 规划提案 · 待确认</p>
-            <h2 id="ai-proposal-title">{current.title}</h2>
-          </div>
+      <header>
+        <div>
+          <p className="ai-proposal-eyebrow">AI 规划提案 · 待确认</p>
+          <h2 id="ai-proposal-title">{current.title}</h2>
+        </div>
+        {!inline && (
           <button
             type="button"
             className="ai-proposal-close"
@@ -115,88 +124,101 @@ export function AiProposalReview({ proposal, onConfirm, onCancel }: AiProposalRe
           >
             ×
           </button>
-        </header>
+        )}
+      </header>
 
-        <div className="ai-proposal-content">
-          <p className="ai-proposal-disclosure">{current.description}</p>
-          <dl className="ai-proposal-fields">
-            {current.preview.fields.map((field, index) => (
-              <div key={`${field.label}-${index}`}>
-                <dt>{field.label}</dt>
-                <dd>
-                  {field.previousValue && (
-                    <span className="ai-proposal-previous">{field.previousValue} → </span>
-                  )}
-                  {field.value}
-                </dd>
+      <div className="ai-proposal-content">
+        <p className="ai-proposal-disclosure">{current.description}</p>
+        <dl className="ai-proposal-fields">
+          {current.preview.fields.map((field, index) => (
+            <div key={`${field.label}-${index}`}>
+              <dt>{field.label}</dt>
+              <dd>
+                {field.previousValue && (
+                  <span className="ai-proposal-previous">{field.previousValue} → </span>
+                )}
+                {field.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        {current.preview.warnings.length > 0 && (
+          <aside className="ai-proposal-warnings" role="status" aria-label="安排冲突提示">
+            <strong>需要留意</strong>
+            {current.preview.warnings.map((warning, index) => (
+              <div key={`${warning.code}-${index}`}>
+                <p>{warning.message}</p>
+                <ul>
+                  {warning.details.map((detail) => (
+                    <li key={detail}>{detail}</li>
+                  ))}
+                </ul>
               </div>
             ))}
-          </dl>
-          {current.preview.warnings.length > 0 && (
-            <aside className="ai-proposal-warnings" role="status" aria-label="安排冲突提示">
-              <strong>需要留意</strong>
-              {current.preview.warnings.map((warning, index) => (
-                <div key={`${warning.code}-${index}`}>
-                  <p>{warning.message}</p>
-                  <ul>
-                    {warning.details.map((detail) => (
-                      <li key={detail}>{detail}</li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </aside>
-          )}
-          {result?.status === "needsReconfirmation" && (
-            <p className="ai-proposal-refresh" role="status" aria-live="polite">
-              相关安排已变化，请检查更新后的预览，再次确认。
-            </p>
-          )}
-          {errorText && (
-            <p className="ai-proposal-error" role="alert">
-              {errorText}
-            </p>
-          )}
-          {success && (
-            <p className="ai-proposal-success" role="status">
-              已添加到规划。
-            </p>
-          )}
-        </div>
+          </aside>
+        )}
+        {result?.status === "needsReconfirmation" && (
+          <p className="ai-proposal-refresh" role="status" aria-live="polite">
+            相关安排已变化，请检查更新后的预览，再次确认。
+          </p>
+        )}
+        {errorText && (
+          <p className="ai-proposal-error" role="alert">
+            {errorText}
+          </p>
+        )}
+        {success && (
+          <p className="ai-proposal-success" role="status">
+            已添加到规划。
+          </p>
+        )}
+      </div>
 
-        <footer>
-          {success ? (
+      <footer>
+        {success ? (
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => onCancel(current)}
+            data-initial-focus
+          >
+            完成
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => onCancel(current)}
+              disabled={!closeAllowed}
+              data-initial-focus
+            >
+              取消
+            </button>
             <button
               type="button"
               className="primary-button"
-              onClick={() => onCancel(current)}
-              data-initial-focus
+              onClick={() => void confirm()}
+              disabled={busy || Boolean(errorText)}
             >
-              完成
+              {busy ? "正在验证并保存…" : confirmLabel(current)}
             </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => onCancel(current)}
-                disabled={!closeAllowed}
-                data-initial-focus
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => void confirm()}
-                disabled={busy || Boolean(errorText)}
-              >
-                {busy ? "正在验证并保存…" : confirmLabel(current)}
-              </button>
-            </>
-          )}
-        </footer>
-      </section>
+          </>
+        )}
+      </footer>
+    </section>
+  );
+  return inline ? (
+    review
+  ) : (
+    <div
+      className="ai-proposal-backdrop"
+      data-testid="ai-proposal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && closeAllowed) onCancel(current);
+      }}
+    >
+      {review}
     </div>
   );
 }

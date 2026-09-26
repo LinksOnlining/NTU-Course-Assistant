@@ -510,7 +510,7 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: repeat(3, max-content);
+  grid-template-rows: max-content max-content minmax(0, 1fr);
   align-content: start;
   gap: var(--space-3);
   overflow: hidden;
@@ -696,7 +696,7 @@
 
 @media (max-height: 820px) and (min-width: 761px) {
   .workspace-dashboard-rail {
-    grid-template-rows: repeat(3, max-content);
+    grid-template-rows: max-content max-content minmax(0, 1fr);
   }
 
   .workspace-timeline-card,
@@ -774,7 +774,7 @@
   }
 
   .workspace-dashboard-rail {
-    grid-template-rows: repeat(3, max-content);
+    grid-template-rows: max-content max-content minmax(0, 1fr);
     gap: var(--space-1);
   }
 

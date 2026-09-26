@@ -23,6 +23,89 @@
   outline: none;
 }
 
+.ai-proposal-inline {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+}
+
+.ai-proposal-inline > header,
+.ai-proposal-inline > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0;
+}
+
+.ai-proposal-inline > header {
+  border: 0;
+  background: transparent;
+}
+
+.ai-proposal-inline h2 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: var(--font-size-body);
+}
+
+.ai-proposal-inline .ai-proposal-eyebrow {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-caption);
+}
+
+.ai-proposal-inline .ai-proposal-content {
+  overflow: visible;
+  padding: 0;
+}
+
+.ai-proposal-inline .ai-proposal-disclosure {
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-caption);
+}
+
+.ai-proposal-inline .ai-proposal-fields {
+  gap: var(--space-1);
+}
+
+.ai-proposal-inline .ai-proposal-fields > div {
+  grid-template-columns: minmax(58px, 0.35fr) minmax(0, 1fr);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-caption);
+}
+
+.ai-proposal-inline .ai-proposal-warnings,
+.ai-proposal-inline .ai-proposal-refresh,
+.ai-proposal-inline .ai-proposal-error,
+.ai-proposal-inline .ai-proposal-success {
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  font-size: var(--font-size-caption);
+}
+
+.ai-proposal-inline > footer {
+  justify-content: flex-end;
+  border: 0;
+}
+
+.ai-proposal-inline > footer button {
+  min-height: 32px;
+  padding: 4px var(--space-2);
+  font-size: var(--font-size-caption);
+}
+
+.ai-proposal-inline > footer button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .ai-proposal-dialog > header,
 .ai-proposal-dialog > footer {
   display: flex;
@@ -170,5 +253,17 @@
   .ai-proposal-fields > div {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+
+  .ai-proposal-inline {
+    padding: var(--space-2);
+  }
+
+  .ai-proposal-inline .ai-proposal-fields > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-proposal-inline > footer button {
+    flex: 1 1 auto;
   }
 }

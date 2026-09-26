@@ -125,11 +125,12 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 
 ## 13. Phase 4.5 Today Assistant 工作流
 
-- Workspace Rail 的“AI 助手”入口仅打开一次性面板；只有用户点击“分析今天”或“帮我安排今天”后才调用 provider。启动、进入工作台、改权限均不会自动请求。没有聊天、会话、AI 历史或数据库持久化。
+- Workspace Rail 内联显示一次性 Composer、结果及 Proposal Review，无需点击第二层弹窗；只有用户发送内容或点击快捷操作后才调用 provider。启动、进入工作台、改权限均不会自动请求。支持发送按钮与 Ctrl/Cmd+Enter，Enter 保留换行；没有聊天、会话、AI 历史或数据库持久化。
 - Workflow 定义是本地可信配置，固定为 `today.analyze` 与 `today.plan`，声明请求 scopes、只读工具 allowlist、提案工具 allowlist 和结果模式。请求仅携带当前 Settings → AI 已授权的 scope；所有模块读取继续经过 Phase 4.2 Context Engine 和预算投影。
-- `today.analyze` 仅允许授权的只读工具，结构化结果经 provider JSON Schema 与本地 schema 双重校验；任何 Planner Proposal Tool 调用都会被拒绝。`today.plan` 沿用相同的 scope-aware read tools，并将“帮我安排今天”的明确用户动作解释为本次 workflow 的 `planner.propose` 能力；仅暴露 `planner_propose_time_block`，每次最多一个内存态提案。
+- `today.analyze` 仅允许授权的只读工具，结构化结果经 provider JSON Schema 与本地 schema 双重校验；任何 Planner Proposal Tool 调用都会被拒绝。一次性自然语言由本地确定性路由选择 workflow；模糊请求默认 `today.analyze`，明确要求安排时间块时才进入 `today.plan`。`today.plan` 沿用相同的 scope-aware read tools，并将该用户动作解释为本次 workflow 的 `planner.propose` 能力；仅暴露 `planner_propose_time_block`，每次最多一个内存态提案。
 - 提案不会自动应用。生产路径复用 Phase 4.4 `AiProposalReview`、preview/revalidation、明确本地确认和既有 Planner Application UseCase；纯文本回答即使声称已经创建，也始终按未修改状态显示。
-- 系统 instructions 通过固定 Rust intent 映射提供；Workspace/Planner/Academic 标题及其他业务值是不可信数据。Diary 正文、Inbox 原始内容和 Search 不进入 Today Assistant。天气仅使用已授权且已有的缓存，不增加联网请求。一次性用户文字不超过 500 字符。
+- 系统 instructions 通过固定 Rust intent 映射提供；tool-turn 指令不得将请求限定为只读函数，而须告知 Provider 只能调用本请求实际提供的函数；Proposal function 仅创建待审提案、不执行写入。Workspace/Planner/Academic 标题及其他业务值是不可信数据。Diary 正文、Inbox 原始内容和 Search 不进入 Today Assistant。天气仅使用已授权且已有的缓存，不增加联网请求。一次性用户文字不超过 500 字符。
+- 模型输出在 UI 中按今日概览、需注意事项、建议安排、信息限制与来源分区显示；轻量清理 Markdown 语法，不将原始 Markdown 当作结构化界面呈现。真实 Proposal 预览在工作台 Rail 内联显示任务、日期、开始/结束、时长与 buffer，并仍复用 Phase 4.4 本地取消、重校验与确认链路。
 - DeepSeek 请求复用当前 Settings 中 provider、模型、reasoning 与 timeout；不新增 API、provider、schema、权限设置或自动重试。关闭/失败后允许用户手动重试；请求在运行时 single-flight，native timeout 仍有效；没有停止按钮，取消保留为未实现能力。
 - DeepSeek live 文本、结构化、tool call、proposal 与确认首次闭环必须由 Ethan 使用本人已配置的账号与安全测试数据验收；不得要求其向聊天提供 API Key。
 - 详细实现、验证及待人工验收项见 [`v2-phase-4-5-verification.md`](v2-phase-4-5-verification.md)。

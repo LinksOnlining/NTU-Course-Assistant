@@ -24,6 +24,26 @@ const PROPOSAL_OUTPUT = {
   required: ["accepted"],
   additionalProperties: false,
 };
+const TIME_BLOCK_INPUT = {
+  type: "object",
+  properties: {
+    personalTaskId: { type: "string" },
+    date: { type: "string" },
+    startTime: { type: "string" },
+    endTime: { type: "string" },
+    bufferBeforeMinutes: { type: "integer" },
+    bufferAfterMinutes: { type: "integer" },
+  },
+  required: [
+    "personalTaskId",
+    "date",
+    "startTime",
+    "endTime",
+    "bufferBeforeMinutes",
+    "bufferAfterMinutes",
+  ],
+  additionalProperties: false,
+};
 const ANALYSIS = {
   summary: "今天安排有序。",
   risks: ["下午空档较短。"],
@@ -38,6 +58,7 @@ function fixture({
   failedToolIds = [],
 } = {}) {
   const executions = [];
+  const proposalInputs = [];
   const providerCalls = [];
   const structuredCalls = [];
   const textCalls = [];
@@ -131,11 +152,12 @@ function fixture({
       moduleId: "planner",
       effect: "proposal",
       requiredPermission: "planner.propose",
-      inputSchema: EMPTY_OBJECT,
+      inputSchema: TIME_BLOCK_INPUT,
       outputSchema: PROPOSAL_OUTPUT,
       parseInput: (value) => value,
-      async execute(_value, context) {
+      async execute(value, context) {
         executions.push("planner.propose-time-block");
+        proposalInputs.push(value);
         context.reportProposal(proposal);
         return { accepted: true };
       },
@@ -210,6 +232,7 @@ function fixture({
     structuredCalls,
     textCalls,
     executions,
+    proposalInputs,
     proposal,
     get credentialChecks() {
       return credentialChecks;
@@ -238,8 +261,11 @@ function makeReadTool(id, name, permission, executions, failedToolIds) {
   };
 }
 
-function call(name, callId = "tool-call") {
-  return { kind: "functionCalls", calls: [{ callId, name, arguments: "{}" }] };
+function call(name, args = {}, callId = "tool-call") {
+  return {
+    kind: "functionCalls",
+    calls: [{ callId, name, arguments: JSON.stringify(args) }],
+  };
 }
 
 test("工作流固定 allowlist：分析只读，安排只开放一个时间块提案", () => {
@@ -332,24 +358,62 @@ test("analyze 即使收到伪造 Proposal Tool 调用仍只返回分析且不执
   assert.deepEqual(testFixture.executions, []);
 });
 
-test("today.plan 只开放 planner.propose + 时间块工具；提案返回待审且不执行写入", async () => {
+test("today.plan 将授权时间块函数真实暴露给 Provider 并生成待审 Proposal，不执行写入", async () => {
   const testFixture = fixture({
     grants: ["planner.read"],
-    turns: [call("planner_propose_time_block")],
+    turns: [
+      call("planner_get_open_items"),
+      call(
+        "planner_propose_time_block",
+        {
+          personalTaskId: "task-1",
+          date: "2026-09-26",
+          startTime: "14:00",
+          endTime: "14:30",
+          bufferBeforeMinutes: 0,
+          bufferAfterMinutes: 0,
+        },
+        "proposal-call",
+      ),
+    ],
   });
-  const result = await testFixture.orchestrator.run({ workflowId: "today.plan" });
-  assert.equal(result.status, "ready");
+  const result = await testFixture.orchestrator.run({
+    workflowId: "today.plan",
+    instruction: "为 AI验收测试任务安排 30 分钟时间块",
+  });
+  assert.equal(result.status, "ready", JSON.stringify(result));
   assert.equal(result.result.proposal.id, testFixture.proposal.id);
   assert.equal(result.result.proposal.status, "reviewRequired");
   assert.equal(testFixture.textCalls.length, 1);
   assert.equal(testFixture.textCalls[0].intent, "todayPlan");
   assert.deepEqual(
-    testFixture.providerCalls[0].tools
-      .filter((tool) => tool.name.startsWith("planner_propose_"))
-      .map((tool) => tool.name),
+    [
+      ...new Set(
+        testFixture.providerCalls
+          .flatMap((request) => request.tools)
+          .filter((tool) => tool.name.startsWith("planner_propose_"))
+          .map((tool) => tool.name),
+      ),
+    ],
     ["planner_propose_time_block"],
   );
-  assert.deepEqual(testFixture.executions, ["planner.propose-time-block"]);
+  const exposedFunction = testFixture.providerCalls[0].tools.find(
+    (tool) => tool.name === "planner_propose_time_block",
+  );
+  assert.ok(exposedFunction, "proposal function is present in the production Provider request");
+  assert.equal(testFixture.providerCalls[0].toolChoice, "auto");
+  assert.deepEqual(exposedFunction.parameters.required, TIME_BLOCK_INPUT.required);
+  assert.deepEqual(testFixture.proposalInputs, [
+    {
+      personalTaskId: "task-1",
+      date: "2026-09-26",
+      startTime: "14:00",
+      endTime: "14:30",
+      bufferBeforeMinutes: 0,
+      bufferAfterMinutes: 0,
+    },
+  ]);
+  assert.deepEqual(testFixture.executions, ["planner.open-items", "planner.propose-time-block"]);
   assert.equal("apply" in testFixture.orchestrator, false);
 });
 

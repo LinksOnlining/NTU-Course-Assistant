@@ -217,6 +217,11 @@ test("TimeBlock 提案必须关联未完成任务，任务变化要求重新确�
     },
     "mock",
   );
+  assert.deepEqual(
+    proposal.preview.fields.map(({ label }) => label),
+    ["任务", "日期", "开始", "结束", "时长", "提前 / 延后缓冲"],
+  );
+  assert.equal(proposal.preview.fields.find(({ label }) => label === "时长").value, "60 分钟");
   fixture.setTasks([
     task("task-1", { title: "更新后的任务名", updatedAt: "2026-09-26T11:00:00.000Z" }),
   ]);

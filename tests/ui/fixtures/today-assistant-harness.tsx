@@ -32,8 +32,11 @@ const proposal: AiPlannerProposal = {
   preview: {
     revision: 1,
     fields: [
+      { label: "任务", value: "准备验收测试" },
       { label: "日期", value: "2026-09-26" },
-      { label: "时间", value: "14:00–15:00" },
+      { label: "开始", value: "14:00" },
+      { label: "结束", value: "15:00" },
+      { label: "时长", value: "60 分钟" },
     ],
     warnings: [],
   },
@@ -43,8 +46,11 @@ const proposal: AiPlannerProposal = {
 const mode = new URLSearchParams(location.search).get("mode") ?? "ready";
 let requestCount = 0;
 let confirmationCount = 0;
-let cancellationCount = 0;
-const testWindow = window as Window & { __todayRequestCount?: number };
+const testWindow = window as Window & {
+  __todayRequestCount?: number;
+  __todayWorkflow?: string;
+  __todayInstruction?: string;
+};
 
 const result: AiWorkflowResult = {
   workflowId: "today.analyze",
@@ -62,9 +68,14 @@ const result: AiWorkflowResult = {
 };
 
 const service = {
-  async run({ workflowId }: { readonly workflowId: "today.analyze" | "today.plan" }) {
+  async run({ workflowId, instruction = "" }: {
+    readonly workflowId: "today.analyze" | "today.plan";
+    readonly instruction?: string;
+  }) {
     requestCount += 1;
     testWindow.__todayRequestCount = (testWindow.__todayRequestCount ?? 0) + 1;
+    testWindow.__todayWorkflow = workflowId;
+    testWindow.__todayInstruction = instruction;
     if (mode === "delay") await new Promise((resolve) => window.setTimeout(resolve, 160));
     if (mode === "no-permissions") return { status: "noPermissions" as const };
     if (mode === "not-configured") return { status: "notConfigured" as const };
@@ -99,6 +110,17 @@ const service = {
       result: {
         ...result,
         workflowId,
+        ...(mode === "markdown"
+          ? {
+              answer: "## 今日概览 **午后有空**",
+              analysis: {
+                summary: "## 午后有空\n**可以安排复习。**",
+                risks: ["**下午空档较短。**"],
+                suggestions: ["- 午后预留复习时间。"],
+                limitations: ["**天气信息未授权。**"],
+              },
+            }
+          : {}),
         ...(workflowId === "today.plan" ? { proposal } : {}),
       },
     };
@@ -106,9 +128,9 @@ const service = {
 } as AiWorkflowOrchestrator;
 
 function Harness() {
-  const [open, setOpen] = useState(false);
   const [settingsOpened, setSettingsOpened] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [cancellationCount, setCancellationCount] = useState(0);
 
   async function confirm(value: AiPlannerProposal): Promise<AiProposalApplyResult> {
     confirmationCount += 1;
@@ -121,31 +143,25 @@ function Harness() {
 
   return (
     <main>
-      <button type="button" onClick={() => setOpen(true)} data-testid="open-assistant">
-        打开今日助手
-      </button>
       <p data-testid="confirmation-count">{confirmationCount}</p>
       <p data-testid="cancellation-count">{cancellationCount}</p>
       {settingsOpened && <p data-testid="settings-opened">AI 设置已打开</p>}
       {applied && <p data-testid="applied">已刷新工作台</p>}
-      {open && (
-        <TodayAssistantPanel
-          service={service}
-          onOpenSettings={() => setSettingsOpened(true)}
-          onConfirmProposal={confirm}
-          onCancelProposal={() => {
-            cancellationCount += 1;
-          }}
-          onApplied={() => setApplied(true)}
-          onClose={() => setOpen(false)}
-        />
-      )}
+      <TodayAssistantPanel
+        service={service}
+        onOpenSettings={() => setSettingsOpened(true)}
+        onConfirmProposal={confirm}
+        onCancelProposal={() => {
+          setCancellationCount((value) => value + 1);
+        }}
+        onApplied={() => setApplied(true)}
+      />
     </main>
   );
 }
 
 const theme = new URLSearchParams(location.search).get("theme");
-if (theme === "dark") document.documentElement.dataset.theme = "dark";
+if (theme === "dark" || theme === "light") document.documentElement.dataset.theme = theme;
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing test root");
 createRoot(root).render(<Harness />);

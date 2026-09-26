@@ -24,6 +24,7 @@ import type {
   TimeBlockProposalPayload,
 } from "./proposal.ts";
 import { transitionAiProposal } from "./proposal.ts";
+import { durationMinutes } from "../../core/time.ts";
 
 const PROPOSAL_TTL_MS = 15 * 60_000;
 const MAX_PENDING_PROPOSALS = 50;
@@ -301,7 +302,14 @@ export function createAiPlannerProposalRuntime(
         title: "建议安排任务时间块",
         fields: [
           { label: "任务", value: result.task?.title ?? "关联任务" },
-          ...eventFields({ ...payload, title: result.task?.title ?? "时间块", location: null }),
+          { label: "日期", value: payload.date },
+          { label: "开始", value: payload.startTime },
+          { label: "结束", value: payload.endTime },
+          { label: "时长", value: `${durationMinutes(payload)} 分钟` },
+          {
+            label: "提前 / 延后缓冲",
+            value: `${payload.bufferBeforeMinutes} / ${payload.bufferAfterMinutes} 分钟`,
+          },
         ],
         warnings: result.warnings,
         preconditionFingerprint: result.fingerprint,

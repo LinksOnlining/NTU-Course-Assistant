@@ -31,10 +31,17 @@ test("AI workflow orchestration uses Context Engine and AIToolRegistry without p
 test("AI only starts from explicit user action and Planner writes remain behind proposal review", () => {
   const panel = source("src/workspace/ai/TodayAssistantPanel.tsx");
   const dashboard = source("src/workspace/dashboard/WorkspaceDashboard.tsx");
+  const review = source("src/workspace/ai/AiProposalReview.tsx");
   const app = source("src/App.tsx");
-  assert.match(panel, /onClick=\{\(\) => void run\("today\.analyze"\)\}/u);
-  assert.match(panel, /onClick=\{\(\) => void run\("today\.plan"\)\}/u);
+  assert.match(dashboard, /<TodayAssistantPanel/u);
+  assert.match(panel, /onClick=\{\(\) => void run\("today\.analyze", ""\)\}/u);
+  assert.match(panel, /onClick=\{\(\) => void run\("today\.plan",/u);
+  assert.match(panel, /data-testid="today-assistant-send"/u);
+  assert.match(panel, /resolveTodayAssistantWorkflow\(instruction\)/u);
+  assert.doesNotMatch(panel, /aria-modal|today-assistant-backdrop|onClose/u);
   assert.match(panel, /<AiProposalReview/u);
+  assert.match(panel, /inline\s*$/mu);
+  assert.match(review, /inline \? "ai-proposal-inline"/u);
   assert.match(dashboard, /aiPlannerProposalRuntime\.apply/u);
   assert.match(dashboard, /confirmed: true/u);
   assert.match(dashboard, /permissionIds: \["planner\.propose"\]/u);
