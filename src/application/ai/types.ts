@@ -4,7 +4,15 @@ import type { AiContextBundle, AiJsonValue } from "./context.ts";
 export type AiProviderId = "mock" | "deepseek";
 
 export type AiIntent =
-  "summarize" | "plan" | "suggest" | "organize" | "rewrite" | "extract" | "reflect";
+  | "summarize"
+  | "plan"
+  | "suggest"
+  | "organize"
+  | "rewrite"
+  | "extract"
+  | "reflect"
+  | "todayAnalyze"
+  | "todayPlan";
 
 export interface AiRequest {
   readonly id: string;

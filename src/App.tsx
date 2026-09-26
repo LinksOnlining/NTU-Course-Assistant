@@ -127,6 +127,7 @@ export function App() {
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [periods, setPeriods] = useState<readonly PeriodTime[]>(TEST_TIMETABLE.periods);
   const [isPeriodSettingsOpen, setIsPeriodSettingsOpen] = useState(false);
+  const [settingsInitialPage, setSettingsInitialPage] = useState<string | undefined>();
   const [isUsingTestSchedule, setIsUsingTestSchedule] = useState(true);
   const [reminderConfiguration, setReminderConfiguration] = useState<ReminderConfiguration>({
     termConfig: null,
@@ -154,6 +155,11 @@ export function App() {
   const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
     getThemePreference(),
   );
+
+  const openSettings = useCallback((initialPage?: string) => {
+    setSettingsInitialPage(initialPage);
+    setIsPeriodSettingsOpen(true);
+  }, []);
   const [currentRoute, setCurrentRoute] = useState<AppRoute>(
     () => createWorkspaceHomeTarget().route,
   );
@@ -796,7 +802,7 @@ export function App() {
       route={currentRoute}
       lastAcademicRoute={lastAcademicRoute}
       onNavigate={navigateToRoute}
-      onOpenSettings={() => setIsPeriodSettingsOpen(true)}
+      onOpenSettings={() => openSettings()}
       settingsDisabled={storageStatus !== "ready"}
       weatherSlot={
         weather.settings.enabled && weather.settings.location ? (
@@ -999,6 +1005,7 @@ export function App() {
               : null
           }
           onNavigate={navigateToRoute}
+          onOpenAISettings={() => openSettings("AI")}
           onScheduleRoutine={(suggestion) => {
             setRoutineScheduleRequest(suggestion);
             navigateToRoute({ area: "workspace", page: "schedule" });
@@ -1113,7 +1120,7 @@ export function App() {
             setPendingImportCourses([]);
             setImportError("");
           }}
-          onOpenPeriodSettings={() => setIsPeriodSettingsOpen(true)}
+          onOpenPeriodSettings={() => openSettings()}
           onEnterFinalReview={enterFinalImportReview}
           onReturnToEdit={() => {
             if (isImporting) return;
@@ -1160,6 +1167,7 @@ export function App() {
       {isPeriodSettingsOpen && (
         <PeriodSettings
           initialDomain={currentRoute.area === "academic" ? "academic" : "workspace"}
+          initialPage={settingsInitialPage}
           periods={periods}
           isUsingTestSchedule={isUsingTestSchedule}
           reminderConfiguration={reminderConfiguration}
@@ -1204,7 +1212,10 @@ export function App() {
           }}
           onCheckUpdates={() => void checkForUpdates(true)}
           weather={weather}
-          onCancel={() => setIsPeriodSettingsOpen(false)}
+          onCancel={() => {
+            setIsPeriodSettingsOpen(false);
+            setSettingsInitialPage(undefined);
+          }}
         />
       )}
     </AppShell>

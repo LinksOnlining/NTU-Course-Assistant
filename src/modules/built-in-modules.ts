@@ -950,7 +950,10 @@ export const BUILT_IN_MODULES = [
   },
   {
     id: "ai",
-    metadata: { name: "AI", description: "AI 运行能力尚未开放。" },
+    metadata: {
+      name: "AI",
+      description: "AI 仅作为工作台中的一次性辅助能力提供，不开放独立 AI 模块。",
+    },
     order: 100,
     available: false,
     enabledByDefault: false,

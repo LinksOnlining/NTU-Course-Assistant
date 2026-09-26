@@ -634,3 +634,121 @@ test("內置输入边界约束日期 horizon 与数量；JSON Schema 校验只�
   });
   assert.throws(() => adapter.parseInput({ limit: 51 }), /limit/u);
 });
+
+test("工作流 read allowlist 在 Provider 工具暴露和执行时双重拒绝其他已授权读取工具", async () => {
+  const declarations = [
+    {
+      id: "workspace.test",
+      name: "workspace_test_read",
+      moduleId: "workspace",
+      order: 10,
+      description: "允许的摘要",
+      effect: "read",
+      permissionIds: ["workspace.read"],
+      inputSchema: TOOL_INPUT,
+      outputSchema: TOOL_OUTPUT,
+    },
+    {
+      id: "workspace.other",
+      name: "workspace_other_read",
+      moduleId: "workspace",
+      order: 20,
+      description: "工作流未开放的摘要",
+      effect: "read",
+      permissionIds: ["workspace.read"],
+      inputSchema: TOOL_INPUT,
+      outputSchema: TOOL_OUTPUT,
+    },
+  ];
+  const state = fixture({ declarations });
+  const mock = provider([
+    functionCalls(call("forged-read", "workspace_other_read")),
+    { kind: "final", content: "完成" },
+  ]);
+  const result = await runAiToolLoop({
+    request: request(),
+    provider: mock,
+    registry: state.registry,
+    permissionSettings: ALLOWED,
+    allowedReadToolIds: ["workspace.test"],
+  });
+
+  assert.equal(result.status, "completed");
+  assert.deepEqual(
+    mock.calls[0].tools.map(({ name }) => name),
+    ["workspace_test_read"],
+  );
+  assert.deepEqual(state.executions, []);
+  const denied = JSON.parse(outputItems(mock.calls[1])[0].output);
+  assert.equal(denied.error.code, "PERMISSION_DENIED");
+});
+
+test("Today 工作流的日期范围工具默认限制到本次时间窗并拒绝越界读取", async () => {
+  const executed = [];
+  const rangedTool = {
+    id: "academic.upcoming",
+    name: "academic_get_upcoming",
+    moduleId: "academic",
+    effect: "read",
+    requiredPermission: "academic.read",
+    inputSchema: {
+      type: "object",
+      properties: { from: { type: "string" }, to: { type: "string" } },
+      required: [],
+      additionalProperties: false,
+    },
+    outputSchema: TOOL_OUTPUT,
+    parseInput: (value) => value,
+    async execute(value) {
+      executed.push(value);
+      return { value: "范围内摘要" };
+    },
+  };
+  const registry = {
+    tools: [rangedTool],
+    getByName: (name) => (name === rangedTool.name ? rangedTool : undefined),
+    getAvailable: (gate) => (gate.require("academic.read").allowed ? [rangedTool] : []),
+  };
+  const timeWindow = { from: "2026-09-26", to: "2026-10-02" };
+  const defaultRangeProvider = provider([
+    functionCalls(call("default-range", rangedTool.name, "{}")),
+    { kind: "final", content: "完成" },
+  ]);
+  const bounded = await runAiToolLoop({
+    request: request(),
+    provider: defaultRangeProvider,
+    registry,
+    permissionSettings: { persistentGrants: ["academic.read"] },
+    allowedReadToolIds: ["academic.upcoming"],
+    allowedDateRange: timeWindow,
+  });
+  assert.equal(bounded.status, "completed");
+  assert.deepEqual(executed, [timeWindow]);
+
+  executed.length = 0;
+  const outsideProvider = provider([
+    functionCalls(
+      call(
+        "outside-range",
+        rangedTool.name,
+        JSON.stringify({ from: "2026-10-03", to: "2026-10-03" }),
+      ),
+    ),
+    { kind: "final", content: "只能基于有限信息回答" },
+  ]);
+  const outside = await runAiToolLoop({
+    request: request(),
+    provider: outsideProvider,
+    registry,
+    permissionSettings: { persistentGrants: ["academic.read"] },
+    allowedReadToolIds: ["academic.upcoming"],
+    allowedDateRange: timeWindow,
+  });
+  assert.equal(outside.status, "completed");
+  assert.equal(outside.failedToolCount, 1);
+  assert.deepEqual(executed, []);
+  assert.equal(
+    JSON.parse(outputItems(outsideProvider.calls[1])[0].output).error.code,
+    "PERMISSION_DENIED",
+  );
+});

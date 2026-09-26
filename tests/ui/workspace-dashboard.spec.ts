@@ -479,7 +479,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
   ).toBeVisible();
   await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
   await expect(page.getByRole("button", { name: /收件箱，暂无待整理/u })).toBeVisible();
-  await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
+  await expect(page.getByTestId("workspace-ai-entry")).toBeVisible();
   await expect(page.getByText("已完成事项", { exact: true })).toHaveCount(0);
   await expect(page.getByTestId("workspace-today-overview")).toBeVisible();
   await expect(page.getByTestId("workspace-today-overview")).toContainText("正在上课");
@@ -579,7 +579,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
       await expect(page.getByRole("button", { name: /任务/u })).toBeVisible();
       await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
       await expect(page.getByRole("button", { name: /收件箱，暂无待整理/u })).toBeVisible();
-      await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
+      await expect(page.getByTestId("workspace-ai-entry")).toBeVisible();
     }
   }
 });
@@ -787,14 +787,12 @@ test("Diary, Inbox and schedule routes remain explicit, and returning to Workspa
   await expect.poll(getLoads).toBeGreaterThan(previousLoads);
   previousLoads = await getLoads();
 
-  for (const name of ["AI，尚未开放"]) {
-    await page.getByRole("button", { name: new RegExp(name, "u") }).click();
-    await expect(page.getByRole("heading", { name: "该模块尚未开放" })).toBeVisible();
-    await page.getByRole("button", { name: "返回工作台" }).click();
-    await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
-    await expect.poll(getLoads).toBeGreaterThan(previousLoads);
-    previousLoads = await getLoads();
-  }
+  await page.getByTestId("workspace-ai-entry").click();
+  await expect(page.getByRole("dialog", { name: "今日助手" })).toBeVisible();
+  await expect(page.getByTestId("today-assistant-loading")).toHaveCount(0);
+  await page.getByRole("button", { name: "关闭今日助手" }).click();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
+  await expect.poll(getLoads).toBe(previousLoads);
 
   await page.getByRole("button", { name: /查看完整日程/u }).click();
   await expect(page.getByTestId("workspace-schedule")).toBeVisible();
@@ -824,7 +822,7 @@ test("Dashboard cards remain visible in both light and dark themes", async ({ pa
     await expect(page.getByRole("button", { name: /任务/u })).toBeVisible();
     await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
     await expect(page.getByRole("button", { name: /收件箱，暂无待整理/u })).toBeVisible();
-    await expect(page.getByRole("button", { name: /AI，尚未开放/u })).toBeVisible();
+    await expect(page.getByTestId("workspace-ai-entry")).toBeVisible();
   };
   await visibleModules();
 
@@ -851,7 +849,7 @@ test("empty Academic data still renders the complete axis and truthful empty/una
   await expect(timeline.getByText("00:00")).toBeVisible();
   await expect(timeline.getByText("24:00")).toBeVisible();
   await expect(page.getByText("暂无未完成任务")).toBeVisible();
-  await expect(page.getByText("尚未开放").first()).toBeVisible();
+  await expect(page.getByTestId("workspace-ai-entry")).toContainText("按需分析");
   await expect(page.getByText(/^0$/u)).toHaveCount(0);
   await page.getByRole("button", { name: /今天暂无安排/u }).click();
   const details = page.getByRole("dialog", { name: "今日详情" });

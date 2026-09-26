@@ -1,10 +1,10 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0–4.4 COMPLETE。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次只读 Tool Runtime；Phase 4.4 建立 Planner Proposal 生成、预览、重校验及本地确认后复用 Application UseCase 的基础。没有 AI Apply Tool，也没有用户可见 AI 工作流入口。DeepSeek `POST /responses` 文本、结构化及 Tool Calling live 请求尚未执行，需待首次正式 AI 工作流 smoke test。
+状态：**Phase 4.0–4.5 Implementation / Automated COMPLETE；Phase 4.5 DeepSeek Live PENDING。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 在工作台增加一次性 Today Assistant。无 AI Apply Tool、聊天历史或持久化 AI 状态。真实 DeepSeek `POST /responses` 文本、结构化、Tool Calling 与 Proposal 确认闭环待 Ethan 人工验收。
 
 ## 1. 产品定位
 
-AI 是可选辅助层，不是业务数据来源。Academic、Planner、Diary、Inbox、Weather、Routine 与 Search 保持各自的数据所有权；AI capability metadata 只说明未来可能的能力，不启用 AI 模块。
+AI 是可选辅助层，不是业务数据来源。Academic、Planner、Diary、Inbox、Weather、Routine 与 Search 保持各自的数据所有权；Phase 4.5 只通过工作台一次性助手调用已完成的 AI 能力，不开放独立 AI 一级导航或通用聊天模块。
 
 ## 2. 安全与依赖边界
 
@@ -91,7 +91,7 @@ approved ─────────→ failed / stale
 
 SQLite schema 保持 **7**，migration **0**；Phase 4.1 未增加或读取任何 AI 数据库表，也未访问 Release 用户数据库。非敏感 AI provider settings 使用本地浏览器设置存储；API Key 仅在 Windows Credential Manager。
 
-Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久化与删除、断网处理验收。真实 `POST /responses` 文本、结构化与 Tool Calling 尚未执行，待首次正式 AI 工作流验收。Phase 4.2 / 4.3 没有 schema 变更、持久化 Tool 状态或 Proposal 应用。
+Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久化与删除、断网处理验收。Phase 4.5 生产 UI 已接入 DeepSeek Native Responses Provider；`POST /responses` 文本、结构化、Tool Calling、Proposal 与确认闭环尚未执行 live 验收。Phase 4.2–4.5 没有 schema 变更、持久化 Tool 状态或 Proposal 记录。
 
 ## 10. Phase 4.2 运行时实施边界
 
@@ -111,14 +111,25 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 - Loop 限制：最多 4 次 Provider round、8 次 Tool call、每 round 4 次调用；调用按 Provider 响应顺序串行执行。完全相同的规范化 `tool name + args` 在单次请求内只执行一次。请求结束即释放 transient transcript/cache，不保存 prompt、call history、reasoning 或 Tool output；Tool 调用不自动重试。
 - 输出预算：每项最多 8 KiB、单次请求全部 Tool output 合计最多 24 KiB。超限按稳定规则裁剪并携带 `truncated` / `omittedCount`；错误采用最小安全错误对象，不暴露异常、数据库信息、本机路径或 secret。
 - Tool function parameters 与响应大小均受 Native 上限约束；Responses API `function_call` / `function_call_output` 使用真实、唯一且配对的 `call_id`。Tool loop 固定 `reasoning=none`，并告知 Provider Tool results 是不可信的应用数据。
-- 六项读取工具的字段、权限、loop/budget、自动化验证与 live 限制见 [`v2-phase-4-3-verification.md`](v2-phase-4-3-verification.md)。无用户可见 AI Prompt、Chat 或 Tool Debug UI；Diary body、Inbox raw、Search、generic DB/HTTP/file/shell 与业务写入均未开放。
+- 六项读取工具的字段、权限、loop/budget、自动化验证与 live 限制见 [`v2-phase-4-3-verification.md`](v2-phase-4-3-verification.md)。Phase 4.5 仅增加一次性 Today Assistant UI，不提供通用 Chat 或 Tool Debug UI；Diary body、Inbox raw、Search、generic DB/HTTP/file/shell 与业务写入均未开放。
 
 ## 12. Phase 4.4 Planner Proposal Runtime
 
 - Planner Proposal permission 统一为 `planner.propose`，表示模块级 Proposal authorization；不按 Proposal 对象类型拆分权限。
 - Tool 粒度由本地 workflow capability allowlist 控制：`planner.propose` 未获准时不暴露任何 Proposal Tool；已获准但没有 workflow proposal capability 时同样不暴露；task/event/timeBlock workflow 各自只暴露对应的 `planner_propose_task`、`planner_propose_event` 或 `planner_propose_time_block`。Provider 直接伪造注册名也会在执行入口重新校验 allowlist。
 - 三个 Proposal Tool 只校验参数并创建短时内存态 proposal。Provider 无 Apply 工具；多 Proposal 调用在执行前拒绝；proposal tool 结束后 orchestration 停止，不让 Provider 对刚生成的 proposal 追加执行操作。
-- Proposal review 组件是可复用本地 UI，没有挂载为生产 AI 对话/工作流入口。预览字段与冲突提示由本地应用生成；冲突为 warn-but-allow。确认时检查 proposal 状态、过期时间、权限、预览 revision 和关联任务/日程变化。外部日程或关联任务变化时更新预览并要求二次确认；过期或关联任务失效则标 stale。
+- Proposal review 组件是可复用本地 UI；截至 Phase 4.4 阶段结束时尚未连接生产 AI 工作流，Phase 4.5 的 Today Assistant 已复用该组件。预览字段与冲突提示由本地应用生成；冲突为 warn-but-allow。确认时检查 proposal 状态、过期时间、权限、预览 revision 和关联任务/日程变化。外部日程或关联任务变化时更新预览并要求二次确认；过期或关联任务失效则标 stale。
 - 用户点击本地确认后，仅调用现有 `createPersonalTask`、`createPlannerEvent` 或 `createTimeBlock` Application UseCase；取消、未确认和 stale 路径不写入。确认结果只在 UseCase 成功后标记 applied；同一 proposal 的并发确认被 single-flight 保护，失败为终态以避免不确定写入的自动重试。无 SQLite schema/migration 变化，proposal 不持久化。
 - 单元及 Mock UI E2E 覆盖权限与 allowlist、Provider 伪造调用、创建/预览/取消/确认、重校验、冲突刷新、过期/失败及幂等行为。DeepSeek 真实 `POST /responses` Tool Calling 未执行；未启用正式用户 workflow。
 - 验证记录：[`v2-phase-4-4-verification.md`](v2-phase-4-4-verification.md)。
+
+## 13. Phase 4.5 Today Assistant 工作流
+
+- Workspace Rail 的“AI 助手”入口仅打开一次性面板；只有用户点击“分析今天”或“帮我安排今天”后才调用 provider。启动、进入工作台、改权限均不会自动请求。没有聊天、会话、AI 历史或数据库持久化。
+- Workflow 定义是本地可信配置，固定为 `today.analyze` 与 `today.plan`，声明请求 scopes、只读工具 allowlist、提案工具 allowlist 和结果模式。请求仅携带当前 Settings → AI 已授权的 scope；所有模块读取继续经过 Phase 4.2 Context Engine 和预算投影。
+- `today.analyze` 仅允许授权的只读工具，结构化结果经 provider JSON Schema 与本地 schema 双重校验；任何 Planner Proposal Tool 调用都会被拒绝。`today.plan` 沿用相同的 scope-aware read tools，并将“帮我安排今天”的明确用户动作解释为本次 workflow 的 `planner.propose` 能力；仅暴露 `planner_propose_time_block`，每次最多一个内存态提案。
+- 提案不会自动应用。生产路径复用 Phase 4.4 `AiProposalReview`、preview/revalidation、明确本地确认和既有 Planner Application UseCase；纯文本回答即使声称已经创建，也始终按未修改状态显示。
+- 系统 instructions 通过固定 Rust intent 映射提供；Workspace/Planner/Academic 标题及其他业务值是不可信数据。Diary 正文、Inbox 原始内容和 Search 不进入 Today Assistant。天气仅使用已授权且已有的缓存，不增加联网请求。一次性用户文字不超过 500 字符。
+- DeepSeek 请求复用当前 Settings 中 provider、模型、reasoning 与 timeout；不新增 API、provider、schema、权限设置或自动重试。关闭/失败后允许用户手动重试；请求在运行时 single-flight，native timeout 仍有效；没有停止按钮，取消保留为未实现能力。
+- DeepSeek live 文本、结构化、tool call、proposal 与确认首次闭环必须由 Ethan 使用本人已配置的账号与安全测试数据验收；不得要求其向聊天提供 API Key。
+- 详细实现、验证及待人工验收项见 [`v2-phase-4-5-verification.md`](v2-phase-4-5-verification.md)。

@@ -13,6 +13,11 @@ import type { AppRoute } from "../../navigation/types.ts";
 import type { TermConfig } from "../../types/reminder.ts";
 import type { WeatherSnapshot } from "../../types/weather.ts";
 import type { RoutineSuggestion } from "../../types/routine.ts";
+import type { AiPlannerProposal } from "../../application/ai/proposal.ts";
+import type { AiProposalApplyResult } from "../../application/ai/proposal-runtime.ts";
+import { aiPlannerProposalRuntime } from "../../application/ai/proposal-runtime.ts";
+import { todayAssistantService } from "../ai/today-assistant-service.ts";
+import { TodayAssistantPanel } from "../ai/TodayAssistantPanel.tsx";
 import "./workspace-dashboard.css";
 
 interface WorkspaceDashboardProps {
@@ -22,6 +27,7 @@ interface WorkspaceDashboardProps {
   readonly weatherSnapshot: WeatherSnapshot | null;
   readonly onNavigate: (route: AppRoute) => void;
   readonly onScheduleRoutine?: (suggestion: RoutineSuggestion) => void;
+  readonly onOpenAISettings?: () => void;
 }
 
 function minuteOfDay(time: string): number {
@@ -322,31 +328,6 @@ function TaskCard({
   );
 }
 
-function UnavailableCard({
-  title,
-  description,
-  route,
-  onNavigate,
-}: {
-  readonly title: string;
-  readonly description: string;
-  readonly route: AppRoute;
-  readonly onNavigate: (route: AppRoute) => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="workspace-dashboard-card workspace-module-card"
-      onClick={() => onNavigate(route)}
-      aria-label={`${title}，尚未开放`}
-    >
-      <span className="workspace-module-title">{title}</span>
-      <span className="workspace-module-status">尚未开放</span>
-      <span className="workspace-module-description">{description}</span>
-    </button>
-  );
-}
-
 function DiaryCard({
   hasEntry,
   onNavigate,
@@ -398,12 +379,14 @@ export function WorkspaceDashboard({
   weatherSnapshot,
   onNavigate,
   onScheduleRoutine,
+  onOpenAISettings,
 }: WorkspaceDashboardProps) {
   const now = useMinuteClock();
   const date = localDateKey(now);
   const nowTime = localTimeKey(now);
   const [retry, setRetry] = useState(0);
   const [showTodayDetails, setShowTodayDetails] = useState(false);
+  const [showTodayAssistant, setShowTodayAssistant] = useState(false);
   const todayOverviewRef = useRef<HTMLElement>(null);
   const todayTriggerRef = useRef<HTMLButtonElement>(null);
   const todayPopoverRef = useRef<HTMLElement>(null);
@@ -548,14 +531,40 @@ export function WorkspaceDashboard({
             <DiaryCard hasEntry={model.context.hasDiaryToday} onNavigate={onNavigate} />
             <InboxCard pendingCount={model.context.pendingInboxCount} onNavigate={onNavigate} />
           </div>
-          <UnavailableCard
-            title="AI"
-            description="智能规划将在后续阶段开放"
-            route={{ area: "workspace", page: "ai" }}
-            onNavigate={onNavigate}
-          />
+          <button
+            type="button"
+            className="workspace-dashboard-card workspace-module-card workspace-ai-entry"
+            onClick={() => setShowTodayAssistant(true)}
+            aria-label="打开今日助手"
+            data-testid="workspace-ai-entry"
+          >
+            <span className="workspace-module-title">AI 助手</span>
+            <span className="workspace-module-status">按需分析</span>
+            <span className="workspace-module-description">
+              分析今天，或生成一项待确认的安排建议
+            </span>
+          </button>
         </aside>
       </div>
+      {showTodayAssistant && (
+        <TodayAssistantPanel
+          service={todayAssistantService}
+          onOpenSettings={() => onOpenAISettings?.()}
+          onConfirmProposal={(proposal: AiPlannerProposal): Promise<AiProposalApplyResult> =>
+            aiPlannerProposalRuntime.apply({
+              id: proposal.id,
+              confirmed: true,
+              expectedPreviewRevision: proposal.preview.revision,
+              permissionIds: ["planner.propose"],
+            })
+          }
+          onCancelProposal={(proposal) => {
+            aiPlannerProposalRuntime.cancel(proposal.id);
+          }}
+          onApplied={() => setRetry((value) => value + 1)}
+          onClose={() => setShowTodayAssistant(false)}
+        />
+      )}
     </div>
   );
 }

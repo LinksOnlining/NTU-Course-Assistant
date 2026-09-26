@@ -27,6 +27,8 @@ export const AI_TOOL_LOOP_LIMITS = Object.freeze({
   maxArgumentsBytes: 8 * 1024,
 });
 
+const DATE_RANGE_TOOL_IDS = new Set(["academic.upcoming", "planner.schedule"]);
+
 export type AiToolLoopResult =
   | {
       readonly status: "completed";
@@ -34,11 +36,13 @@ export type AiToolLoopResult =
       readonly providerRounds: number;
       readonly toolCalls: number;
       readonly toolNames: readonly string[];
+      readonly failedToolCount: number;
     }
   | {
       readonly status: "failed";
-      readonly code: "toolLoopLimitExceeded" | "providerFailure";
+      readonly code: "toolLoopLimitExceeded" | "providerFailure" | "proposalFailure";
       readonly message: string;
+      readonly providerErrorCode?: string;
       readonly providerRounds: number;
       readonly toolCalls: number;
     }
@@ -48,6 +52,7 @@ export type AiToolLoopResult =
       readonly providerRounds: number;
       readonly toolCalls: number;
       readonly toolNames: readonly string[];
+      readonly failedToolCount: number;
     };
 
 export async function runAiToolLoop(input: {
@@ -55,6 +60,10 @@ export async function runAiToolLoop(input: {
   readonly provider: AIProvider;
   readonly registry: AiToolRegistry;
   readonly permissionSettings: AiDataAccessSettings | unknown;
+  /** Workflow-specific read capability boundary; omitted only by legacy callers. */
+  readonly allowedReadToolIds?: readonly string[];
+  /** Optional workflow horizon for date-range read tools. */
+  readonly allowedDateRange?: { readonly from: string; readonly to: string };
   /** Per-workflow consent and capability allowlist; omission is default-deny. */
   readonly proposalPolicy?: AiProposalToolPolicy;
 }): Promise<AiToolLoopResult> {
@@ -62,7 +71,14 @@ export async function runAiToolLoop(input: {
     settings: input.permissionSettings,
     requestId: input.request.id,
   });
-  const available = input.registry.getAvailable(gate, input.proposalPolicy);
+  const available = input.registry
+    .getAvailable(gate, input.proposalPolicy)
+    .filter(
+      (tool) =>
+        tool.effect !== "read" ||
+        input.allowedReadToolIds === undefined ||
+        input.allowedReadToolIds.includes(tool.id),
+    );
   const providerTools = available.map((tool) => ({
     name: tool.name,
     description: tool.description,
@@ -76,6 +92,7 @@ export async function runAiToolLoop(input: {
   const toolNames: string[] = [];
   let totalCalls = 0;
   let totalOutputBytes = 0;
+  let failedToolCount = 0;
 
   for (let round = 1; round <= AI_TOOL_LOOP_LIMITS.maxProviderRounds; round += 1) {
     let turn;
@@ -87,11 +104,13 @@ export async function runAiToolLoop(input: {
         tools: providerTools,
         toolChoice: providerTools.length ? "auto" : "none",
       });
-    } catch {
+    } catch (caught) {
+      const errorCode = providerErrorCode(caught);
       return {
         status: "failed",
         code: "providerFailure",
         message: "AI 服务本轮请求失败，请稍后重试。",
+        ...(errorCode ? { providerErrorCode: errorCode } : {}),
         providerRounds: round,
         toolCalls: totalCalls,
       };
@@ -116,6 +135,7 @@ export async function runAiToolLoop(input: {
         providerRounds: round,
         toolCalls: totalCalls,
         toolNames: Object.freeze([...new Set(toolNames)]),
+        failedToolCount,
       };
     }
 
@@ -180,15 +200,18 @@ export async function runAiToolLoop(input: {
         gate,
         executedCache,
         input.proposalPolicy,
+        input.allowedReadToolIds,
+        input.allowedDateRange,
         executionContext,
       );
       toolNames.push(call.name);
+      if (result.success === false) failedToolCount += 1;
       const calledTool = input.registry.getByName(call.name);
       if (calledTool?.effect === "proposal") {
         if (!result.success || !reportedProposal) {
           return {
             status: "failed",
-            code: "providerFailure",
+            code: "proposalFailure",
             message: result.failureMessage ?? "无法生成待审规划提案。",
             providerRounds: round,
             toolCalls: totalCalls,
@@ -200,6 +223,7 @@ export async function runAiToolLoop(input: {
           providerRounds: round,
           toolCalls: totalCalls,
           toolNames: Object.freeze([...new Set(toolNames)]),
+          failedToolCount,
         };
       }
       let serialized = result.serialized;
@@ -230,6 +254,8 @@ async function executeCall(
   gate: AiPermissionGate,
   cache: Map<string, string>,
   proposalPolicy?: AiProposalToolPolicy,
+  allowedReadToolIds?: readonly string[],
+  allowedDateRange?: { readonly from: string; readonly to: string },
   executionContext?: AiToolExecutionContext,
 ): Promise<{
   readonly serialized: string;
@@ -237,9 +263,20 @@ async function executeCall(
   readonly failureMessage?: string;
 }> {
   const tool = registry.getByName(call.name);
-  if (!tool) return { serialized: serializeFailure("UNKNOWN_TOOL", "未知的只读工具。") };
+  if (!tool)
+    return { serialized: serializeFailure("UNKNOWN_TOOL", "未知的只读工具。"), success: false };
+  if (
+    tool.effect === "read" &&
+    allowedReadToolIds !== undefined &&
+    !allowedReadToolIds.includes(tool.id)
+  ) {
+    return {
+      serialized: serializeFailure("PERMISSION_DENIED", "当前工作流未开放此工具。"),
+      success: false,
+    };
+  }
   if (utf8Bytes(call.arguments) > AI_TOOL_LOOP_LIMITS.maxArgumentsBytes) {
-    return { serialized: serializeFailure("INVALID_ARGUMENTS", "工具参数无效。") };
+    return { serialized: serializeFailure("INVALID_ARGUMENTS", "工具参数无效。"), success: false };
   }
 
   let parsed: unknown;
@@ -247,11 +284,44 @@ async function executeCall(
   try {
     parsed = JSON.parse(call.arguments) as unknown;
     if (!validateJsonSchema(parsed, tool.inputSchema)) {
-      return { serialized: serializeFailure("INVALID_ARGUMENTS", "工具参数未通过格式校验。") };
+      return {
+        serialized: serializeFailure("INVALID_ARGUMENTS", "工具参数未通过格式校验。"),
+        success: false,
+      };
+    }
+    if (allowedDateRange && DATE_RANGE_TOOL_IDS.has(tool.id)) {
+      if (!isRecord(parsed))
+        return {
+          serialized: serializeFailure("INVALID_ARGUMENTS", "工具参数无效。"),
+          success: false,
+        };
+      const hasFrom = Object.hasOwn(parsed, "from");
+      const hasTo = Object.hasOwn(parsed, "to");
+      if (hasFrom !== hasTo) {
+        return {
+          serialized: serializeFailure("INVALID_ARGUMENTS", "日期范围参数不完整。"),
+          success: false,
+        };
+      }
+      if (hasFrom) {
+        if (
+          typeof parsed.from !== "string" ||
+          typeof parsed.to !== "string" ||
+          parsed.from < allowedDateRange.from ||
+          parsed.to > allowedDateRange.to
+        ) {
+          return {
+            serialized: serializeFailure("PERMISSION_DENIED", "当前工作流只能读取获准的日期范围。"),
+            success: false,
+          };
+        }
+      } else {
+        parsed = { ...parsed, from: allowedDateRange.from, to: allowedDateRange.to };
+      }
     }
     normalized = tool.parseInput(parsed);
   } catch {
-    return { serialized: serializeFailure("INVALID_ARGUMENTS", "工具参数无效。") };
+    return { serialized: serializeFailure("INVALID_ARGUMENTS", "工具参数无效。"), success: false };
   }
 
   if (tool.effect === "read") {
@@ -451,6 +521,15 @@ function limitFailure(round: number, toolCalls: number): AiToolLoopResult {
     providerRounds: round,
     toolCalls,
   };
+}
+
+function providerErrorCode(caught: unknown): string | undefined {
+  return typeof caught === "object" &&
+    caught !== null &&
+    "code" in caught &&
+    typeof caught.code === "string"
+    ? caught.code
+    : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
