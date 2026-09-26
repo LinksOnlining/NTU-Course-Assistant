@@ -6,7 +6,7 @@
 
 - 当前 v2 产品需求单一事实来源：[`PROJECT_BRIEF.md`](PROJECT_BRIEF.md)。
 - 当前 v2 架构及依赖方向契约：[`docs/v2-architecture-contract.md`](docs/v2-architecture-contract.md)。
-- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0 AI Operation Layer Architecture Foundation 已完成：类型、Mock Provider、权限/Context/Proposal/Tool 契约及静态 Registry capability 元数据；没有真实 Provider 调用、AI runtime/UI 或 schema 变更。Phase 4.1 尚未开始；详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md) 与 [`docs/v2-ai-operation-contract.md`](docs/v2-ai-operation-contract.md)。当前 schema 为 7。
+- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0 AI Operation Layer architecture contract 已完成。Phase 4.1 implementation 与自动验证完成：DeepSeek 通过 Native Rust transport，API Key 使用 Windows Credential Manager，AI 设置位于通用设置页；模型发现仅在用户操作时触发，不读取自动 Workspace context，不执行工具或 Proposal。非敏感 Provider 设置存储于设备本地，SQLite schema 仍为 7、migration 0。真实 DeepSeek Windows 在线验收待 Ethan；Phase 4.2 未开始。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md) 与 [`docs/v2-phase-4-1-verification.md`](docs/v2-phase-4-1-verification.md)。
 - 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。此引用不表示 v2 runtime 已实现。
 
 ## 技术方案

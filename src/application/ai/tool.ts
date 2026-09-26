@@ -6,6 +6,8 @@ export type AiJsonObject = { readonly [key: string]: AiJsonValue };
 
 /** 不可信结构化 Provider 输出的无依赖校验边界。 */
 export interface AiValueSchema<Value> {
+  readonly name: string;
+  readonly jsonSchema: AiJsonObject;
   parse(input: unknown): Value;
 }
 

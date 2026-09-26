@@ -1,3 +1,4 @@
+mod ai;
 mod db;
 mod geocoding;
 mod models;
@@ -1143,6 +1144,7 @@ fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(ai::AiService::default())
         .manage(geocoding::GeocodingState::new().expect("初始化天气地理编码 HTTP 客户端失败"))
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             let _ = show_main_window(app);
@@ -1206,6 +1208,12 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            ai::set_deepseek_api_key,
+            ai::get_deepseek_api_key_status,
+            ai::delete_deepseek_api_key,
+            ai::discover_deepseek_models,
+            ai::generate_deepseek_text,
+            ai::generate_deepseek_structured,
             load_courses,
             insert_course,
             import_courses,

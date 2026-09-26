@@ -1,7 +1,7 @@
 import type { ModuleId } from "../../modules/contracts.ts";
 import type { AiContextBundle, AiJsonValue } from "./context.ts";
 
-export type AiProviderId = "mock" | "openai";
+export type AiProviderId = "mock" | "deepseek";
 
 export type AiIntent =
   "summarize" | "plan" | "suggest" | "organize" | "rewrite" | "extract" | "reflect";
@@ -11,6 +11,8 @@ export interface AiRequest {
   readonly intent: AiIntent;
   readonly sourceModule: ModuleId;
   readonly createdAt: string;
+  /** 本次调用显式提供的文本；Phase 4.1 不会自动从 Workspace 收集上下文。 */
+  readonly prompt: string;
   readonly context: AiContextBundle;
 }
 

@@ -12,6 +12,7 @@ const request = {
   intent: "summarize",
   sourceModule: "workspace",
   createdAt: "2026-09-25T10:00:00.000Z",
+  prompt: "测试输入",
   context: {
     selectedItems: [],
     moduleContexts: {},
@@ -49,6 +50,8 @@ test("MockAIProvider 可模拟请求失败和不可用状态", async () => {
 
 test("结构化 Provider 输出必须经由调用方 schema parser 校验", async () => {
   const schema = {
+    name: "sample_result",
+    jsonSchema: { type: "object" },
     parse(value) {
       assert.equal(typeof value.requestId, "string");
       assert.equal(typeof value.result, "string");

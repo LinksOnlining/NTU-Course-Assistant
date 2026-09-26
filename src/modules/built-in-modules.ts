@@ -492,6 +492,15 @@ export const BUILT_IN_MODULES = [
         order: 40,
         available: true,
       },
+      {
+        id: "settings.ai-provider",
+        moduleId: "settings",
+        section: "工作台",
+        pageId: "AI",
+        label: "AI",
+        order: 40,
+        available: true,
+      },
     ],
     navigation: [
       {

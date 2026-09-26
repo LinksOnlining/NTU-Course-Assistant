@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0 COMPLETE**。本文件记录静态架构基础，不代表 AI runtime、真实 Provider、界面或数据库持久化已经实现。Phase 4.1 尚未开始。
+状态：**Phase 4.0 COMPLETE；Phase 4.1 实现及自动验证 COMPLETE / PASS；Windows 真实 DeepSeek 人工验收 PENDING。** 本文件记录架构契约与 Phase 4.1 Provider adapter，不代表权限 Runtime、AI 工具或业务数据操作已经实现。
 
 ## 1. 产品定位
 
@@ -32,7 +32,7 @@ Repository / SQLite
 
 ## 3. Provider 架构
 
-`AIProvider` 是可替换接口，定义 `generateText`、经 schema 校验的 `generateStructured` 和 `checkAvailability`。`AiProviderId` 预留 `openai` 标识，但本阶段只实现离线 `MockAIProvider`；没有 OpenAI SDK、网络请求、API Key 或供应商配置。
+`AIProvider` 是可替换接口，定义 `generateText`、经 schema 校验的 `generateStructured` 和 `checkAvailability`。`AiProviderId` 当前为 `mock | deepseek`；Mock 保持离线确定性行为，DeepSeek 实现为该接口的 production adapter。Phase 4.1 不引入 OpenAI SDK 或其他未实现 Provider。
 
 Mock 支持确定性成功、请求失败和不可用三种模式，用于验证消费者不依赖某个真实 Provider。
 
@@ -69,8 +69,17 @@ approved ─────────→ failed / stale
 
 `applied` 只能表示未来模块 Application UseCase 成功后的状态；本阶段没有应用、写入或持久化 Proposal 的代码。`AiTool` 仅声明 ID、模块、类型、所需权限、输入/输出 schema 与 risk level，不包含 handler 或 `execute`。
 
-## 8. 数据库与阶段边界
+## 8. Phase 4.1 Provider 基础
 
-SQLite schema 保持 **7**，migration **0**，数据库 **未修改**。本阶段不创建 AI 表，不访问 Release 用户数据库，不修改 Rust、Tauri 配置或产品 UI。
+- DeepSeek 只通过 Native Rust `reqwest` 访问固定 HTTPS endpoint `https://api.deepseek.com`；Tauri 命令专用于 DeepSeek，不提供通用 HTTP 或任意 URL 代理，关闭自动 redirect。WebView CSP 不开放 DeepSeek；连接测试只在用户点击后请求 `GET /models`，不发送 prompt 或 Workspace 数据。
+- `POST /responses` 用于文本与 JSON Schema 结构化输出；Rust 收敛最终 assistant `output_text` 为内部 DTO，不向应用层暴露 reasoning 内容或原始 Provider JSON。结构化 JSON 在 Rust 解析后仍由调用方 `AiValueSchema.parse` 再校验。没有工具参数或工具执行。
+- API Key 仅经专用 Tauri credential 命令写入 Windows Credential Manager，稳定 namespace 为 `links-workplace.ai` / `deepseek.default`。前端只读取 configured 状态；输入保存完成后清空。凭据服务不可用时 fail closed，不回退明文存储。非敏感 provider/model/reasoning/timeout 设置复用设备本地设置存储，不进入 SQLite。
+- AI 设置位于通用设置页。Provider 固定 DeepSeek；默认 `deepseek-flash`，仅允许 `deepseek-v4-pro` 作为当前第二个内建选项。连接测试/模型刷新均由用户主动触发；默认 reasoning 为关闭，超时范围为 5–120 秒。
+- Phase 4.1 不使用 AI Context、Permission Gate、Proposal Apply、Tool Runtime 或对任何业务数据的读写。请求仅发送调用者显式提供的 prompt；不保存会话或 reasoning 内容。
+- Native 请求设置有限 timeout；本阶段没有 request registry 或 `cancel_ai_request` 命令。显式取消基础按阶段任务允许延期，标记为 **DEFERRED TO PHASE 4.5**，不得视为已实现。
 
-Phase 4.1 尚未开始。任何真实 Provider、安全凭据存储、权限授权 UI、Tool 执行、Proposal 应用或 schema 7→8 工作，均须按后续阶段单独授权和验证。
+## 9. 数据库与阶段边界
+
+SQLite schema 保持 **7**，migration **0**；Phase 4.1 未增加或读取任何 AI 数据库表，也未访问 Release 用户数据库。非敏感 AI provider settings 使用本地浏览器设置存储；API Key 仅在 Windows Credential Manager。
+
+Phase 4.1 的自动验证通过后，Windows 真实 DeepSeek Key、在线连接、应用关闭重开后的凭据确认仍由用户人工完成。Phase 4.2 仍未开始；任何 Context Runtime、权限授权 Runtime、Tool 执行、Proposal 应用或 schema 7→8 工作均须单独授权与验证。

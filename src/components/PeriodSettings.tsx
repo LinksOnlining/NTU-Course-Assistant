@@ -21,6 +21,7 @@ import { workplaceModuleRegistry } from "../modules/registry.ts";
 import type { WorkspaceWeatherController } from "../workspace/weather/use-workspace-weather.ts";
 import { WeatherSettingsPanel } from "../workspace/weather/WeatherSettingsPanel.tsx";
 import { RoutineSettingsPanel } from "../workspace/routine/RoutineSettingsPanel.tsx";
+import { AISettingsPanel } from "../workspace/ai/AISettingsPanel.tsx";
 
 interface PeriodSettingsProps {
   readonly initialDomain: "workspace" | "academic";
@@ -418,7 +419,7 @@ export function PeriodSettings({
                   <li>今日日程：按 24 小时查看已有课程。</li>
                   <li>时间情境：查看当前状态与下一节课。</li>
                   <li>学业任务：显示已有本地学业事项。</li>
-                  <li>日记、收件箱与 AI：目前仅保留未开放入口。</li>
+                  <li>日记与收件箱尚未开放；AI 可配置服务，但 AI 工作流尚未开放。</li>
                 </ul>
                 <p className="settings-domain-note">
                   课程和学业任务来自已有本地数据；更多首页布局选项将在后续阶段开放。
@@ -433,6 +434,7 @@ export function PeriodSettings({
             {page === "每日寄语" && (
               <p className="settings-domain-note">每日寄语随日期更新；目前暂无可调整的选项。</p>
             )}
+            {page === "AI" && <AISettingsPanel />}
             {page === "天气" && <WeatherSettingsPanel weather={weather} />}
             {page === "日常习惯" && <RoutineSettingsPanel />}
             {page === "显示" && (

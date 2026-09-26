@@ -900,10 +900,121 @@ select:focus-visible {
   gap: var(--space-2);
   padding-left: var(--space-6);
 }
+.ai-settings {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding-bottom: var(--space-3);
+}
+.ai-settings-section {
+  min-width: 0;
+  margin-top: 0;
+}
+.ai-settings-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.ai-settings-summary > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-primary);
+}
+.ai-settings-summary dt {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.ai-settings-summary dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.ai-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ai-key-editor {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+.ai-key-editor > label,
+.ai-settings-field > span {
+  color: var(--text-label);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ai-key-editor input,
+.ai-settings-field input,
+.ai-settings-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 9px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-input);
+  color: var(--text-control);
+  font-size: 12px;
+}
+.ai-key-editor .settings-domain-note {
+  margin: 0;
+}
+.ai-settings-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+.ai-connection-status,
+.ai-settings-warning {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.ai-settings-warning {
+  color: var(--warning);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.ai-settings-advanced {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-secondary);
+}
+.ai-settings-advanced > summary {
+  color: var(--text-label);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.ai-settings-advanced > summary:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.ai-settings-advanced-fields {
+  align-items: end;
+  margin-top: 12px;
+}
+.ai-settings-save-timeout {
+  justify-self: start;
+}
 @media (max-width: 650px) {
   .settings-domain-layout {
     grid-template-columns: 112px minmax(0, 1fr);
     gap: var(--space-2);
+  }
+  .ai-settings-summary {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
