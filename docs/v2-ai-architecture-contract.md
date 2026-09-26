@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0–4.5 Implementation / Automated COMPLETE；Phase 4.5 DeepSeek Live PENDING。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 在工作台增加一次性 Today Assistant。无 AI Apply Tool、聊天历史或持久化 AI 状态。真实 DeepSeek `POST /responses` 文本、结构化、Tool Calling 与 Proposal 确认闭环待 Ethan 人工验收。
+状态：**Phase 4.0–4.5 Implementation / Automated COMPLETE；Phase 4.5 当前冻结范围 DeepSeek Live PASS；Phase 4.5 Overall COMPLETE；Phase 4.6 NOT STARTED。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 在工作台增加一次性 Today Assistant。无 AI Apply Tool、聊天历史或持久化 AI 状态。Proposal function、Review 与 Confirm live 闭环未执行，延期至后续正式 Planner AI workflow，不阻塞 Phase 4.5。
 
 ## 1. 产品定位
 
@@ -91,7 +91,7 @@ approved ─────────→ failed / stale
 
 SQLite schema 保持 **7**，migration **0**；Phase 4.1 未增加或读取任何 AI 数据库表，也未访问 Release 用户数据库。非敏感 AI provider settings 使用本地浏览器设置存储；API Key 仅在 Windows Credential Manager。
 
-Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久化与删除、断网处理验收。Phase 4.5 生产 UI 已接入 DeepSeek Native Responses Provider；`POST /responses` 文本、结构化、Tool Calling、Proposal 与确认闭环尚未执行 live 验收。Phase 4.2–4.5 没有 schema 变更、持久化 Tool 状态或 Proposal 记录。
+Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久化与删除、断网处理验收；并确认 Phase 4.5 的 `POST /responses` 文本与结构化输出、真实 Workspace Context 分析、授权数据约束及无合法业务对象时不虚构 Proposal 均 PASS。`planner_propose_time_block`、Proposal Review 与 Confirm → Revalidate → Application Write live 未执行，延期至后续正式 Planner AI workflow，不构成 Phase 4.5 blocker。Phase 4.2–4.5 没有 schema 变更、持久化 Tool 状态或 Proposal 记录。
 
 ## 10. Phase 4.2 运行时实施边界
 
@@ -132,5 +132,5 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 - 系统 instructions 通过固定 Rust intent 映射提供；tool-turn 指令不得将请求限定为只读函数，而须告知 Provider 只能调用本请求实际提供的函数；Proposal function 仅创建待审提案、不执行写入。Workspace/Planner/Academic 标题及其他业务值是不可信数据。Diary 正文、Inbox 原始内容和 Search 不进入 Today Assistant。天气仅使用已授权且已有的缓存，不增加联网请求。一次性用户文字不超过 500 字符。
 - 模型输出在 UI 中按今日概览、需注意事项、建议安排、信息限制与来源分区显示；轻量清理 Markdown 语法，不将原始 Markdown 当作结构化界面呈现。真实 Proposal 预览在工作台 Rail 内联显示任务、日期、开始/结束、时长与 buffer，并仍复用 Phase 4.4 本地取消、重校验与确认链路。
 - DeepSeek 请求复用当前 Settings 中 provider、模型、reasoning 与 timeout；不新增 API、provider、schema、权限设置或自动重试。关闭/失败后允许用户手动重试；请求在运行时 single-flight，native timeout 仍有效；没有停止按钮，取消保留为未实现能力。
-- DeepSeek live 文本、结构化、tool call、proposal 与确认首次闭环必须由 Ethan 使用本人已配置的账号与安全测试数据验收；不得要求其向聊天提供 API Key。
-- 详细实现、验证及待人工验收项见 [`v2-phase-4-5-verification.md`](v2-phase-4-5-verification.md)。
+- 当前冻结范围的 DeepSeek 文本、结构化、Workspace Context 与授权边界已由 Ethan 验收通过。`planner_propose_time_block` Live、Proposal Review Live、Confirm → Revalidate → Application Write Live 尚未执行，明确延期且不是 Phase 4.5 blocker。后续 Planner AI workflow 可单独设计并验收 future-date context、PlannerEvent Proposal，以及既有 PersonalTask 的 TimeBlock Proposal；意图路由应区分“已有任务 + 安排时间”与“自然活动 + 指定时间”。以上均不属于 Phase 4.5，不得在本阶段扩展实现。
+- 详细实现、验收结果及明确延期项见 [`v2-phase-4-5-verification.md`](v2-phase-4-5-verification.md)。

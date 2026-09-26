@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.5 验证记录
 
-状态：**Implementation COMPLETE；Automated PASS；DeepSeek Live PENDING；Overall PENDING。Phase 4.6 NOT STARTED。** 本阶段未创建 tag、未 push、未发布；待 Ethan 完成本人 DeepSeek 实机验收。
+状态：**Implementation COMPLETE；Automated PASS；DeepSeek Live PASS（当前冻结范围）；Overall COMPLETE。Phase 4.6 NOT STARTED。** Ethan 已确认当前范围 Windows 实机验收通过。本阶段未创建 tag、未 push、未发布。
 
 ## 1. 基线与范围
 
@@ -24,7 +24,7 @@
 - 系统指令经固定 Rust intent 映射；模型输入及应用数据不可信。用户输入限制 500 字符，结果 schema/字符串有界并复用路径、凭据脱敏。
 - Diary body、Inbox raw、Search、通用数据库/HTTP/文件/命令工具不进入本工作流；Weather 仅读已授权缓存，不新增网络请求。
 - 模型文本即使声称“已经创建”，在无本地 applied result 时仍被标记为纯文本建议、未修改应用数据。
-- 真实 API Key 未读取、未输出、未写入仓库；未发起任何真实 DeepSeek 请求。
+- Ethan 已在本人 Windows 环境完成当前范围真实 DeepSeek 验收；API Key 未提供给 Codex、未输出、未写入仓库。
 
 ## 4. UI
 
@@ -32,7 +32,7 @@
 - 支持自由文本发送、Ctrl/Cmd+Enter、Enter 换行、pending 去重和三种快捷操作。模糊请求由本地确定性路由默认选择 `today.analyze`；明确安排时间块请求选择 `today.plan`。
 - 今日概览、风险、建议、信息限制与来源分区呈现，清理 Markdown 标记；真实 Proposal 审阅在结果下方内联显示任务、日期、起止时间、时长与 buffer。
 - 无取消按钮；Native 请求 timeout 生效，取消能力延后。
-- Mock Playwright 验证常规窗口与 720×520 浅色/深色视口；真实 Windows UI / DeepSeek live 人工验收待 Ethan 执行。
+- Mock Playwright 验证常规窗口与 720×520 浅色/深色视口；Ethan 已确认 Windows 开发态当前范围人工验收通过。
 
 ## 5. 自动验证
 
@@ -47,14 +47,19 @@
 
 | 项目 | 状态 |
 | --- | --- |
-| DeepSeek `GET /models` / Credential Manager（Phase 4.1 历史人工验收） | PASS |
-| Phase 4.5 `POST /responses` text | NOT EXECUTED |
-| Phase 4.5 `POST /responses` structured | NOT EXECUTED |
-| Phase 4.5 `POST /responses` tool calling | NOT EXECUTED |
-| Proposal creation / preview / revalidation / user confirmation / Application write | NOT EXECUTED live |
+| DeepSeek `GET /models` | PASS |
+| Credential Manager 持久化/删除与离线失败处理（Phase 4.1 实机验收） | PASS |
+| Phase 4.5 `POST /responses` text | PASS |
+| Phase 4.5 `POST /responses` structured | PASS |
+| 真实 Workspace Context 分析 | PASS |
+| 真实授权数据约束 | PASS |
+| 无合法业务对象时不虚构 Proposal | PASS |
+| `planner_propose_time_block` Live | NOT EXECUTED / DEFERRED |
+| Proposal Review Live | NOT EXECUTED / DEFERRED |
+| Proposal Confirm → Revalidate → Application Write Live | NOT EXECUTED / DEFERRED |
 | DeepSeek API Key 是否向 Codex 暴露 | NO |
 
-Ethan 的 live 首次验收应使用本人安全配置与明显的测试 Planner 项目；确认创建后可由本人手动清理测试数据。不得把 API Key 提供到聊天。
+Proposal 相关 live 能力不属于本次验收范围，不构成 Phase 4.5 blocker。未来正式 Planner AI workflow 再验收这些环节；不得把 API Key 提供到聊天。
 
 ## 7. Database / Git / 阶段
 
@@ -65,8 +70,8 @@ Ethan 的 live 首次验收应使用本人安全配置与明显的测试 Planner
 - Push / tag / Release：**NO**。
 - Phase 4.5 Implementation：**COMPLETE**。
 - Phase 4.5 Automated：**PASS**。
-- Phase 4.5 DeepSeek Live：**PENDING**。
-- Phase 4.5 Overall：**PENDING**。
+- Phase 4.5 DeepSeek Live（当前冻结范围）：**PASS**。
+- Phase 4.5 Overall：**COMPLETE**。
 - Phase 4.6：**NOT STARTED**。
 
 ## 8. 本轮人工验收阻断修复
@@ -76,5 +81,7 @@ Ethan 的 live 首次验收应使用本人安全配置与明显的测试 Planner
 - 修复后 Native instructions 仅允许调用当前请求实际提供的函数，并明确 Proposal function 只创建待审提案、不会写入；明确安排请求在合法且参数可满足时应调用 Proposal function，否则说明原因、不虚构，也不强迫生成提案。Provider function list 仍由本地 `planner.propose` + workflow allowlist 控制，未增加 Apply Tool。
 - 自由文本 workflow 选择由本地确定性路由完成：模糊/普通请求默认 `today.analyze`，明确安排时间块才选择 `today.plan`。Composer、结构化结果、来源/限制和真实 Proposal Review 改为 Workspace Rail 内联，无聊天记录；输入按钮、Ctrl/Cmd+Enter、pending 去重及手动重试均有测试覆盖。
 - `AiProposalReview` 的既有弹窗模式仍保留给 Phase 4.4 原有调用者；Today Assistant 仅用 inline 模式呈现。提案预览补充 Task、Date、Start、End、Duration、buffers，未改变 Proposal DTO / 持久化或 Apply 语义。
-- 本轮真实 DeepSeek `POST /responses` 仍未执行；自动验证只能证明已暴露函数、可信指令、完整 tool-call/adapter/result 通路以及 UI 确认边界，不等价于模型现场一定选择函数。DeepSeek live 仍待 Ethan 在本人 Windows 环境验收。
-- 未使用真实 API Key，未启动或访问 Release 用户数据库；schema 仍为 7、migration 0；未运行 production EXE/installer。
+- Ethan 已确认真实 DeepSeek `POST /responses` 文本、结构化输出、Workspace Context 分析、授权数据边界与无合法业务对象时不虚构 Proposal 均 PASS。自动化测试另覆盖提案函数暴露、可信指令、tool-call/adapter/result 通路及本地 Review/确认边界；这些测试不替代下列 live 验收。
+- 以下 Proposal live 链路未执行并延期，均不是 Phase 4.5 Overall blocker：`planner_propose_time_block` Live、Proposal Review Live、Confirm → Revalidate → Application Write Live。
+- 后续能力缺口（仅记录，不纳入 Phase 4.5 实现）：(1) Future-date Planner Context，支持明天、后天、周末和指定日期；(2) PlannerEvent Proposal，用于跑步、开会、图书馆、聚餐、出行等自然活动；(3) TimeBlock Proposal 继续用于已存在的 PersonalTask；(4) 意图路由区分“已有任务 + 安排时间 → TimeBlock Proposal”与“自然活动 + 指定时间 → PlannerEvent Proposal”。
+- Ethan 使用本人配置完成实机验收；API Key 未提供给 Codex、未输出、未写入仓库。未启动或访问 Release 用户数据库；schema 仍为 7、migration 0；未运行 production EXE/installer。
