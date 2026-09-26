@@ -6,8 +6,8 @@
 
 - 当前 v2 产品需求单一事实来源：[`PROJECT_BRIEF.md`](PROJECT_BRIEF.md)。
 - 当前 v2 架构及依赖方向契约：[`docs/v2-architecture-contract.md`](docs/v2-architecture-contract.md)。
-- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0–4.5 COMPLETE；Ethan 已确认 Phase 4.5 当前冻结范围 Windows 实机验收 PASS（DeepSeek 文本/结构化、真实 Workspace Context、授权数据约束及无合法对象时不虚构 Proposal）。Proposal function、Review 与确认写入 live 闭环未执行，延期至后续正式 Planner AI workflow，不构成 Phase 4.5 blocker。当前工作台 Rail 内联呈现一次性输入、结构化结果和提案审阅；明确安排请求经本地安全路由进入 `today.plan`，最多暴露一个 `planner_propose_time_block`，且系统提示仅允许调用本请求实际提供的函数。Proposal 只有经本地预览、重校验和用户确认才调用现有 Planner Application UseCase。无 Apply Tool、聊天历史或持久化 AI 状态；Diary 正文、Inbox 原始内容和 Search 不进入工作流。SQLite schema 仍为 7、migration 0。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md) 与 [`docs/v2-phase-4-5-verification.md`](docs/v2-phase-4-5-verification.md)。
-- 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。Phase 4.5 不开放独立 AI 一级导航；future-date Planner Context、PlannerEvent Proposal、现有任务的 TimeBlock Proposal 与相应意图路由属于未来正式 Planner AI workflow，不在 Phase 4.5 范围内。
+- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0–4.5 COMPLETE；Phase 4.6 Implementation 与 Automated COMPLETE/PASS，DeepSeek Live 与整体人工验收仍 PENDING。Phase 4.5 已验收的 DeepSeek 文本/结构化响应、Workspace Context 与授权边界保持历史 PASS；Phase 4.6 增加本地可信日期/意图路由、future-date Planner Context、精确 Task 匹配及 Event/TimeBlock/Task Proposal。候选时间由现有 Timeline/free-time 与 buffer 逻辑在本地计算，Provider 只可回显本地候选并且每个 workflow 最多暴露一个 Proposal Tool。Proposal 只有经本地预览、重校验和用户确认才调用现有 Planner Application UseCase。无 Apply Tool、聊天历史或持久化 AI 状态；Diary 正文、Inbox 原始内容和 Search 不进入工作流。SQLite schema 仍为 7、migration 0。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md) 与 [`docs/v2-phase-4-6-verification.md`](docs/v2-phase-4-6-verification.md)。
+- 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。Phase 4.6 的真实 DeepSeek Planner Tool Calling 与 Windows 人工验收仍待 Ethan 执行。
 
 ## 技术方案
 

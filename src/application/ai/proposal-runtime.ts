@@ -356,6 +356,10 @@ export function createAiPlannerProposalRuntime(
     if (applyInput.expectedPreviewRevision !== proposal.preview.revision) {
       return { status: "needsReconfirmation", proposal };
     }
+    if (scheduleProposalIsPast(proposal, ports.now())) {
+      store.set(transitionAiProposal(proposal, "stale"));
+      return { status: "stale" };
+    }
 
     try {
       const latest = await refreshProposalPreview(proposal);
@@ -577,6 +581,22 @@ function linkedTaskChanged(before: AiPlannerProposal, after: AiPlannerProposal):
     JSON.stringify(before.preconditions.linkedTask ?? null) !==
     JSON.stringify(after.preconditions.linkedTask ?? null)
   );
+}
+
+function scheduleProposalIsPast(proposal: AiPlannerProposal, now: Date): boolean {
+  if (proposal.type === "task") return false;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+  const localDateTime = `${value("year")}-${value("month")}-${value("day")}T${value("hour")}:${value("minute")}`;
+  return `${proposal.payload.date}T${proposal.payload.startTime}` <= localDateTime;
 }
 
 function pruneExpired(store: AiProposalStore, now: number): void {

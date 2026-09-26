@@ -64,6 +64,8 @@ export async function runAiToolLoop(input: {
   readonly allowedReadToolIds?: readonly string[];
   /** Optional workflow horizon for date-range read tools. */
   readonly allowedDateRange?: { readonly from: string; readonly to: string };
+  /** Trusted local planner candidate; proposal calls must match this exact payload. */
+  readonly proposalConstraint?: AiToolExecutionContext["proposalConstraint"];
   /** Per-workflow consent and capability allowlist; omission is default-deny. */
   readonly proposalPolicy?: AiProposalToolPolicy;
 }): Promise<AiToolLoopResult> {
@@ -188,6 +190,7 @@ export async function runAiToolLoop(input: {
       const executionContext: AiToolExecutionContext = {
         requestId: input.request.id,
         providerId: input.provider.id,
+        ...(input.proposalConstraint ? { proposalConstraint: input.proposalConstraint } : {}),
         reportProposal: (proposal) => {
           if (reportedProposal) throw new Error("只允许创建一个规划提案。");
           if (!isPlannerProposal(proposal)) throw new Error("无效的规划提案响应。");
@@ -341,6 +344,19 @@ async function executeCall(
     return {
       serialized: serializeFailure("PERMISSION_DENIED", "当前工作流未获准生成此类规划提案。"),
       success: false,
+    };
+  }
+  if (
+    tool.effect === "proposal" &&
+    executionContext?.proposalConstraint &&
+    (tool.id !== executionContext.proposalConstraint.toolId ||
+      stableStringify(normalized) !==
+        stableStringify(executionContext.proposalConstraint.arguments))
+  ) {
+    return {
+      serialized: serializeFailure("INVALID_ARGUMENTS", "提案参数与本地核验的规划候选不一致。"),
+      success: false,
+      failureMessage: "AI 返回的提案未匹配本地核验候选，请重试。",
     };
   }
   const fingerprint = `${tool.name}:${stableStringify(normalized)}`;

@@ -203,6 +203,33 @@ test("日程冲突变化会刷新本地 Preview 并要求再次确认后才写�
   assert.equal(fixture.writes.length, 1);
 });
 
+test("日程提案到开始时间后重校验为 stale，不会迟到写入", async () => {
+  let now = new Date("2026-09-26T02:00:00.000Z"); // 10:00 Asia/Shanghai
+  const fixture = runtimePorts({ now: () => now });
+  const runtime = createAiPlannerProposalRuntime({ ports: fixture.ports });
+  const proposal = await runtime.proposeEvent(
+    {
+      title: "跑步",
+      date: "2026-09-26",
+      startTime: "10:05",
+      endTime: "10:30",
+      location: null,
+      bufferBeforeMinutes: 0,
+      bufferAfterMinutes: 0,
+    },
+    "deepseek",
+  );
+  now = new Date("2026-09-26T02:06:00.000Z"); // 10:06 Asia/Shanghai
+  const result = await runtime.apply({
+    id: proposal.id,
+    confirmed: true,
+    expectedPreviewRevision: 1,
+    permissionIds: ["planner.propose"],
+  });
+  assert.equal(result.status, "stale");
+  assert.deepEqual(fixture.writes, []);
+});
+
 test("TimeBlock 提案必须关联未完成任务，任务变化要求重新确认", async () => {
   const fixture = runtimePorts();
   const runtime = createAiPlannerProposalRuntime({ ports: fixture.ports });

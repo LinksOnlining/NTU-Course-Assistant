@@ -5,6 +5,7 @@ import type { AiIntent } from "./types.ts";
 import { sanitizeAiText } from "./context-projector.ts";
 
 export type AiWorkflowId = "today.analyze" | "today.plan";
+export type AiWorkflowRequestId = AiWorkflowId | "planner.route";
 export type AiWorkflowResponseMode = "structured-analysis" | "proposal-plan";
 
 export interface AiWorkflowDefinition {

@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0–4.5 Implementation / Automated COMPLETE；Phase 4.5 当前冻结范围 DeepSeek Live PASS；Phase 4.5 Overall COMPLETE；Phase 4.6 NOT STARTED。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 在工作台增加一次性 Today Assistant。无 AI Apply Tool、聊天历史或持久化 AI 状态。Proposal function、Review 与 Confirm live 闭环未执行，延期至后续正式 Planner AI workflow，不阻塞 Phase 4.5。
+状态：**Phase 4.0–4.5 COMPLETE；Phase 4.6 Implementation COMPLETE、Automated PASS、DeepSeek Live PENDING、Overall PENDING（等待 Ethan 人工验收）。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 在工作台增加一次性 Today Assistant；Phase 4.6 扩展本地可信 Planner 路由与未来日期提案。无 AI Apply Tool、聊天历史或持久化 AI 状态。Phase 4.6 的真实 DeepSeek Planner Tool Calling / Windows Live 尚未执行。
 
 ## 1. 产品定位
 
@@ -134,3 +134,12 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 - DeepSeek 请求复用当前 Settings 中 provider、模型、reasoning 与 timeout；不新增 API、provider、schema、权限设置或自动重试。关闭/失败后允许用户手动重试；请求在运行时 single-flight，native timeout 仍有效；没有停止按钮，取消保留为未实现能力。
 - 当前冻结范围的 DeepSeek 文本、结构化、Workspace Context 与授权边界已由 Ethan 验收通过。`planner_propose_time_block` Live、Proposal Review Live、Confirm → Revalidate → Application Write Live 尚未执行，明确延期且不是 Phase 4.5 blocker。后续 Planner AI workflow 可单独设计并验收 future-date context、PlannerEvent Proposal，以及既有 PersonalTask 的 TimeBlock Proposal；意图路由应区分“已有任务 + 安排时间”与“自然活动 + 指定时间”。以上均不属于 Phase 4.5，不得在本阶段扩展实现。
 - 详细实现、验收结果及明确延期项见 [`v2-phase-4-5-verification.md`](v2-phase-4-5-verification.md)。
+
+## 14. Phase 4.6 Planner Assistant Expansion
+
+- `planner.route` 是一次性本地 Application 路由入口；日期、相对日期、星期/周末范围、daypart、精确时间、时长、Task/Activity 意图和目标时区均由本地代码解析，不让 Provider 决定意图或计算日期。范围最多 31 天；daypart 统一为 morning 06:00–12:00、afternoon 12:00–18:00、evening 18:00–22:00、late 22:00–24:00。
+- 本地路由区分只读分析、独立 PlannerEvent、唯一精确匹配的已有 PersonalTask TimeBlock、明确创建 PersonalTask 和澄清。无对话历史/数据库记忆；缺失关键信息时澄清，不模糊猜 Task，不自动串联“创建 Task + 安排 TimeBlock”。
+- Future Context 复用 Phase 4.2 Context Engine、Academic Application 查询和 Planner Application 查询。Academic 使用 canonical effective occurrences；查询限定目标日期区间，最多 50 项并对截断上下文拒绝生成安全候选。Weather 仅使用已授权且已缓存的数据，不触发位置或天气网络请求。Diary body、Inbox raw、Search 与任意数据库访问仍未开放。
+- 日程候选仅由本地调用现有 Timeline `computeFreeTimeIntervals` / `effectiveOccupancy` 计算，包含 PlannerEvent/TimeBlock buffers、有效课程、考试和取消状态；今天跳过已经过去的分钟。固定明确时间可保留 warn-but-allow 冲突并在预览标注；普通范围选择首个确定性合法候选。时长、对象 ID、日期和区间被绑定到可信候选，Provider 无法修改候选参数。
+- Proposal gate 保持 `planner.propose`（Planner 模块级授权）加 workflow-specific 单一 Proposal Tool allowlist。每次最多一个 Proposal；禁止 AI Apply/Write。只有用户本地确认后，既有 Proposal Runtime 才重校验并调用现有 Application UseCase。
+- 自动化验证与生产前端 build 结果、SQLite schema=7/migration=0、人工验收待办及明确未执行的 DeepSeek Live 项目见 [`v2-phase-4-6-verification.md`](v2-phase-4-6-verification.md)。真实 DeepSeek Tool Calling 和 Windows GUI 人工验收未执行，不得将其标记为 PASS。

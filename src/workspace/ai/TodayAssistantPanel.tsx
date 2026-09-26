@@ -7,9 +7,9 @@ import type {
   AiWorkflowResult,
   AiWorkflowRunResult,
 } from "../../application/ai/workflow-orchestrator.ts";
-import type { AiWorkflowId } from "../../application/ai/today-workflows.ts";
+import type { AiWorkflowRequestId } from "../../application/ai/today-workflows.ts";
 import { AiProposalReview } from "./AiProposalReview.tsx";
-import { plainAssistantText, resolveTodayAssistantWorkflow } from "./today-assistant-routing.ts";
+import { plainAssistantText } from "./today-assistant-routing.ts";
 import "./today-assistant.css";
 
 interface TodayAssistantPanelProps {
@@ -22,12 +22,17 @@ interface TodayAssistantPanelProps {
 
 type PanelState =
   | { readonly kind: "idle" }
-  | { readonly kind: "loading"; readonly workflowId: AiWorkflowId; readonly instruction: string }
+  | {
+      readonly kind: "loading";
+      readonly workflowId: AiWorkflowRequestId;
+      readonly instruction: string;
+    }
   | { readonly kind: "ready"; readonly result: AiWorkflowResult }
   | { readonly kind: "message"; readonly status: "noPermissions" | "notConfigured" | "noContext" }
+  | { readonly kind: "clarification"; readonly message: string }
   | {
       readonly kind: "failed";
-      readonly workflowId: AiWorkflowId;
+      readonly workflowId: AiWorkflowRequestId;
       readonly instruction: string;
       readonly message: string;
       readonly category: AiWorkflowErrorCategory;
@@ -35,10 +40,11 @@ type PanelState =
 
 function resultState(
   result: AiWorkflowRunResult,
-  workflowId: AiWorkflowId,
+  workflowId: AiWorkflowRequestId,
   instruction: string,
 ): PanelState {
   if (result.status === "ready") return { kind: "ready", result: result.result };
+  if (result.status === "clarification") return { kind: "clarification", message: result.message };
   if (
     result.status === "noPermissions" ||
     result.status === "notConfigured" ||
@@ -77,7 +83,7 @@ export function TodayAssistantPanel({
   const runningRef = useRef(false);
   const busy = state.kind === "loading";
 
-  async function run(workflowId: AiWorkflowId, text = instruction) {
+  async function run(workflowId: AiWorkflowRequestId, text = instruction) {
     if (runningRef.current) return;
     runningRef.current = true;
     const safeInstruction = text.trim().slice(0, 500);
@@ -101,7 +107,7 @@ export function TodayAssistantPanel({
 
   function send() {
     if (busy || !instruction.trim()) return;
-    void run(resolveTodayAssistantWorkflow(instruction));
+    void run("planner.route");
   }
 
   async function confirmProposal(proposal: AiPlannerProposal): Promise<AiProposalApplyResult> {
@@ -177,7 +183,7 @@ export function TodayAssistantPanel({
           type="button"
           className="primary-button"
           disabled={busy}
-          onClick={() => void run("today.plan", "请帮我安排今天的时间。")}
+          onClick={() => void run("planner.route", "请帮我安排今天的时间。")}
         >
           安排今天
         </button>
@@ -197,9 +203,14 @@ export function TodayAssistantPanel({
         {state.kind === "idle" && <p>有需要时再问我；不会保存对话记录。</p>}
         {state.kind === "loading" && (
           <p role="status" data-testid="today-assistant-loading">
-            {state.workflowId === "today.plan" ? "正在看看合适的安排…" : "正在整理今天的重点…"}
+            {state.workflowId === "planner.route"
+              ? "正在理解日期和安排…"
+              : state.workflowId === "today.plan"
+                ? "正在看看合适的安排…"
+                : "正在整理今天的重点…"}
           </p>
         )}
+        {state.kind === "clarification" && <p role="status">{state.message}</p>}
         {state.kind === "message" && state.status === "noPermissions" && (
           <div role="status">
             <p>还没有允许 AI 使用的工作台数据。</p>
@@ -268,7 +279,7 @@ function ResultCard({
   return (
     <section className="today-assistant-result-card" data-testid="today-assistant-result">
       <div className="today-assistant-result-section">
-        <h3>{analysis ? "🌙 今日概览" : "✨ 今日建议"}</h3>
+        <h3>{analysis ? `🌙 ${result.analysisTitle ?? "今日概览"}` : "✨ 规划建议"}</h3>
         <p className="today-assistant-answer">
           {plainAssistantText(analysis?.summary ?? result.answer)}
         </p>

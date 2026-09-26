@@ -29,22 +29,30 @@ test("工作台直接显示一次性 AI Composer；不点击第二层也能输�
   await expect(page.getByText("发送至 DeepSeek 处理")).toBeVisible();
 });
 
-test("自由文本发送按钮与 Ctrl+Enter 工作；Enter 保留换行，路由默认安全分析", async ({ page }) => {
+test("自由文本发送按钮与 Ctrl+Enter 工作；应用层接管可信意图路由", async ({ page }) => {
   await page.goto(harnessPath);
   const input = page.getByTestId("today-assistant-instruction");
-  await input.fill("今天安排如何？\n请看看风险");
+  await input.fill("明天忙不忙？\n请看看风险");
   await input.press("Enter");
   expect(await requestCount(page)).toBe(0);
   await input.press("Control+Enter");
   await expect(page.getByTestId("today-assistant-result")).toBeVisible();
   expect(await requestCount(page)).toBe(1);
   expect(await lastRequest(page)).toEqual({
-    workflow: "today.analyze",
-    instruction: "今天安排如何？\n请看看风险",
+    workflow: "planner.route",
+    instruction: "明天忙不忙？\n请看看风险",
   });
 });
 
-test("明确时间块请求由本地路由进入 plan workflow", async ({ page }) => {
+test("缺少活动时长时展示澄清结果，不伪造提案", async ({ page }) => {
+  await page.goto(`${harnessPath}?mode=clarification`);
+  await page.getByLabel("想让我帮你看看什么？").fill("明天晚上跑步");
+  await page.getByRole("button", { name: "发送" }).click();
+  await expect(page.getByRole("status")).toContainText("想为“跑步”留多长时间？");
+  await expect(page.getByTestId("ai-proposal-review")).toHaveCount(0);
+});
+
+test("明确时间块请求交由 Application trusted router 选择 workflow", async ({ page }) => {
   await page.goto(harnessPath);
   await page
     .getByLabel("想让我帮你看看什么？")
@@ -52,7 +60,7 @@ test("明确时间块请求由本地路由进入 plan workflow", async ({ page }
   await page.getByRole("button", { name: "发送" }).click();
   await expect(page.getByTestId("ai-proposal-review")).toBeVisible();
   expect(await lastRequest(page)).toEqual({
-    workflow: "today.plan",
+    workflow: "planner.route",
     instruction:
       "为 AI验收测试任务安排一个 30 分钟时间块。如果没有合适时间就直接告诉我，不要虚构安排。",
   });
@@ -78,7 +86,7 @@ test("快捷操作仍可分别发起分析、安排和风险检查", async ({ pa
   await page.goto(harnessPath);
   for (const [label, expectedWorkflow] of [
     ["分析今天", "today.analyze"],
-    ["安排今天", "today.plan"],
+    ["安排今天", "planner.route"],
     ["看看风险", "today.analyze"],
   ]) {
     await page.getByRole("button", { name: label }).click();
@@ -159,6 +167,20 @@ test("有效提案显式确认后才调用本地确认回调", async ({ page }) 
   await expect(page.getByTestId("confirmation-count")).toHaveText("1");
   await expect(page.getByTestId("applied")).toBeVisible();
   await expect(page.getByRole("status")).toHaveText("已添加到规划。");
+});
+
+test("未来独立活动显示 Event Proposal 并仅在用户确认后创建日程", async ({ page }) => {
+  await page.goto(`${harnessPath}?mode=event-ready`);
+  await page.getByLabel("想让我帮你看看什么？").fill("明天晚上想跑30分钟");
+  await page.getByRole("button", { name: "发送" }).click();
+  const review = page.getByTestId("ai-proposal-review");
+  await expect(review).toBeVisible();
+  await expect(review.getByText("跑步", { exact: true })).toBeVisible();
+  await expect(review.getByRole("button", { name: "确认创建日程" })).toBeVisible();
+  await expect(page.getByTestId("confirmation-count")).toHaveText("0");
+  await review.getByRole("button", { name: "确认创建日程" }).click();
+  await expect(page.getByTestId("confirmation-count")).toHaveText("1");
+  await expect(review.getByRole("status")).toHaveText("已添加到规划。");
 });
 
 test("模型自然语言声称写入但没有真实 proposal 时不显示确认入口", async ({ page }) => {

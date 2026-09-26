@@ -20,6 +20,11 @@ export interface AiToolExecutionContext {
   readonly requestId: string;
   readonly providerId: string;
   readonly reportProposal?: (proposal: unknown) => void;
+  /** Trusted one-shot planner payload; providers may only echo this exact local candidate. */
+  readonly proposalConstraint?: {
+    readonly toolId: string;
+    readonly arguments: AiJsonValue;
+  };
 }
 
 /** Runtime-only binding of a module contribution to an Application read adapter. */

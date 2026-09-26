@@ -5,6 +5,7 @@ import type {
   AiWorkflowOrchestrator,
   AiWorkflowResult,
 } from "../../../src/application/ai/workflow-orchestrator.ts";
+import type { AiWorkflowRequestId } from "../../../src/application/ai/today-workflows.ts";
 import type { AiProposalApplyResult } from "../../../src/application/ai/proposal-runtime.ts";
 import { TodayAssistantPanel } from "../../../src/workspace/ai/TodayAssistantPanel.tsx";
 import "../../../src/theme/theme.css";
@@ -43,6 +44,34 @@ const proposal: AiPlannerProposal = {
   preconditions: { warningFingerprint: "none" },
 };
 
+const eventProposal: AiPlannerProposal = {
+  ...proposal,
+  id: "ui-event-proposal",
+  type: "event",
+  title: "建议安排活动",
+  description: "将为你创建一项待确认日程。",
+  payload: {
+    title: "跑步",
+    date: "2026-09-27",
+    startTime: "18:00",
+    endTime: "18:30",
+    location: null,
+    bufferBeforeMinutes: 0,
+    bufferAfterMinutes: 0,
+  },
+  preview: {
+    ...proposal.preview,
+    title: "建议安排活动",
+    fields: [
+      { label: "活动", value: "跑步" },
+      { label: "日期", value: "2026-09-27" },
+      { label: "开始", value: "18:00" },
+      { label: "结束", value: "18:30" },
+      { label: "时长", value: "30 分钟" },
+    ],
+  },
+};
+
 const mode = new URLSearchParams(location.search).get("mode") ?? "ready";
 let requestCount = 0;
 let confirmationCount = 0;
@@ -68,8 +97,11 @@ const result: AiWorkflowResult = {
 };
 
 const service = {
-  async run({ workflowId, instruction = "" }: {
-    readonly workflowId: "today.analyze" | "today.plan";
+  async run({
+    workflowId,
+    instruction = "",
+  }: {
+    readonly workflowId: AiWorkflowRequestId;
     readonly instruction?: string;
   }) {
     requestCount += 1;
@@ -79,6 +111,9 @@ const service = {
     if (mode === "delay") await new Promise((resolve) => window.setTimeout(resolve, 160));
     if (mode === "no-permissions") return { status: "noPermissions" as const };
     if (mode === "not-configured") return { status: "notConfigured" as const };
+    if (mode === "clarification") {
+      return { status: "clarification" as const, message: "想为“跑步”留多长时间？" };
+    }
     if (mode === "credential") {
       return {
         status: "failed" as const,
@@ -93,12 +128,16 @@ const service = {
         message: "网络不可用，请检查连接后重试。",
       };
     }
+    const resolvedWorkflow: AiWorkflowResult["workflowId"] =
+      workflowId === "today.analyze" || !/(?:安排|任务|跑|时间块)/u.test(instruction)
+        ? "today.analyze"
+        : "today.plan";
     if (mode === "hallucinated-success") {
       return {
         status: "ready" as const,
         result: {
           ...result,
-          workflowId,
+          workflowId: resolvedWorkflow,
           analysis: undefined,
           answer: "任务已创建",
           proposal: undefined,
@@ -109,7 +148,7 @@ const service = {
       status: "ready" as const,
       result: {
         ...result,
-        workflowId,
+        workflowId: resolvedWorkflow,
         ...(mode === "markdown"
           ? {
               answer: "## 今日概览 **午后有空**",
@@ -121,7 +160,9 @@ const service = {
               },
             }
           : {}),
-        ...(workflowId === "today.plan" ? { proposal } : {}),
+        ...(resolvedWorkflow === "today.plan"
+          ? { proposal: mode === "event-ready" ? eventProposal : proposal }
+          : {}),
       },
     };
   },

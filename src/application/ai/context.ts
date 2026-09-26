@@ -88,6 +88,8 @@ export interface AiAcademicSnapshot {
   readonly deadlines: readonly AiAcademicDeadline[];
   /** 用 canonical occurrence ID 查询到的安全展示名，不是完整 Course entity。 */
   readonly courseNames: Readonly<Record<string, string>>;
+  /** Source-side item cap signal; planning must not treat a partial calendar as complete. */
+  readonly truncated?: boolean;
 }
 
 export interface AiPlannerTask {
@@ -123,6 +125,8 @@ export interface AiPlannerSnapshot {
   readonly tasks: readonly AiPlannerTask[];
   readonly events: readonly AiPlannerEvent[];
   readonly timeBlocks: readonly AiPlannerTimeBlock[];
+  /** Source-side item cap signal; planning must not treat a partial schedule as complete. */
+  readonly truncated?: boolean;
 }
 
 export interface AiRoutineSummary {

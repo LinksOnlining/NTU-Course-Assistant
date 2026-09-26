@@ -180,7 +180,12 @@ function projectAcademic(input: AiAcademicSnapshot, request: AiContextSourceRequ
       type: item.type,
     }));
 
-  return { courses, exams, deadlines };
+  return {
+    ...(input.truncated ? { truncated: true } : {}),
+    courses,
+    exams,
+    deadlines,
+  };
 }
 
 function projectPlanner(input: AiPlannerSnapshot, request: AiContextSourceRequest): AiJsonValue {
@@ -258,6 +263,7 @@ function projectPlanner(input: AiPlannerSnapshot, request: AiContextSourceReques
     }));
 
   return {
+    ...(input.truncated ? { truncated: true } : {}),
     tasks,
     events,
     timeBlocks: timeBlocks.map((item) => ({
@@ -333,18 +339,22 @@ function projectWeather(input: AiWeatherSnapshot, request: AiContextSourceReques
   const forecast = snapshot.hourly
     .filter(
       (item) =>
-        datePart(item.time) === request.timeContext.localDate &&
-        item.time.slice(11, 16) >= request.timeContext.localTime,
+        inDateRange(datePart(item.time), request) &&
+        (datePart(item.time) > request.timeContext.localDate ||
+          item.time.slice(11, 16) >= request.timeContext.localTime),
     )
     .sort((a, b) => compareText(a.time, b.time))
-    .slice(0, 12)
+    .slice(0, 50)
     .map((item) => ({
       time: safeText(item.time),
       condition: safeText(weatherCodeLabel(item.weatherCode)),
       temperatureCelsius: safeNumber(item.temperatureCelsius),
       precipitationProbability: nullableNumber(item.precipitationProbability),
     }));
-  const current = snapshot.current;
+  const current =
+    snapshot.current && datePart(snapshot.current.time) === request.timeContext.localDate
+      ? snapshot.current
+      : null;
   return {
     location: safeText(snapshot.locationLabel ?? "已选地点"),
     current: current

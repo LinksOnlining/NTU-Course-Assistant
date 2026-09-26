@@ -1,10 +1,10 @@
 # 当前项目状态
 
-- 最后更新：2026-09-26
+- 最后更新：2026-09-27
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4.0–4.5 COMPLETE；Phase 4.6 NOT STARTED。** Phase 4.5 Implementation COMPLETE、Automated PASS、DeepSeek Live PASS（当前冻结范围）、Overall COMPLETE。Ethan 已确认当前范围的 Windows 实机验收通过：`GET /models`、`POST /responses` 文本与结构化生成、真实 Workspace Context 分析、授权数据边界及无合法业务对象时不虚构 Proposal。真实 `planner_propose_time_block`、Proposal Review 与 Confirm → Revalidate → Application Write 未执行，明确 DEFERRED，不再阻塞 Phase 4.5。后续 Planner AI workflow 再评估 future-date context、PlannerEvent Proposal、既有 PersonalTask 的 TimeBlock Proposal 及相应意图路由；不纳入 Phase 4.5。Today Assistant 常驻工作台 Rail，结构化呈现分析与提案审阅；明确时间块请求由本地确定性路由选择 `today.plan`。Provider 仅可调用当前请求实际提供的函数；提案仍需本地预览、重校验和用户确认，不提供 Apply Tool。读取仍受当前 AI 设置授权限制；对话、结果和提案均不持久化；Diary 正文、Inbox 原始内容、Search、自动请求均未开放。SQLite schema 维持 7、migration 0；详见 `docs/v2-phase-4-5-verification.md`。
+- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4.0–4.5 COMPLETE；Phase 4.6 Implementation COMPLETE、Automated PASS、DeepSeek Live PENDING、Overall PENDING（等待 Ethan 人工验收）。** Phase 4.5 的 `GET /models`、`POST /responses` 文本/结构化生成及 Workspace Context 验收仍为历史 PASS；Phase 4.6 新增 Planner 自然语言路由、最多 31 天本地日期解析、日程/任务提案和确定性空闲时段候选。真实 DeepSeek Planner Tool Calling / Phase 4.6 Windows Live 尚未执行，不写作 PASS。`planner.propose` 仍是模块级授权，具体 Proposal Tool 受单一 workflow allowlist 限制；任何提案都须本地预览、重校验和用户确认，不提供 Apply Tool。读取受 AI 设置授权限制；对话、结果和提案不持久化；Diary 正文、Inbox 原始内容、Search、自动请求均未开放。SQLite schema 维持 7、migration 0；详见 `docs/v2-phase-4-6-verification.md`。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 是唯一外网能力且默认关闭，手动搜索仅在提交后请求 Photon 并只保存最终选中地点，当前位置需明确同意、系统授权和坐标模糊化；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 

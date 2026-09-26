@@ -62,7 +62,23 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
           schedule.periodTimes ?? [],
         )
       : [];
+    const scheduledExams = hub.exams
+      .filter((item) => item.status === "SCHEDULED")
+      .filter((item) => {
+        const date = item.startsAt.slice(0, 10);
+        return date >= timeRange.startDate && date <= timeRange.endDate;
+      });
+    const openDeadlines = hub.tasks
+      .filter((item) => item.status !== "COMPLETED")
+      .filter((item) => {
+        const date = item.dueAt.slice(0, 10);
+        return date >= timeRange.startDate && date <= timeRange.endDate;
+      });
     return {
+      truncated:
+        occurrences.length > MAX_CONTEXT_ITEMS ||
+        scheduledExams.length > MAX_CONTEXT_ITEMS ||
+        openDeadlines.length > MAX_CONTEXT_ITEMS,
       occurrences: occurrences.slice(0, MAX_CONTEXT_ITEMS).map((item) => ({
         courseId: item.courseId,
         date: item.date,
@@ -73,36 +89,22 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
         teacher: item.teacher,
         status: item.status,
       })),
-      exams: hub.exams
-        .filter((item) => item.status === "SCHEDULED")
-        .filter((item) => {
-          const date = item.startsAt.slice(0, 10);
-          return date >= timeRange.startDate && date <= timeRange.endDate;
-        })
-        .slice(0, MAX_CONTEXT_ITEMS)
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          startsAt: item.startsAt,
-          endsAt: item.endsAt,
-          location: item.location,
-          status: item.status,
-        })),
-      deadlines: hub.tasks
-        .filter((item) => item.status !== "COMPLETED")
-        .filter((item) => {
-          const date = item.dueAt.slice(0, 10);
-          return date >= timeRange.startDate && date <= timeRange.endDate;
-        })
-        .slice(0, MAX_CONTEXT_ITEMS)
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          dueAt: item.dueAt,
-          priority: item.priority,
-          status: item.status,
-          type: item.type,
-        })),
+      exams: scheduledExams.slice(0, MAX_CONTEXT_ITEMS).map((item) => ({
+        id: item.id,
+        title: item.title,
+        startsAt: item.startsAt,
+        endsAt: item.endsAt,
+        location: item.location,
+        status: item.status,
+      })),
+      deadlines: openDeadlines.slice(0, MAX_CONTEXT_ITEMS).map((item) => ({
+        id: item.id,
+        title: item.title,
+        dueAt: item.dueAt,
+        priority: item.priority,
+        status: item.status,
+        type: item.type,
+      })),
       courseNames: Object.freeze(
         Object.fromEntries(schedule.courses.map((course) => [course.id, course.name])),
       ),
@@ -114,9 +116,13 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
       loadPlannerEvents(timeRange.startDate, timeRange.endDate),
       loadTimeBlocks(timeRange.startDate, timeRange.endDate),
     ]);
+    const openTasks = tasks.filter((item) => item.status !== "completed");
     return {
-      tasks: tasks
-        .filter((item) => item.status !== "completed")
+      truncated:
+        openTasks.length > MAX_CONTEXT_ITEMS ||
+        events.length > MAX_CONTEXT_ITEMS ||
+        timeBlocks.length > MAX_CONTEXT_ITEMS,
+      tasks: openTasks
         .sort(
           (left, right) =>
             (left.deadlineDate ?? "9999-12-31").localeCompare(right.deadlineDate ?? "9999-12-31") ||
@@ -170,7 +176,7 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
         })),
     };
   },
-  async weather({ timeContext }) {
+  async weather({ timeRange }) {
     const settings = loadWeatherSettings();
     const cached = loadWeatherCache();
     const snapshot =
@@ -193,10 +199,10 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
             hourly: snapshot.hourly
               .filter(
                 (item) =>
-                  item.time.slice(0, 10) === timeContext.localDate &&
-                  item.time.slice(11, 16) >= timeContext.localTime,
+                  item.time.slice(0, 10) >= timeRange.startDate &&
+                  item.time.slice(0, 10) <= timeRange.endDate,
               )
-              .slice(0, 12)
+              .slice(0, MAX_CONTEXT_ITEMS)
               .map((item) => ({
                 time: item.time,
                 weatherCode: item.weatherCode,

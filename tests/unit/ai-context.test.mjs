@@ -290,7 +290,10 @@ test("仅查询持久授权的模块，默认时间范围受限且输出是固�
   assert.equal(snapshot.moduleContexts.workspace.next, undefined);
   assert.equal(snapshot.moduleContexts.academic.courses.length, 1);
   assert.equal(snapshot.moduleContexts.academic.courses[0].title, "[本地路径已省略]");
-  assert.equal(snapshot.moduleContexts.weather.forecast.length, 1);
+  assert.equal(snapshot.moduleContexts.weather.forecast.length, 2);
+  assert.ok(
+    snapshot.moduleContexts.weather.forecast.some((item) => item.time.startsWith("2026-09-27")),
+  );
   assert.deepEqual(snapshot.moduleContexts.planner.events[0], {
     id: "event-1",
     title: "会议",

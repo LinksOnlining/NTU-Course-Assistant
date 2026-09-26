@@ -18,6 +18,7 @@ test("AI workflow orchestration uses Context Engine and AIToolRegistry without p
   const orchestrator = source("src/application/ai/workflow-orchestrator.ts");
   const service = source("src/workspace/ai/today-assistant-service.ts");
   const sources = source("src/workspace/ai/today-context-sources.ts");
+  const plannerAssistant = source("src/application/ai/planner-assistant.ts");
   assert.match(orchestrator, /contextProvider\.buildContext/u);
   assert.match(orchestrator, /runAiToolLoop/u);
   assert.match(orchestrator, /allowedReadToolIds/u);
@@ -25,6 +26,8 @@ test("AI workflow orchestration uses Context Engine and AIToolRegistry without p
   assert.match(service, /aiToolRegistry/u);
   assert.doesNotMatch(orchestrator, /(?:^|[/\\])(?:repository|database|sqlite|db)\//imu);
   assert.doesNotMatch(orchestrator, /\b(?:fetch|XMLHttpRequest|WebSocket)\s*\(/u);
+  assert.match(plannerAssistant, /computeFreeTimeIntervals/u);
+  assert.doesNotMatch(plannerAssistant, /Repository|SQLite|database|fetch\s*\(/iu);
   assert.doesNotMatch(sources, /(?:diary\.body|inbox\.raw|loadDiary|loadInbox|rawText|\.body\b)/iu);
 });
 
@@ -35,9 +38,14 @@ test("AI only starts from explicit user action and Planner writes remain behind 
   const app = source("src/App.tsx");
   assert.match(dashboard, /<TodayAssistantPanel/u);
   assert.match(panel, /onClick=\{\(\) => void run\("today\.analyze", ""\)\}/u);
-  assert.match(panel, /onClick=\{\(\) => void run\("today\.plan",/u);
+  assert.match(panel, /run\("planner\.route"\)/u);
+  assert.match(panel, /run\("planner\.route", "请帮我安排今天的时间。"\)/u);
+  assert.doesNotMatch(panel, /resolveTodayAssistantWorkflow/u);
   assert.match(panel, /data-testid="today-assistant-send"/u);
-  assert.match(panel, /resolveTodayAssistantWorkflow\(instruction\)/u);
+  assert.doesNotMatch(
+    source("src/workspace/ai/today-assistant-routing.ts"),
+    /resolveTodayAssistantWorkflow/u,
+  );
   assert.doesNotMatch(panel, /aria-modal|today-assistant-backdrop|onClose/u);
   assert.match(panel, /<AiProposalReview/u);
   assert.match(panel, /inline\s*$/mu);

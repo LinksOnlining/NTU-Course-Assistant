@@ -5,6 +5,7 @@ import {
   todayAnalysisSchema,
 } from "../../src/application/ai/today-workflows.ts";
 import { createAiWorkflowOrchestrator } from "../../src/application/ai/workflow-orchestrator.ts";
+import { createAiPlannerProposalRuntime } from "../../src/application/ai/proposal-runtime.ts";
 
 const EMPTY_OBJECT = {
   type: "object",
@@ -22,6 +23,39 @@ const PROPOSAL_OUTPUT = {
   type: "object",
   properties: { accepted: { type: "boolean" } },
   required: ["accepted"],
+  additionalProperties: false,
+};
+const EVENT_INPUT = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    date: { type: "string" },
+    startTime: { type: "string" },
+    endTime: { type: "string" },
+    location: { type: ["string", "null"] },
+    bufferBeforeMinutes: { type: "integer" },
+    bufferAfterMinutes: { type: "integer" },
+  },
+  required: [
+    "title",
+    "date",
+    "startTime",
+    "endTime",
+    "location",
+    "bufferBeforeMinutes",
+    "bufferAfterMinutes",
+  ],
+  additionalProperties: false,
+};
+const TASK_INPUT = {
+  type: "object",
+  properties: {
+    title: { type: "string" },
+    deadlineDate: { type: ["string", "null"] },
+    deadlineTime: { type: ["string", "null"] },
+    priority: { type: "string", enum: ["none", "low", "medium", "high"] },
+  },
+  required: ["title", "deadlineDate", "deadlineTime", "priority"],
   additionalProperties: false,
 };
 const TIME_BLOCK_INPUT = {
@@ -56,21 +90,36 @@ function fixture({
   credential = true,
   turns = [],
   failedToolIds = [],
+  proposalType = "timeBlock",
+  onProposal,
+  plannerTasks = [
+    {
+      id: "task-1",
+      title: "AI验收测试任务",
+      status: "open",
+      priority: "medium",
+      deadlineDate: null,
+      deadlineTime: null,
+    },
+  ],
 } = {}) {
   const executions = [];
   const proposalInputs = [];
+  const eventInputs = [];
+  const taskInputs = [];
   const providerCalls = [];
   const structuredCalls = [];
   const textCalls = [];
+  const contextRequests = [];
   let credentialChecks = 0;
   let contextBuilds = 0;
   const proposal = {
     id: "proposal-1",
-    type: "timeBlock",
+    type: proposalType,
     requiredPermission: "planner.propose",
     requiresConfirmation: true,
     status: "reviewRequired",
-    title: "建议安排任务时间块",
+    title: "建议规划安排",
     description: "待本地预览并确认。",
     payload: {},
     createdAt: "2026-09-26T10:00:00.000Z",
@@ -122,11 +171,13 @@ function fixture({
       moduleId: "planner",
       effect: "proposal",
       requiredPermission: "planner.propose",
-      inputSchema: EMPTY_OBJECT,
+      inputSchema: TASK_INPUT,
       outputSchema: PROPOSAL_OUTPUT,
       parseInput: (value) => value,
-      async execute(_value, context) {
+      async execute(value, context) {
         executions.push("planner.propose-task");
+        taskInputs.push(value);
+        if (onProposal) return onProposal("planner.propose-task", value, context);
         context.reportProposal(proposal);
         return { accepted: true };
       },
@@ -137,11 +188,13 @@ function fixture({
       moduleId: "planner",
       effect: "proposal",
       requiredPermission: "planner.propose",
-      inputSchema: EMPTY_OBJECT,
+      inputSchema: EVENT_INPUT,
       outputSchema: PROPOSAL_OUTPUT,
       parseInput: (value) => value,
-      async execute(_value, context) {
+      async execute(value, context) {
         executions.push("planner.propose-event");
+        eventInputs.push(value);
+        if (onProposal) return onProposal("planner.propose-event", value, context);
         context.reportProposal(proposal);
         return { accepted: true };
       },
@@ -158,6 +211,7 @@ function fixture({
       async execute(value, context) {
         executions.push("planner.propose-time-block");
         proposalInputs.push(value);
+        if (onProposal) return onProposal("planner.propose-time-block", value, context);
         context.reportProposal(proposal);
         return { accepted: true };
       },
@@ -195,12 +249,31 @@ function fixture({
   const contextProvider = {
     async buildContext(request, settings) {
       contextBuilds += 1;
+      contextRequests.push(request);
       return {
         requestId: request.id,
         generatedAt: request.generatedAt,
         timeContext: request.timeContext,
         selectedItems: [],
-        moduleContexts: { workspace: { context: { date: request.timeContext.localDate } } },
+        moduleContexts: {
+          ...(request.requestedScopes.includes("workspace.read")
+            ? { workspace: { context: { date: request.timeContext.localDate } } }
+            : {}),
+          ...(request.requestedScopes.includes("academic.read") &&
+          settings.persistentGrants.includes("academic.read")
+            ? { academic: { courses: [], exams: [], deadlines: [] } }
+            : {}),
+          ...(request.requestedScopes.includes("planner.read") &&
+          settings.persistentGrants.includes("planner.read")
+            ? {
+                planner: {
+                  tasks: plannerTasks,
+                  events: [],
+                  timeBlocks: [],
+                },
+              }
+            : {}),
+        },
         permissions: {
           includedScopes: request.requestedScopes.filter((scope) =>
             settings.persistentGrants.includes(scope),
@@ -209,7 +282,18 @@ function fixture({
         },
         redactions: [],
         providerFailures: [],
-        budget: { maxTotalBytes: 32768 },
+        budget: {
+          maxTotalBytes: 32768,
+          maxModuleBytes: 8192,
+          maxStringLength: 512,
+          maxItemsPerModule: 50,
+          maxSelectedItems: 20,
+          usedBytes: 0,
+          truncated: false,
+          omittedCount: 0,
+          truncatedModules: [],
+          moduleBytes: {},
+        },
       };
     },
   };
@@ -233,6 +317,9 @@ function fixture({
     textCalls,
     executions,
     proposalInputs,
+    eventInputs,
+    taskInputs,
+    contextRequests,
     proposal,
     get credentialChecks() {
       return credentialChecks;
@@ -358,18 +445,67 @@ test("analyze 即使收到伪造 Proposal Tool 调用仍只返回分析且不执
   assert.deepEqual(testFixture.executions, []);
 });
 
+test("自然语言分析路由保持只读；缺少时长的活动在本地澄清且不请求 Provider", async () => {
+  const analysis = fixture({
+    grants: ["workspace.read"],
+    turns: [{ kind: "final", content: "今天安排较宽松。" }],
+  });
+  const analysisResult = await analysis.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "今天安排如何？请看看风险",
+  });
+  assert.equal(analysisResult.status, "ready");
+  assert.equal(analysisResult.result.workflowId, "today.analyze");
+  assert.ok(
+    analysis.providerCalls.every((request) =>
+      request.tools.every((tool) => !tool.name.startsWith("planner_propose_")),
+    ),
+  );
+
+  const clarification = fixture();
+  const result = await clarification.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "明天晚上跑步",
+  });
+  assert.equal(result.status, "clarification");
+  assert.match(result.message, /留多长时间/u);
+  assert.equal(clarification.providerCalls.length, 0);
+  assert.equal(clarification.contextBuilds, 0);
+});
+
+test("未来日期分析只读取目标日期的 Academic/Planner context，不混入仅限今天的工作台摘要", async () => {
+  const testFixture = fixture({ grants: ["academic.read", "planner.read"] });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "明天有什么安排？",
+  });
+  assert.equal(result.status, "ready");
+  assert.equal(result.result.analysisTitle, "2026-09-27 安排");
+  assert.deepEqual(testFixture.contextRequests[0].requestedScopes, [
+    "academic.read",
+    "planner.read",
+    "weather.read",
+  ]);
+  assert.deepEqual(testFixture.contextRequests[0].timeRange, {
+    startDate: "2026-09-27",
+    endDate: "2026-09-27",
+  });
+  assert.equal(testFixture.contextRequests[0].requestedScopes.includes("workspace.read"), false);
+  assert.equal(testFixture.contextRequests[0].requestedScopes.includes("routine.read"), false);
+});
+
 test("today.plan 将授权时间块函数真实暴露给 Provider 并生成待审 Proposal，不执行写入", async () => {
   const testFixture = fixture({
-    grants: ["planner.read"],
+    grants: ["academic.read", "planner.read"],
     turns: [
       call("planner_get_open_items"),
       call(
         "planner_propose_time_block",
         {
           personalTaskId: "task-1",
-          date: "2026-09-26",
-          startTime: "14:00",
-          endTime: "14:30",
+          date: "2026-09-27",
+          startTime: "12:00",
+          endTime: "12:30",
           bufferBeforeMinutes: 0,
           bufferAfterMinutes: 0,
         },
@@ -379,13 +515,17 @@ test("today.plan 将授权时间块函数真实暴露给 Provider 并生成待�
   });
   const result = await testFixture.orchestrator.run({
     workflowId: "today.plan",
-    instruction: "为 AI验收测试任务安排 30 分钟时间块",
+    instruction: "明天下午给 AI验收测试任务安排 30 分钟时间块",
   });
   assert.equal(result.status, "ready", JSON.stringify(result));
   assert.equal(result.result.proposal.id, testFixture.proposal.id);
   assert.equal(result.result.proposal.status, "reviewRequired");
-  assert.equal(testFixture.textCalls.length, 1);
-  assert.equal(testFixture.textCalls[0].intent, "todayPlan");
+  assert.equal(
+    testFixture.textCalls.length,
+    0,
+    "proposal completion does not need a second provider call",
+  );
+  assert.match(result.result.answer, /待确认/u);
   assert.deepEqual(
     [
       ...new Set(
@@ -402,13 +542,18 @@ test("today.plan 将授权时间块函数真实暴露给 Provider 并生成待�
   );
   assert.ok(exposedFunction, "proposal function is present in the production Provider request");
   assert.equal(testFixture.providerCalls[0].toolChoice, "auto");
+  assert.match(
+    testFixture.providerCalls[0].inputItems[0].content,
+    /必须调用上述唯一 Proposal Tool/u,
+  );
+  assert.match(testFixture.providerCalls[0].inputItems[0].content, /planner_propose_time_block/u);
   assert.deepEqual(exposedFunction.parameters.required, TIME_BLOCK_INPUT.required);
   assert.deepEqual(testFixture.proposalInputs, [
     {
       personalTaskId: "task-1",
-      date: "2026-09-26",
-      startTime: "14:00",
-      endTime: "14:30",
+      date: "2026-09-27",
+      startTime: "12:00",
+      endTime: "12:30",
       bufferBeforeMinutes: 0,
       bufferAfterMinutes: 0,
     },
@@ -417,12 +562,277 @@ test("today.plan 将授权时间块函数真实暴露给 Provider 并生成待�
   assert.equal("apply" in testFixture.orchestrator, false);
 });
 
-test("Provider 伪造未开放的任务提案名称会被拒绝且不会执行", async () => {
+test("TimeBlock Mock E2E：未来路由、上下文、工具、Review、重校验、Application 写入与刷新", async () => {
+  const task = {
+    id: "task-1",
+    title: "AI验收测试任务",
+    status: "open",
+    priority: "medium",
+    deadlineDate: null,
+    deadlineTime: null,
+    updatedAt: "2026-09-26T10:00:00.000Z",
+  };
+  const writes = [];
+  let scheduleReads = 0;
+  let nextId = 0;
+  const proposalRuntime = createAiPlannerProposalRuntime({
+    ports: {
+      now: () => new Date("2026-09-26T10:00:00.000Z"),
+      createId: () => `e2e-${++nextId}`,
+      loadTermConfig: async () => null,
+      loadTasks: async () => [task],
+      loadScheduleDay: async (date) => {
+        scheduleReads += 1;
+        return { date, events: [], timeBlocks: [], timelineItems: [], tasks: [task], warnings: [] };
+      },
+      createTask: async (draft) => ({ id: "unused-task", ...draft }),
+      createEvent: async (draft) => ({ id: "unused-event", ...draft }),
+      createBlock: async (draft) => {
+        writes.push(["timeBlock", draft]);
+        return { id: "created-block", ...draft };
+      },
+    },
+  });
+  const testFixture = fixture({
+    grants: ["academic.read", "planner.read"],
+    turns: [
+      call("planner_get_open_items"),
+      call(
+        "planner_propose_time_block",
+        {
+          personalTaskId: "task-1",
+          date: "2026-09-27",
+          startTime: "12:00",
+          endTime: "12:30",
+          bufferBeforeMinutes: 0,
+          bufferAfterMinutes: 0,
+        },
+        "time-block-proposal",
+      ),
+    ],
+    onProposal: async (toolId, value, context) => {
+      assert.equal(toolId, "planner.propose-time-block");
+      context.reportProposal(await proposalRuntime.proposeTimeBlock(value, "deepseek"));
+      return { accepted: true };
+    },
+  });
+
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "明天下午给 AI验收测试任务安排 30 分钟时间块",
+  });
+  assert.equal(result.status, "ready", JSON.stringify(result));
+  const proposal = result.result.proposal;
+  assert.equal(proposal.type, "timeBlock");
+  assert.equal(proposal.status, "reviewRequired");
+  assert.deepEqual(
+    proposal.preview.fields.map(({ label }) => label),
+    ["任务", "日期", "开始", "结束", "时长", "提前 / 延后缓冲"],
+  );
+  assert.deepEqual(testFixture.executions, ["planner.open-items", "planner.propose-time-block"]);
+  assert.equal(writes.length, 0, "proposal review must not write before user confirmation");
+
+  let timetableRefreshes = 0;
+  const applied = await proposalRuntime.apply({
+    id: proposal.id,
+    confirmed: true,
+    expectedPreviewRevision: proposal.preview.revision,
+    permissionIds: ["planner.propose"],
+  });
+  if (applied.status === "applied") timetableRefreshes += 1;
+  assert.equal(applied.status, "applied");
+  assert.ok(
+    scheduleReads >= 2,
+    "proposal creation and confirmation both read current schedule state",
+  );
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0][0], "timeBlock");
+  assert.equal(writes[0][1].personalTaskId, "task-1");
+  assert.equal(
+    timetableRefreshes,
+    1,
+    "the applied result triggers the existing timetable refresh boundary",
+  );
+});
+
+test("可信路由为独立活动只开放 Event Proposal，并绑定本地未来候选", async () => {
+  const testFixture = fixture({
+    grants: ["academic.read", "planner.read"],
+    proposalType: "event",
+    turns: [
+      call("planner_propose_event", {
+        title: "跑步",
+        date: "2026-09-27",
+        startTime: "18:00",
+        endTime: "18:30",
+        location: null,
+        bufferBeforeMinutes: 0,
+        bufferAfterMinutes: 0,
+      }),
+    ],
+  });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "明天晚上想跑 30 分钟",
+  });
+  assert.equal(result.status, "ready", JSON.stringify(result));
+  assert.equal(result.result.proposal.type, "event");
+  assert.deepEqual(
+    testFixture.providerCalls[0].tools
+      .filter((tool) => tool.name.startsWith("planner_propose_"))
+      .map((tool) => tool.name),
+    ["planner_propose_event"],
+  );
+  assert.deepEqual(testFixture.eventInputs, [
+    {
+      title: "跑步",
+      date: "2026-09-27",
+      startTime: "18:00",
+      endTime: "18:30",
+      location: null,
+      bufferBeforeMinutes: 0,
+      bufferAfterMinutes: 0,
+    },
+  ]);
+  assert.deepEqual(testFixture.contextRequests[0].timeRange, {
+    startDate: "2026-09-27",
+    endDate: "2026-09-27",
+  });
+  assert.ok(result.result.limitations.some((item) => item.includes("没有可用的天气预报")));
+  assert.deepEqual(testFixture.executions, ["planner.propose-event"]);
+});
+
+test("明确创建任务意图只开放 Task Proposal，deadline 由本地解析", async () => {
   const testFixture = fixture({
     grants: ["planner.read"],
+    proposalType: "task",
+    turns: [
+      call("planner_propose_task", {
+        title: "交实验报告",
+        deadlineDate: "2026-10-02",
+        deadlineTime: null,
+        priority: "none",
+      }),
+    ],
+  });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "帮我记一个周五前交实验报告的任务",
+  });
+  assert.equal(result.status, "ready", JSON.stringify(result));
+  assert.equal(result.result.proposal.type, "task");
+  assert.deepEqual(
+    testFixture.providerCalls[0].tools
+      .filter((tool) => tool.name.startsWith("planner_propose_"))
+      .map((tool) => tool.name),
+    ["planner_propose_task"],
+  );
+  assert.deepEqual(testFixture.taskInputs, [
+    {
+      title: "交实验报告",
+      deadlineDate: "2026-10-02",
+      deadlineTime: null,
+      priority: "none",
+    },
+  ]);
+  assert.deepEqual(testFixture.executions, ["planner.propose-task"]);
+});
+
+test("范围式安排现有任务仅在本地找到 exact match 后生成 TimeBlock Proposal", async () => {
+  const testFixture = fixture({
+    grants: ["academic.read", "planner.read"],
+    plannerTasks: [
+      {
+        id: "report-task",
+        title: "写实验报告",
+        status: "open",
+        priority: "medium",
+        deadlineDate: "2026-10-04",
+        deadlineTime: null,
+      },
+    ],
+    turns: [
+      call("planner_propose_time_block", {
+        personalTaskId: "report-task",
+        date: "2026-09-28",
+        startTime: "00:00",
+        endTime: "02:00",
+        bufferBeforeMinutes: 0,
+        bufferAfterMinutes: 0,
+      }),
+    ],
+  });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "下周找两个小时写实验报告",
+  });
+  assert.equal(result.status, "ready", JSON.stringify(result));
+  assert.equal(result.result.proposal.type, "timeBlock");
+  assert.deepEqual(testFixture.proposalInputs[0], {
+    personalTaskId: "report-task",
+    date: "2026-09-28",
+    startTime: "00:00",
+    endTime: "02:00",
+    bufferBeforeMinutes: 0,
+    bufferAfterMinutes: 0,
+  });
+  assert.deepEqual(
+    testFixture.providerCalls[0].tools
+      .filter((tool) => tool.name.startsWith("planner_propose_"))
+      .map((tool) => tool.name),
+    ["planner_propose_time_block"],
+  );
+});
+
+test("范围式安排任务未 exact match 时在本地澄清，不开放 Provider 或 Proposal Tool", async () => {
+  const testFixture = fixture({
+    grants: ["academic.read", "planner.read"],
     turns: [call("planner_propose_task")],
   });
-  const result = await testFixture.orchestrator.run({ workflowId: "today.plan" });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "下周找两个小时写实验报告",
+  });
+  assert.equal(result.status, "clarification");
+  assert.match(result.message, /没有找到名称完全匹配/u);
+  assert.equal(testFixture.providerCalls.length, 0);
+  assert.deepEqual(testFixture.executions, []);
+});
+
+test("Provider 改写本地候选日期会被拒绝，且未到 proposal adapter", async () => {
+  const testFixture = fixture({
+    grants: ["academic.read", "planner.read"],
+    proposalType: "event",
+    turns: [
+      call("planner_propose_event", {
+        title: "跑步",
+        date: "2026-09-28",
+        startTime: "18:00",
+        endTime: "18:30",
+        location: null,
+        bufferBeforeMinutes: 0,
+        bufferAfterMinutes: 0,
+      }),
+    ],
+  });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "明天晚上想跑 30 分钟",
+  });
+  assert.equal(result.status, "failed");
+  assert.equal(result.category, "proposal");
+  assert.deepEqual(testFixture.executions, []);
+});
+
+test("Provider 伪造未开放的任务提案名称会被拒绝且不会执行", async () => {
+  const testFixture = fixture({
+    grants: ["academic.read", "planner.read"],
+    turns: [call("planner_propose_task")],
+  });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "明天下午给 AI验收测试任务安排 30 分钟",
+  });
   assert.equal(result.status, "failed");
   assert.deepEqual(testFixture.executions, []);
   assert.deepEqual(
