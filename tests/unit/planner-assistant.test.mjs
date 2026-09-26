@@ -117,11 +117,23 @@ test("Planner 意图区分独立活动、已有任务、显式新任务、分析
   assert.equal(event.scope.startDate, "2026-09-27");
   assert.equal(event.scope.dayPart, "evening");
   assert.equal(event.durationMinutes, 30);
+  const fullEventRequest = resolvePlannerInstruction("明天晚上想跑30分钟，帮我安排一下", NOW);
+  assert.equal(fullEventRequest.intent, "planEvent");
+  assert.equal(fullEventRequest.title, "跑步");
+  assert.equal(fullEventRequest.scope.startDate, "2026-09-27");
+  assert.equal(fullEventRequest.scope.dayPart, "evening");
+  assert.equal(fullEventRequest.durationMinutes, 30);
 
   const task = resolvePlannerInstruction("明天下午给高数复习安排一小时", NOW);
   assert.equal(task.intent, "planExistingTask");
   assert.equal(task.taskQuery, "高数复习");
   assert.equal(task.durationMinutes, 60);
+  for (const quotedTitle of ["“高数复习”", '"高数复习"', "高数复习"]) {
+    assert.equal(
+      resolvePlannerInstruction(`明天下午给${quotedTitle}安排1小时`, NOW).taskQuery,
+      "高数复习",
+    );
+  }
 
   const findTaskTime = resolvePlannerInstruction("下周找两个小时写实验报告", NOW);
   assert.equal(findTaskTime.intent, "planExistingTask");
@@ -267,6 +279,79 @@ test("未来课程、日程和缓冲会阻止候选占用，冲突时间块仍�
     }),
   });
   assert.match(warning[0].warnings.join(" "), /冲突活动/u);
+});
+
+test("明天晚上全空且请求 30 分钟时返回最早精确候选及本地时间事实", () => {
+  const scope = resolvePlannerTimeScope("明天晚上", NOW).scope;
+  const [candidate] = findPlannerCandidateSlots({
+    scope,
+    durationMinutes: 30,
+    now: NOW,
+    context: context(),
+  });
+  assert.deepEqual(
+    {
+      candidateId: candidate.candidateId,
+      start: candidate.start,
+      end: candidate.end,
+      date: candidate.date,
+      startTime: candidate.startTime,
+      endTime: candidate.endTime,
+      durationMinutes: candidate.durationMinutes,
+      warnings: candidate.warnings,
+      sourceWindow: candidate.sourceWindow,
+    },
+    {
+      candidateId: "slot-20260927-1800-1830",
+      start: "2026-09-27T10:00:00.000Z",
+      end: "2026-09-27T10:30:00.000Z",
+      date: "2026-09-27",
+      startTime: "18:00",
+      endTime: "18:30",
+      durationMinutes: 30,
+      warnings: [],
+      sourceWindow: "2026-09-27 18:00–22:00",
+    },
+  );
+  const [sameCandidate] = findPlannerCandidateSlots({
+    scope,
+    durationMinutes: 30,
+    now: NOW,
+    context: context(),
+  });
+  assert.equal(sameCandidate.candidateId, candidate.candidateId, "候选编号应可重复计算");
+});
+
+test("用户指定 20:00 时只生成该 30 分钟候选，不改时也不延长到午夜", () => {
+  const scope = resolvePlannerTimeScope("明天晚上20:00", NOW).scope;
+  const [candidate] = findPlannerCandidateSlots({
+    scope,
+    durationMinutes: 30,
+    now: NOW,
+    context: context(),
+  });
+  assert.deepEqual(
+    [
+      candidate.candidateId,
+      candidate.date,
+      candidate.startTime,
+      candidate.endTime,
+      candidate.durationMinutes,
+    ],
+    ["slot-20260927-2000-2030", "2026-09-27", "20:00", "20:30", 30],
+  );
+
+  const midnightEnd = resolvePlannerTimeScope("明天深夜23:30", NOW).scope;
+  assert.deepEqual(
+    findPlannerCandidateSlots({
+      scope: midnightEnd,
+      durationMinutes: 30,
+      now: NOW,
+      context: context(),
+    }),
+    [],
+    "same-day Planner events cannot serialize 24:00 as an end time",
+  );
 });
 
 test("候选受当前时间、业务边界和不完整上下文约束", () => {

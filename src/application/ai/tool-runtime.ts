@@ -64,7 +64,7 @@ export async function runAiToolLoop(input: {
   readonly allowedReadToolIds?: readonly string[];
   /** Optional workflow horizon for date-range read tools. */
   readonly allowedDateRange?: { readonly from: string; readonly to: string };
-  /** Trusted local planner candidate; proposal calls must match this exact payload. */
+  /** Trusted local planner selection; calls must match it and use its canonical payload. */
   readonly proposalConstraint?: AiToolExecutionContext["proposalConstraint"];
   /** Per-workflow consent and capability allowlist; omission is default-deny. */
   readonly proposalPolicy?: AiProposalToolPolicy;

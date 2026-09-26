@@ -284,7 +284,7 @@ export function createAiPlannerProposalRuntime(
         type: "event",
         payload,
         source,
-        title: "建议创建日程",
+        title: "建议创建活动",
         fields: eventFields(payload),
         warnings: result.warnings,
         preconditionFingerprint: result.fingerprint,
@@ -536,8 +536,10 @@ function assertNoErrors(errors: Readonly<Record<string, string | undefined>>): v
 
 function eventFields(payload: EventProposalPayload): AiProposalPreview["fields"] {
   return Object.freeze([
+    { label: "活动", value: payload.title },
     { label: "日期", value: payload.date },
     { label: "时间", value: `${payload.startTime}–${payload.endTime}` },
+    { label: "时长", value: `${durationMinutes(payload)} 分钟` },
     { label: "地点", value: payload.location ?? "未设置" },
     {
       label: "提前 / 延后缓冲",

@@ -300,15 +300,7 @@ const proposeEventTool = plannerProposalTool(
   "planner_propose_event",
   40,
   "创建一个待用户审阅的日程提案；不会直接写入日程。",
-  objectSchema({
-    title: { type: "string", minLength: 1, maxLength: 200 },
-    date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
-    startTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
-    endTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
-    location: { type: ["string", "null"], maxLength: 200 },
-    bufferBeforeMinutes: { type: "integer", minimum: 0, maximum: 240 },
-    bufferAfterMinutes: { type: "integer", minimum: 0, maximum: 240 },
-  }),
+  objectSchema({ candidateId: { type: "string", minLength: 1, maxLength: 64 } }),
   proposalOutputSchema("event"),
 );
 
@@ -317,14 +309,7 @@ const proposeTimeBlockTool = plannerProposalTool(
   "planner_propose_time_block",
   50,
   "创建一个关联现有任务的待审时间块提案；不会直接写入时间块。",
-  objectSchema({
-    personalTaskId: { type: "string", minLength: 1, maxLength: 128 },
-    date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
-    startTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
-    endTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
-    bufferBeforeMinutes: { type: "integer", minimum: 0, maximum: 240 },
-    bufferAfterMinutes: { type: "integer", minimum: 0, maximum: 240 },
-  }),
+  objectSchema({ candidateId: { type: "string", minLength: 1, maxLength: 64 } }),
   proposalOutputSchema("timeBlock"),
 );
 

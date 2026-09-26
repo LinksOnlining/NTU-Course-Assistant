@@ -2,14 +2,14 @@
 
 日期：2026-09-27
 分支：`v2/workspace-rebase`
-实现基线：`9da94c0 docs: close phase 4.5 live acceptance`
+修复基线：`91c8ca8 feat: expand ai planner for future scheduling`
 SQLite：schema `7`，migration `0`
 
 ## 阶段状态
 
 - Phase 4.6 Implementation：**COMPLETE**
 - Phase 4.6 Automated：**PASS**
-- Phase 4.6 DeepSeek Live：**PENDING**（未执行真实 Planner Tool Calling）
+- Phase 4.6 DeepSeek Live：**PENDING RETEST**（本次自动修复后未执行真实 DeepSeek Planner Tool Calling）
 - Phase 4.6 Overall：**PENDING** Ethan Windows 人工验收
 - Phase 5：**NOT STARTED**
 
@@ -19,16 +19,34 @@ SQLite：schema `7`，migration `0`
 - 区分只读分析、独立活动 `PlannerEvent`、已有 `PersonalTask` 的 `TimeBlock`、显式创建 `PersonalTask` 和澄清。对话无历史；已有任务仅接受唯一规范化 exact match；缺少日期、时长或目标对象时不猜测。
 - 目标日期 Context 复用现有 Context Engine、Academic Application 查询及 Planner Application 查询。课程使用 canonical effective occurrence；包含目标区间内的考试、学业截止日期、PlannerEvent、TimeBlock、开放任务。Weather 仅读取已授权且已缓存的摘要，不触发位置或天气请求；Diary 正文、Inbox 原文、Search 与 DB 不对 AI 开放。
 - 空闲时间在本地基于现有 Timeline `computeFreeTimeIntervals` / `effectiveOccupancy` 确定性计算，考虑课程、考试、日程、TimeBlock 与 buffer。当天不推荐已经开始的时间；明确时刻的普通冲突保留 warn-but-allow 并显示预览提示。超过范围、冲突数据不完整或 Context 被截断时不生成安全候选。
-- 安全边界保持 `planner.propose` 模块级授权 + workflow-specific 单一 Proposal Tool allowlist。一个请求最多一个 Proposal；Provider 参数必须与本地核验候选完全一致。Provider 无 Apply/Write 工具；用户确认后才通过现有 Proposal Review、重校验和 Application UseCase 写入。
+- 安全边界保持 `planner.propose` 模块级授权 + workflow-specific 单一 Proposal Tool allowlist。一个请求最多一个 Proposal；Provider 仅提交与当前请求唯一候选完全一致的 `candidateId`；日期和时间由可信本地 payload 构造。Provider 无 Apply/Write 工具；用户确认后才通过现有 Proposal Review、重校验和 Application UseCase 写入。
 - 仅扩展现有工作台 Composer 的一次性请求路由与结果标题；未新增聊天历史、数据库结构、AI 一级导航或新 Provider。
+
+## Live 问题修复（2026-09-27）
+
+### PlannerEvent 候选不匹配
+
+- 故障阶段定位为 Proposal Tool 参数门禁：旧流程先在本地构造日期、开始/结束时间等完整 payload，再要求 Provider 重新生成这些业务字段，并将 Provider 参数与完整本地 payload 做 `stableStringify` 精确比较；任何一个值不同都会命中“AI 返回的提案未匹配本地校验候选，请重试”。这是结构性根因。既有日志未保存本次 DeepSeek 的原始 `function_call.arguments`，因此无法诚实指出当时究竟哪一个字段发生差异；不将猜测写成事实。
+- 旧 Candidate 只有日期、本地开始/结束钟点、时长、warnings 和 source window，没有可供 Provider 选择的候选身份。当前 Candidate 包含稳定 `candidateId`、本地日期/钟点、由同一注入时区生成的 ISO `start` / `end`、`durationMinutes`、warnings 和 source window。
+- ID 使用 `slot-YYYYMMDD-HHMM-HHMM` 的确定性格式，由本地候选日期与本地起止钟点组成；相同输入重复生成相同 ID。`planner_propose_event` / `planner_propose_time_block` 只向 Provider 暴露 `candidateId`，不暴露可由模型改写的 start/end。运行时仍严格校验该 ID 与当前请求唯一候选一致；Proposal Adapter 从当前请求的可信本地 `canonicalPayload` 构造 Proposal，Provider 不提供任何时间事实。伪造 ID 或额外传入 start/end 均被拒绝。
+- 时间业务字段仍以 Planner 使用的本地 `date` + `startTime` / `endTime` 为准；Candidate 的 ISO 时刻从同一时区契约派生，不以 UTC 字符串与本地钟点作裸字符串比较。明天晚上解析为 18:00–22:00 窗口；30 分钟请求在全空窗口中确定性选择最早合法的 18:00–18:30。明确指定 20:00 时只候选 20:00–20:30，不暗中改时。结束时间不允许序列化为不受当前 Planner 时间 schema 支持的 24:00。
+- 真实开发态数据库只读核验中，测试目标“高数复习”的唯一未完成 exact match 数为 0；本地澄清是正确安全行为，不创建伪 ID 或模糊绑定。自动 fixture 覆盖唯一 exact match、零匹配、多个同名匹配及中文/英文外层引号规范化。该检查只记录匹配数量，不复制数据库行。
+- PersonalTask Proposal 创建路径保持现状并通过回归。Event Proposal Review 标题为“建议创建活动”，预览包括活动名、日期、合并时间段、时长、地点和缓冲；只有本地用户确认、重新校验通过后才调用现有 Application UseCase。提案生成/预览本身不写入。
+
+### 隐私与 Provider 指令
+
+- 工作台提示由“仅使用你在 AI 设置中允许的数据，并发送至 DeepSeek 处理。”调整为“仅在你主动使用 AI 时，将本次请求所需且已授权的数据发送至 DeepSeek 处理。”；权限 Gate、显式用户动作、workflow 最小读取范围和 Context 投影机制未改变。
+- 当前 workflow 有 Proposal Tool 时，trusted instructions 表述为仅可生成待审提案并等待用户确认，不声称只读或可直接应用；没有 Proposal Tool 时才说明当前为只读分析。Provider 仍无 Apply/Write Tool。
 
 ## 自动验证
 
 | 检查 | 结果 |
 |---|---|
 | `npm run typecheck` | PASS |
-| `npm run verify` | PASS — 331 unit、130 architecture、1011 UI；15 UI 条件跳过；lint、Prettier、前端 build 均 PASS |
-| Planner/Context/Proposal/Tool/Orchestrator targeted regression | PASS — 64 tests；后续日期边界补充测试 8/8 PASS |
+| `npm run verify` | PASS — 338 unit、130 architecture、1011 UI；15 UI 条件跳过；lint、Prettier、前端 build 均 PASS |
+| Planner/Context/Proposal/Tool/Orchestrator targeted regression | PASS — 55 tests；Candidate、Task exact match、Proposal gate / confirm / revalidation 覆盖 |
+| Today Assistant targeted UI regression | PASS — 126 tests，9 个窗口/DPI 项目均通过（包含新 privacy 文案和 Event Proposal 预览字段） |
+| AI operation / Today Assistant architecture tests | PASS — 13 tests |
 | `cargo test --manifest-path src-tauri/Cargo.toml` | PASS — 97 tests |
 | `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` | PASS |
 | `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` | PASS |
@@ -38,34 +56,34 @@ UI tests 中 15 项为既有条件跳过；Playwright 可能记录 Tauri mock `c
 
 ## 本机 Build 产物检查
 
-以下均为忽略目录 `src-tauri/target/release/` 内的本地构建产物；未加入 Git。文件名仍显示应用现有版本 `1.3.1`，本 Phase 未更改产品版本、Tauri 版本或 schema。
+以下均为忽略目录 `src-tauri/target/release/` 内本轮重新生成的本地构建产物；未加入 Git。文件名显示 v2 开发分支当前应用版本 `1.3.1`；本 Phase 未更改产品版本、Tauri 依赖版本或 schema。只确认文件、大小和 SHA-256，没有运行 EXE 或安装 installer。
 
 | 文件 | 大小（字节） | SHA-256 |
 |---|---:|---|
-| `ntu-course-assistant.exe` | 67,993,088 | `EC8E429667994382896CFC0D42CA6E893DEABC24BFB89030601AA5DB663FF903` |
-| `NTU Course Assistant_1.3.1_x64_en-US.msi` | 54,390,784 | `316657F1C82B929FFDAA0393D7D7CF78BDCF97FCE81F23A19E134953ABBEF0EA` |
-| `NTU Course Assistant_1.3.1_x64_en-US.msi.sig` | 436 | `023B7E6F30F0307FB061877E25B279EF19A98EF5002C041DD4D49FBF20068EE2` |
-| `NTU Course Assistant_1.3.1_x64-setup.exe` | 52,487,056 | `A41CDE281C17C78BC312F4D4C624419FD40DFA313F3E7F93170D944069F9F041` |
-| `NTU Course Assistant_1.3.1_x64-setup.exe.sig` | 436 | `22D62F1571F587CF432FEA9D8D40ED39924D86BADD067F83F06904E93D221FE5` |
+| `ntu-course-assistant.exe` | 67,993,600 | `FB5852B64A9FA15E3A9A543E32BCD8A353D09659B3E23E13EC007A9F79600460` |
+| `NTU Course Assistant_1.3.1_x64_en-US.msi` | 54,390,784 | `502D34466F4B9E9E85B5742558CF7CD1E3242D813B377C8FD274F3519A0E2089` |
+| `NTU Course Assistant_1.3.1_x64_en-US.msi.sig` | 436 | `9D9C4AC896084D20DB3CC11458D44A6068910853D72D76FD0787A612EED9BF92` |
+| `NTU Course Assistant_1.3.1_x64-setup.exe` | 52,433,468 | `4F9F84A0710E26D367F06851E3A7EF26F90A4A86D6AA6DBC7FC149CCC4A52309` |
+| `NTU Course Assistant_1.3.1_x64-setup.exe.sig` | 436 | `9015B61ECACFB1D817E0D7E358C7E526F2E5C34F309B3868DC39C9DD54B474A1` |
 
-**没有运行 EXE、没有安装 installer、没有执行真实 DeepSeek 请求。** 本 build 仅证明当前工作树可完成 production packaging；不是新版本 Release。
+**没有运行 EXE、没有安装 installer、没有访问 Release 用户数据库、没有执行真实 DeepSeek 请求。** 本 build 仅证明当前工作树可完成 production packaging；不是新版本 Release。只读核验的数据库是独立 `dev-v2` 数据库，仅得到任务匹配计数 `0`。
 
 ## Live 状态与限制
 
 - Phase 4.5 已完成的 DeepSeek `GET /models`、文本/结构化 `POST /responses`、真实 Workspace Context 与授权约束保持历史 PASS。
-- Phase 4.6 DeepSeek Tool Calling（Event、TimeBlock、Task 三种路由）、真实 Proposal Preview/Review、确认后重校验与真实 Planner 写入：**NOT EXECUTED**。
-- Windows 真实界面验收：**PENDING**。本记录没有将自动化 Mock E2E 当作 Provider/Windows Live PASS。
+- Phase 4.6 DeepSeek Tool Calling（Event、TimeBlock、Task 三种路由）、真实 Windows Proposal Preview/Review、真实确认写入：**PENDING RETEST / NOT EXECUTED AFTER FIX**。
+- 本次 Mock/自动化验证覆盖 candidate selection、完整 Event Proposal 预览、确认前零写入、确认后重校验及既有 Application 写入路径；不等同于真实 DeepSeek/Windows Live PASS。
 - schema 7、migration 0；没有新增 AI 持久化、聊天历史或 Proposal 数据表。
 
 ## Ethan 人工验收清单
 
 请在 Windows 开发态先确认 AI 数据权限和 DeepSeek 已配置，再逐项检查：
 
-1. 工作台输入“明天晚上跑步 30 分钟”：本地识别日期/时长，只产生一个待审 PlannerEvent，不声称已写入；检查预览后取消，再次确认数据未变化。
-2. 输入“周末晚上跑步 45 分钟”：候选在周末窗口中确定；若缺信息/冲突，结果如实澄清或显示冲突，不伪造空闲事实。
-3. 输入安排已有任务的请求：只在任务标题唯一 exact match 时生成 TimeBlock；不存在或重名时澄清，不绑定错误任务。
-4. 输入明确创建 PersonalTask 的请求：只生成 Task Proposal，不自动生成 TimeBlock。
+1. 工作台输入“明天晚上想跑30分钟，帮我安排一下”：本地识别 `tomorrow + evening (18:00–22:00) + 30 分钟`，Provider 只能提交 `candidateId`；预览应显示“建议创建活动 / 跑步 / 明天 / 18:00–18:30 / 30 分钟”。取消后确认数据未变化。
+2. 输入“明天晚上20:00跑30分钟”：只允许预览 20:00–20:30，不可由模型改时。
+3. 输入安排已有任务的请求：仅唯一未完成 exact match 才生成 TimeBlock；不存在或重名时澄清，不模糊绑定。
+4. 输入“帮我记一个周五前交实验报告的任务”：只生成 PersonalTask Proposal，不自动生成 TimeBlock。
 5. 分别确认、取消提案；确认后查看 Planner 结果，取消后验证未写入。若开始时间已过去或源日程变化，应要求重校验/再次确认。
 6. 检查天气仅在已授权且有缓存时出现；未授权时不得触发位置、天气或其他后台请求。
 
-人工验收全部完成前，Phase 4.6 Overall 保持 PENDING；不进入 Phase 5，不 push、不 tag、不发布 Release。
+人工 DeepSeek/Windows 验收重新通过前，Phase 4.6 DeepSeek Live 保持 PENDING RETEST，Overall 保持 PENDING；不进入 Phase 4.7 / Phase 5，不 push、不 tag、不发布 Release。

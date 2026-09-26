@@ -197,7 +197,7 @@ export function TodayAssistantPanel({
         </button>
       </div>
       <p className="today-assistant-privacy" id="today-assistant-privacy">
-        仅使用你在 AI 设置中允许的数据，并发送至 DeepSeek 处理。
+        仅在你主动使用 AI 时，将本次请求所需且已授权的数据发送至 DeepSeek 处理。
       </p>
       <div className="today-assistant-result" aria-live="polite">
         {state.kind === "idle" && <p>有需要时再问我；不会保存对话记录。</p>}

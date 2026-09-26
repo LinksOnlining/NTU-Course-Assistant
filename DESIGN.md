@@ -6,8 +6,8 @@
 
 - 当前 v2 产品需求单一事实来源：[`PROJECT_BRIEF.md`](PROJECT_BRIEF.md)。
 - 当前 v2 架构及依赖方向契约：[`docs/v2-architecture-contract.md`](docs/v2-architecture-contract.md)。
-- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0–4.5 COMPLETE；Phase 4.6 Implementation 与 Automated COMPLETE/PASS，DeepSeek Live 与整体人工验收仍 PENDING。Phase 4.5 已验收的 DeepSeek 文本/结构化响应、Workspace Context 与授权边界保持历史 PASS；Phase 4.6 增加本地可信日期/意图路由、future-date Planner Context、精确 Task 匹配及 Event/TimeBlock/Task Proposal。候选时间由现有 Timeline/free-time 与 buffer 逻辑在本地计算，Provider 只可回显本地候选并且每个 workflow 最多暴露一个 Proposal Tool。Proposal 只有经本地预览、重校验和用户确认才调用现有 Planner Application UseCase。无 Apply Tool、聊天历史或持久化 AI 状态；Diary 正文、Inbox 原始内容和 Search 不进入工作流。SQLite schema 仍为 7、migration 0。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md) 与 [`docs/v2-phase-4-6-verification.md`](docs/v2-phase-4-6-verification.md)。
-- 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。Phase 4.6 的真实 DeepSeek Planner Tool Calling 与 Windows 人工验收仍待 Ethan 执行。
+- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0–4.5 COMPLETE；Phase 4.6 Implementation 与 Automated COMPLETE/PASS，Live 因 Event Candidate mismatch 修复后等待 Ethan 重新验收，Overall PENDING。Phase 4.5 已验收的 DeepSeek 文本/结构化响应、Workspace Context 与授权边界保持历史 PASS；Phase 4.6 增加本地可信日期/意图路由、future-date Planner Context、精确 Task 匹配及 Event/TimeBlock/Task Proposal。候选时间由现有 Timeline/free-time 与 buffer 逻辑在本地确定为精确时长候选；Provider 仅提交当前请求的 candidateId，时间字段由可信本地 payload 提供。Event Preview 显示活动、日期、时间段和时长。每个 workflow 最多暴露一个 Proposal Tool，Proposal 只有经本地预览、重校验和用户确认才调用现有 Planner Application UseCase。无 Apply Tool、聊天历史或持久化 AI 状态；Diary 正文、Inbox 原始内容和 Search 不进入工作流。SQLite schema 仍为 7、migration 0。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md) 与 [`docs/v2-phase-4-6-verification.md`](docs/v2-phase-4-6-verification.md)。
+- 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。真实 DeepSeek Planner Tool Calling 与 Windows 人工验收仍 PENDING RETEST。
 
 ## 技术方案
 

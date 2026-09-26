@@ -24,11 +24,15 @@ const adapters: readonly AiToolAdapter[] = [
   },
   {
     id: "planner.propose-event",
-    parseInput: (value) => value as EventProposalPayload,
+    parseInput: (value) => value as PlannerCandidateSelection,
     execute: async (value, context) => {
       requireProposalReporter(context);
       const proposal = await aiPlannerProposalRuntime.proposeEvent(
-        value as EventProposalPayload,
+        canonicalSchedulePayload<EventProposalPayload>(
+          value as PlannerCandidateSelection,
+          context,
+          "planner.propose-event",
+        ),
         source(context),
       );
       context.reportProposal(proposal);
@@ -37,11 +41,15 @@ const adapters: readonly AiToolAdapter[] = [
   },
   {
     id: "planner.propose-time-block",
-    parseInput: (value) => value as TimeBlockProposalPayload,
+    parseInput: (value) => value as PlannerCandidateSelection,
     execute: async (value, context) => {
       requireProposalReporter(context);
       const proposal = await aiPlannerProposalRuntime.proposeTimeBlock(
-        value as TimeBlockProposalPayload,
+        canonicalSchedulePayload<TimeBlockProposalPayload>(
+          value as PlannerCandidateSelection,
+          context,
+          "planner.propose-time-block",
+        ),
         source(context),
       );
       context.reportProposal(proposal);
@@ -51,6 +59,10 @@ const adapters: readonly AiToolAdapter[] = [
 ];
 
 export const AI_PROPOSAL_TOOL_ADAPTERS = Object.freeze(adapters);
+
+interface PlannerCandidateSelection {
+  readonly candidateId: string;
+}
 
 function source(context?: AiToolExecutionContext): AiProposalSource {
   if (context?.providerId === "mock" || context?.providerId === "deepseek")
@@ -64,4 +76,24 @@ function requireProposalReporter(
   readonly reportProposal: (proposal: unknown) => void;
 } {
   if (!context?.reportProposal) throw new Error("Proposal tool requires a local review boundary.");
+}
+
+function canonicalSchedulePayload<Value>(
+  selection: PlannerCandidateSelection,
+  context: AiToolExecutionContext,
+  toolId: "planner.propose-event" | "planner.propose-time-block",
+): Value {
+  const constraint = context.proposalConstraint;
+  const argumentsRecord =
+    typeof constraint?.arguments === "object" && constraint.arguments !== null
+      ? (constraint.arguments as Record<string, unknown>)
+      : null;
+  if (
+    constraint?.toolId !== toolId ||
+    argumentsRecord?.candidateId !== selection.candidateId ||
+    constraint.canonicalPayload === undefined
+  ) {
+    throw new Error("规划候选已失效，请重新生成提案。");
+  }
+  return constraint.canonicalPayload as Value;
 }

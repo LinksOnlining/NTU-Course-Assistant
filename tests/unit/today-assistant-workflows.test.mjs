@@ -27,24 +27,8 @@ const PROPOSAL_OUTPUT = {
 };
 const EVENT_INPUT = {
   type: "object",
-  properties: {
-    title: { type: "string" },
-    date: { type: "string" },
-    startTime: { type: "string" },
-    endTime: { type: "string" },
-    location: { type: ["string", "null"] },
-    bufferBeforeMinutes: { type: "integer" },
-    bufferAfterMinutes: { type: "integer" },
-  },
-  required: [
-    "title",
-    "date",
-    "startTime",
-    "endTime",
-    "location",
-    "bufferBeforeMinutes",
-    "bufferAfterMinutes",
-  ],
+  properties: { candidateId: { type: "string" } },
+  required: ["candidateId"],
   additionalProperties: false,
 };
 const TASK_INPUT = {
@@ -60,22 +44,8 @@ const TASK_INPUT = {
 };
 const TIME_BLOCK_INPUT = {
   type: "object",
-  properties: {
-    personalTaskId: { type: "string" },
-    date: { type: "string" },
-    startTime: { type: "string" },
-    endTime: { type: "string" },
-    bufferBeforeMinutes: { type: "integer" },
-    bufferAfterMinutes: { type: "integer" },
-  },
-  required: [
-    "personalTaskId",
-    "date",
-    "startTime",
-    "endTime",
-    "bufferBeforeMinutes",
-    "bufferAfterMinutes",
-  ],
+  properties: { candidateId: { type: "string" } },
+  required: ["candidateId"],
   additionalProperties: false,
 };
 const ANALYSIS = {
@@ -193,8 +163,9 @@ function fixture({
       parseInput: (value) => value,
       async execute(value, context) {
         executions.push("planner.propose-event");
-        eventInputs.push(value);
-        if (onProposal) return onProposal("planner.propose-event", value, context);
+        const canonicalPayload = context.proposalConstraint?.canonicalPayload;
+        eventInputs.push(canonicalPayload);
+        if (onProposal) return onProposal("planner.propose-event", canonicalPayload, context);
         context.reportProposal(proposal);
         return { accepted: true };
       },
@@ -210,8 +181,9 @@ function fixture({
       parseInput: (value) => value,
       async execute(value, context) {
         executions.push("planner.propose-time-block");
-        proposalInputs.push(value);
-        if (onProposal) return onProposal("planner.propose-time-block", value, context);
+        const canonicalPayload = context.proposalConstraint?.canonicalPayload;
+        proposalInputs.push(canonicalPayload);
+        if (onProposal) return onProposal("planner.propose-time-block", canonicalPayload, context);
         context.reportProposal(proposal);
         return { accepted: true };
       },
@@ -501,14 +473,7 @@ test("today.plan 将授权时间块函数真实暴露给 Provider 并生成待�
       call("planner_get_open_items"),
       call(
         "planner_propose_time_block",
-        {
-          personalTaskId: "task-1",
-          date: "2026-09-27",
-          startTime: "12:00",
-          endTime: "12:30",
-          bufferBeforeMinutes: 0,
-          bufferAfterMinutes: 0,
-        },
+        { candidateId: "slot-20260927-1200-1230" },
         "proposal-call",
       ),
     ],
@@ -599,14 +564,7 @@ test("TimeBlock Mock E2E：未来路由、上下文、工具、Review、重校�
       call("planner_get_open_items"),
       call(
         "planner_propose_time_block",
-        {
-          personalTaskId: "task-1",
-          date: "2026-09-27",
-          startTime: "12:00",
-          endTime: "12:30",
-          bufferBeforeMinutes: 0,
-          bufferAfterMinutes: 0,
-        },
+        { candidateId: "slot-20260927-1200-1230" },
         "time-block-proposal",
       ),
     ],
@@ -656,27 +614,66 @@ test("TimeBlock Mock E2E：未来路由、上下文、工具、Review、重校�
 });
 
 test("可信路由为独立活动只开放 Event Proposal，并绑定本地未来候选", async () => {
+  const eventWrites = [];
+  const proposalRuntime = createAiPlannerProposalRuntime({
+    ports: {
+      now: () => new Date("2026-09-26T02:00:00.000Z"),
+      createId: () => "event-candidate",
+      loadTermConfig: async () => null,
+      loadTasks: async () => [],
+      loadScheduleDay: async (date) => ({
+        date,
+        events: [],
+        timeBlocks: [],
+        timelineItems: [],
+        tasks: [],
+        warnings: [],
+      }),
+      createTask: async (draft) => ({ id: "unused-task", ...draft }),
+      createEvent: async (draft) => {
+        eventWrites.push(draft);
+        return { id: "created-event", ...draft };
+      },
+      createBlock: async (draft) => ({ id: "unused-block", ...draft }),
+    },
+  });
   const testFixture = fixture({
     grants: ["academic.read", "planner.read"],
     proposalType: "event",
-    turns: [
-      call("planner_propose_event", {
-        title: "跑步",
-        date: "2026-09-27",
-        startTime: "18:00",
-        endTime: "18:30",
-        location: null,
-        bufferBeforeMinutes: 0,
-        bufferAfterMinutes: 0,
-      }),
-    ],
+    turns: [call("planner_propose_event", { candidateId: "slot-20260927-1800-1830" })],
+    onProposal: async (toolId, value, context) => {
+      assert.equal(toolId, "planner.propose-event");
+      context.reportProposal(await proposalRuntime.proposeEvent(value, "deepseek"));
+      return { accepted: true };
+    },
   });
   const result = await testFixture.orchestrator.run({
     workflowId: "planner.route",
-    instruction: "明天晚上想跑 30 分钟",
+    instruction: "明天晚上想跑30分钟，帮我安排一下",
   });
   assert.equal(result.status, "ready", JSON.stringify(result));
   assert.equal(result.result.proposal.type, "event");
+  assert.equal(result.result.proposal.title, "建议创建活动");
+  assert.deepEqual(result.result.proposal.payload, {
+    title: "跑步",
+    date: "2026-09-27",
+    startTime: "18:00",
+    endTime: "18:30",
+    location: null,
+    bufferBeforeMinutes: 0,
+    bufferAfterMinutes: 0,
+  });
+  assert.deepEqual(
+    result.result.proposal.preview.fields.map(({ label, value }) => [label, value]),
+    [
+      ["活动", "跑步"],
+      ["日期", "2026-09-27"],
+      ["时间", "18:00–18:30"],
+      ["时长", "30 分钟"],
+      ["地点", "未设置"],
+      ["提前 / 延后缓冲", "0 / 0 分钟"],
+    ],
+  );
   assert.deepEqual(
     testFixture.providerCalls[0].tools
       .filter((tool) => tool.name.startsWith("planner_propose_"))
@@ -694,12 +691,39 @@ test("可信路由为独立活动只开放 Event Proposal，并绑定本地未�
       bufferAfterMinutes: 0,
     },
   ]);
+  assert.match(
+    testFixture.providerCalls[0].inputItems[0].content,
+    /本地核验候选编号：slot-20260927-1800-1830/u,
+  );
+  assert.match(
+    testFixture.providerCalls[0].inputItems[0].content,
+    /只能提交本地给出的 candidateId/u,
+  );
+  assert.doesNotMatch(testFixture.providerCalls[0].inputItems[0].content, /只能提供只读分析/u);
+  assert.deepEqual(
+    testFixture.providerCalls[0].tools.find((tool) => tool.name === "planner_propose_event")
+      .parameters,
+    EVENT_INPUT,
+  );
   assert.deepEqual(testFixture.contextRequests[0].timeRange, {
     startDate: "2026-09-27",
     endDate: "2026-09-27",
   });
   assert.ok(result.result.limitations.some((item) => item.includes("没有可用的天气预报")));
   assert.deepEqual(testFixture.executions, ["planner.propose-event"]);
+  assert.deepEqual(eventWrites, [], "提案生成 / 预览期间不能写入日程");
+  const applied = await proposalRuntime.apply({
+    id: result.result.proposal.id,
+    confirmed: true,
+    expectedPreviewRevision: 1,
+    permissionIds: ["planner.propose"],
+  });
+  assert.equal(applied.status, "applied");
+  assert.equal(eventWrites.length, 1, "只有本地确认并重校验后才调用写入用例");
+  assert.deepEqual(
+    [eventWrites[0].date, eventWrites[0].startTime, eventWrites[0].endTime],
+    ["2026-09-27", "18:00", "18:30"],
+  );
 });
 
 test("明确创建任务意图只开放 Task Proposal，deadline 由本地解析", async () => {
@@ -751,16 +775,7 @@ test("范围式安排现有任务仅在本地找到 exact match 后生成 TimeBl
         deadlineTime: null,
       },
     ],
-    turns: [
-      call("planner_propose_time_block", {
-        personalTaskId: "report-task",
-        date: "2026-09-28",
-        startTime: "00:00",
-        endTime: "02:00",
-        bufferBeforeMinutes: 0,
-        bufferAfterMinutes: 0,
-      }),
-    ],
+    turns: [call("planner_propose_time_block", { candidateId: "slot-20260928-0000-0200" })],
   });
   const result = await testFixture.orchestrator.run({
     workflowId: "planner.route",
@@ -799,21 +814,11 @@ test("范围式安排任务未 exact match 时在本地澄清，不开放 Provid
   assert.deepEqual(testFixture.executions, []);
 });
 
-test("Provider 改写本地候选日期会被拒绝，且未到 proposal adapter", async () => {
+test("Provider 选择不存在的 candidateId 会被拒绝，且未到 proposal adapter", async () => {
   const testFixture = fixture({
     grants: ["academic.read", "planner.read"],
     proposalType: "event",
-    turns: [
-      call("planner_propose_event", {
-        title: "跑步",
-        date: "2026-09-28",
-        startTime: "18:00",
-        endTime: "18:30",
-        location: null,
-        bufferBeforeMinutes: 0,
-        bufferAfterMinutes: 0,
-      }),
-    ],
+    turns: [call("planner_propose_event", { candidateId: "planner-slot-unknown" })],
   });
   const result = await testFixture.orchestrator.run({
     workflowId: "planner.route",
@@ -821,6 +826,90 @@ test("Provider 改写本地候选日期会被拒绝，且未到 proposal adapter
   });
   assert.equal(result.status, "failed");
   assert.equal(result.category, "proposal");
+  assert.deepEqual(testFixture.executions, []);
+});
+
+test("Provider 试图在 candidateId 之外改写 start/end 时被 schema 拒绝", async () => {
+  const testFixture = fixture({
+    grants: ["academic.read", "planner.read"],
+    proposalType: "event",
+    turns: [
+      call("planner_propose_event", {
+        candidateId: "slot-20260927-1800-1830",
+        startTime: "20:00",
+        endTime: "20:30",
+      }),
+    ],
+  });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "明天晚上跑30分钟",
+  });
+  assert.equal(result.status, "failed");
+  assert.deepEqual(testFixture.executions, []);
+  assert.deepEqual(testFixture.eventInputs, []);
+});
+
+test("引用不存在的同名任务仍澄清，不会模糊绑定", async () => {
+  const testFixture = fixture({
+    grants: ["academic.read", "planner.read"],
+    turns: [call("planner_propose_time_block", { candidateId: "slot-20260927-1200-1300" })],
+  });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "明天下午给“高数复习”安排1小时",
+  });
+  assert.equal(result.status, "clarification");
+  assert.match(result.message, /没有找到名称完全匹配的未完成任务“高数复习”/u);
+  assert.equal(testFixture.providerCalls.length, 0);
+  assert.deepEqual(testFixture.executions, []);
+});
+
+test("唯一 exact match 的带引号任务标题仍生成候选绑定的 TimeBlock Proposal", async () => {
+  const testFixture = fixture({
+    grants: ["academic.read", "planner.read"],
+    plannerTasks: [
+      {
+        id: "calculus-review",
+        title: "高数复习",
+        status: "open",
+        priority: "medium",
+        deadlineDate: null,
+        deadlineTime: null,
+      },
+    ],
+    turns: [call("planner_propose_time_block", { candidateId: "slot-20260927-1200-1300" })],
+  });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "明天下午给“高数复习”安排1小时",
+  });
+  assert.equal(result.status, "ready", JSON.stringify(result));
+  assert.equal(result.result.proposal.type, "timeBlock");
+  assert.equal(testFixture.proposalInputs[0].personalTaskId, "calculus-review");
+});
+
+test("多个同名未完成任务要求用户明确选择，不向 Provider 暴露时间块提案", async () => {
+  const duplicateTask = {
+    id: "calculus-review-2",
+    title: "高数复习",
+    status: "open",
+    priority: "medium",
+    deadlineDate: null,
+    deadlineTime: null,
+  };
+  const testFixture = fixture({
+    grants: ["academic.read", "planner.read"],
+    plannerTasks: [{ ...duplicateTask, id: "calculus-review-1" }, duplicateTask],
+    turns: [call("planner_propose_time_block", { candidateId: "slot-20260927-1200-1300" })],
+  });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "明天下午给“高数复习”安排1小时",
+  });
+  assert.equal(result.status, "clarification");
+  assert.match(result.message, /找到多个同名/u);
+  assert.equal(testFixture.providerCalls.length, 0);
   assert.deepEqual(testFixture.executions, []);
 });
 

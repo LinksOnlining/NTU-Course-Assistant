@@ -48,7 +48,7 @@ const eventProposal: AiPlannerProposal = {
   ...proposal,
   id: "ui-event-proposal",
   type: "event",
-  title: "建议安排活动",
+  title: "建议创建活动",
   description: "将为你创建一项待确认日程。",
   payload: {
     title: "跑步",
@@ -61,12 +61,11 @@ const eventProposal: AiPlannerProposal = {
   },
   preview: {
     ...proposal.preview,
-    title: "建议安排活动",
+    title: "建议创建活动",
     fields: [
       { label: "活动", value: "跑步" },
       { label: "日期", value: "2026-09-27" },
-      { label: "开始", value: "18:00" },
-      { label: "结束", value: "18:30" },
+      { label: "时间", value: "18:00–18:30" },
       { label: "时长", value: "30 分钟" },
     ],
   },

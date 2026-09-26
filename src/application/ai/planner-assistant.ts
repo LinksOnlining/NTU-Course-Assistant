@@ -57,6 +57,9 @@ export type PlannerInstructionResolution =
   | { readonly intent: "clarification"; readonly message: string };
 
 export interface PlannerCandidateSlot {
+  readonly candidateId: string;
+  readonly start: string;
+  readonly end: string;
   readonly date: string;
   readonly startTime: string;
   readonly endTime: string;
@@ -320,17 +323,24 @@ export function findPlannerCandidateSlots(input: {
     if (input.scope.exactStartMinute !== null) {
       const start = window.startMinute;
       const end = start + input.durationMinutes;
-      if (start < earliestStart || end > window.endMinute || end > 1440) continue;
+      if (start < earliestStart || end > window.endMinute || end >= 1440) continue;
       candidates.push(
-        slot(window, start, end, input.durationMinutes, conflictWarnings(dayItems, start, end)),
+        slot(
+          window,
+          start,
+          end,
+          input.durationMinutes,
+          conflictWarnings(dayItems, start, end),
+          input.scope.timezone,
+        ),
       );
       return Object.freeze(candidates);
     }
     for (const interval of computeFreeTimeIntervals(dayItems)) {
       const start = Math.ceil(Math.max(earliestStart, interval.startMinute) / 5) * 5;
       const end = start + input.durationMinutes;
-      if (end <= Math.min(window.endMinute, interval.endMinute, 1440)) {
-        candidates.push(slot(window, start, end, input.durationMinutes, []));
+      if (end < 1440 && end <= Math.min(window.endMinute, interval.endMinute)) {
+        candidates.push(slot(window, start, end, input.durationMinutes, [], input.scope.timezone));
         return Object.freeze(candidates);
       }
     }
@@ -346,8 +356,8 @@ export function findPlannerCandidateSlots(input: {
         ? Math.max(window.startMinute, Math.ceil((local.hour * 60 + local.minute + 1) / 5) * 5)
         : window.startMinute;
     const lastStart = Math.min(
-      window.endMinute - input.durationMinutes,
-      1440 - input.durationMinutes,
+      window.endMinute - input.durationMinutes - 1,
+      1439 - input.durationMinutes,
     );
     if (start > lastStart) continue;
     const end = start + input.durationMinutes;
@@ -362,6 +372,7 @@ export function findPlannerCandidateSlots(input: {
           start,
           end,
         ),
+        input.scope.timezone,
       ),
     ]);
   }
@@ -722,11 +733,18 @@ function slot(
   end: number,
   durationMinutes: number,
   warnings: readonly string[],
+  timezone: string,
 ): PlannerCandidateSlot {
+  const startTime = formatMinute(start);
+  const endTime = formatMinute(end);
+  const candidateId = `slot-${window.date.replaceAll("-", "")}-${startTime.replace(":", "")}-${endTime.replace(":", "")}`;
   return Object.freeze({
+    candidateId,
+    start: zonedDateTimeToIso(window.date, start, timezone),
+    end: zonedDateTimeToIso(window.date, end, timezone),
     date: window.date,
-    startTime: formatMinute(start),
-    endTime: formatMinute(end),
+    startTime,
+    endTime,
     durationMinutes,
     warnings: Object.freeze([...warnings]),
     sourceWindow: `${window.date} ${formatMinute(window.startMinute)}–${formatMinute(window.endMinute)}`,

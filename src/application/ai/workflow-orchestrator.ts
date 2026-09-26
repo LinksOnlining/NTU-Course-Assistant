@@ -443,7 +443,7 @@ function prepareProposalConstraint(
         ]
       : [];
   const notes = [...deadlineWarning];
-  const args: Record<string, AiJsonValue> =
+  const canonicalPayload: Record<string, AiJsonValue> =
     resolution.intent === "planEvent"
       ? {
           title: resolution.title,
@@ -464,7 +464,8 @@ function prepareProposalConstraint(
         };
   return Object.freeze({
     toolId,
-    arguments: Object.freeze(args),
+    arguments: Object.freeze({ candidateId: candidate.candidateId }),
+    canonicalPayload: Object.freeze(canonicalPayload),
     ...(notes.length ? { notes: Object.freeze(notes) } : {}),
   });
 }
@@ -473,7 +474,8 @@ function proposalControlPrompt(
   resolution: Exclude<PlannerInstructionResolution, { intent: "analyze" | "clarification" }>,
   constraint: PlannerProposalConstraint,
 ): string {
-  const args = asJsonRecord(constraint.arguments) ?? {};
+  const args = asJsonRecord(constraint.canonicalPayload ?? constraint.arguments) ?? {};
+  const selection = asJsonRecord(constraint.arguments);
   const toolName = Object.entries(PROPOSAL_TOOL_BY_INTENT).find(
     ([, id]) => id === constraint.toolId,
   )?.[0];
@@ -484,9 +486,12 @@ function proposalControlPrompt(
   return [
     `本地可信路由结果：${resolution.intent}。`,
     `本次唯一允许的 Proposal Tool：${toolName === "planEvent" ? "planner_propose_event" : toolName === "planExistingTask" ? "planner_propose_time_block" : "planner_propose_task"}。`,
+    ...(typeof selection?.candidateId === "string"
+      ? [`本次本地核验候选编号：${selection.candidateId}。调用时只传该 candidateId。`]
+      : []),
     details,
-    "本地已完成日期、对象和业务范围校验；必须调用上述唯一 Proposal Tool 创建一个待审提案，不得只给文字建议。",
-    "只能用上述本地核验内容生成一个待审提案；不得更改任务 ID、标题、日期、时长或时间，不得调用清单外能力。",
+    "本地已完成日期、对象、时长和业务范围校验；必须调用上述唯一 Proposal Tool 创建一个待审提案，不得只给文字建议。",
+    "时间候选由本地确定。日程 / 时间块工具只能提交本地给出的 candidateId，不得自行生成或改写日期、开始时间、结束时间、任务 ID、标题或时长；任务提案字段必须与本地核验内容一致。不得调用清单外能力。",
     "如果候选有冲突，提案预览会显示本地冲突警告；不得把它描述为已经安排或已经写入。",
     "只有用户在本地 Proposal Review 中明确确认，才会调用 Application UseCase。",
   ].join("\n");

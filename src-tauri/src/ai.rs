@@ -1632,8 +1632,8 @@ mod tests {
             description: "创建待确认的时间块提案；不会直接写入。".into(),
             parameters: json!({
                 "type":"object",
-                "properties":{"personalTaskId":{"type":"string"}},
-                "required":["personalTaskId"],
+                "properties":{"candidateId":{"type":"string"}},
+                "required":["candidateId"],
                 "additionalProperties":false
             }),
         }];
@@ -1646,7 +1646,7 @@ mod tests {
         assert!(!instructions.contains("只能提供只读分析"));
         assert!(body["tools"].as_array().unwrap().iter().any(|tool| {
             tool["name"] == "planner_propose_time_block"
-                && tool["parameters"]["required"][0] == "personalTaskId"
+                && tool["parameters"]["required"][0] == "candidateId"
         }));
     }
 

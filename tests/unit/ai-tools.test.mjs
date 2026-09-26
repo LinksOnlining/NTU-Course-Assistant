@@ -244,6 +244,23 @@ test("每个 Proposal Tool 的输出 schema 只接受自身 Proposal 类型", ()
   }
 });
 
+test("日程与时间块 Proposal Tool 只接受本地候选编号，不接收模型生成的时间字段", () => {
+  const definitions = workplaceModuleRegistry.aiTools;
+  for (const name of ["planner_propose_event", "planner_propose_time_block"]) {
+    const inputSchema = definitions.find((tool) => tool.name === name).inputSchema;
+    assert.deepEqual(inputSchema.required, ["candidateId"]);
+    assert.deepEqual(Object.keys(inputSchema.properties), ["candidateId"]);
+    assert.equal(validateJsonSchema({ candidateId: "slot-20260927-1800-1830" }, inputSchema), true);
+    assert.equal(
+      validateJsonSchema(
+        { candidateId: "slot-20260927-1800-1830", startTime: "20:00" },
+        inputSchema,
+      ),
+      false,
+    );
+  }
+});
+
 test("权限关闭的工具不会发给 Provider；无工具时选择 none；新请求读取新权限", async () => {
   const state = fixture();
   const noPermissionProvider = provider([{ kind: "final", content: "无工具" }]);

@@ -26,7 +26,9 @@ test("工作台直接显示一次性 AI Composer；不点击第二层也能输�
   await expect(page.getByRole("heading", { name: "⏰ 需要注意" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "✨ 建议安排" })).toBeVisible();
   await expect(page.getByText("参考：工作台、任务与日程")).toBeVisible();
-  await expect(page.getByText("发送至 DeepSeek 处理")).toBeVisible();
+  await expect(
+    page.getByText("仅在你主动使用 AI 时，将本次请求所需且已授权的数据发送至 DeepSeek 处理。"),
+  ).toBeVisible();
 });
 
 test("自由文本发送按钮与 Ctrl+Enter 工作；应用层接管可信意图路由", async ({ page }) => {
@@ -176,6 +178,9 @@ test("未来独立活动显示 Event Proposal 并仅在用户确认后创建日�
   const review = page.getByTestId("ai-proposal-review");
   await expect(review).toBeVisible();
   await expect(review.getByText("跑步", { exact: true })).toBeVisible();
+  await expect(review.getByText("2026-09-27", { exact: true })).toBeVisible();
+  await expect(review.getByText("18:00–18:30", { exact: true })).toBeVisible();
+  await expect(review.getByText("30 分钟", { exact: true })).toBeVisible();
   await expect(review.getByRole("button", { name: "确认创建日程" })).toBeVisible();
   await expect(page.getByTestId("confirmation-count")).toHaveText("0");
   await review.getByRole("button", { name: "确认创建日程" }).click();
