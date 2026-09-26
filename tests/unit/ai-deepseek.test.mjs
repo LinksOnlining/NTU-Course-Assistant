@@ -53,6 +53,10 @@ function bridge(overrides = {}) {
       calls.push(["structured", input]);
       return { answer: "已校验" };
     },
+    async generateToolTurn(input) {
+      calls.push(["toolTurn", input]);
+      return { kind: "final", content: "工具调用循环完成", model: input.model };
+    },
     ...overrides,
   };
 }
@@ -178,6 +182,50 @@ test("结构化输出通过调用方本地解析器二次校验", async () => {
     assert.equal(error.code, "schemaMismatch");
     return true;
   });
+});
+
+test("Tool adapter 只传显式 user prompt 与 provider-neutral function transcript，且固定当前模型/超时", async () => {
+  const native = bridge();
+  const provider = new DeepSeekProvider(native, () => settings({ reasoningEffort: "max" }));
+  const result = await provider.generateToolTurn({
+    id: "request_tool",
+    intent: "summarize",
+    inputItems: [
+      { kind: "message", role: "user", content: request.prompt },
+      { kind: "functionCall", callId: "call_1", name: "workspace_get_overview", arguments: "{}" },
+      { kind: "functionCallOutput", callId: "call_1", output: '{"success":true}' },
+    ],
+    tools: [
+      {
+        name: "workspace_get_overview",
+        description: "读取摘要",
+        parameters: { type: "object", properties: {}, additionalProperties: false },
+      },
+    ],
+    toolChoice: "auto",
+  });
+  assert.deepEqual(result, { kind: "final", content: "工具调用循环完成" });
+  assert.equal(native.calls[0][0], "toolTurn");
+  assert.deepEqual(native.calls[0][1], {
+    id: "request_tool",
+    intent: "summarize",
+    inputItems: [
+      { kind: "message", role: "user", content: request.prompt },
+      { kind: "functionCall", callId: "call_1", name: "workspace_get_overview", arguments: "{}" },
+      { kind: "functionCallOutput", callId: "call_1", output: '{"success":true}' },
+    ],
+    tools: [
+      {
+        name: "workspace_get_overview",
+        description: "读取摘要",
+        parameters: { type: "object", properties: {}, additionalProperties: false },
+      },
+    ],
+    toolChoice: "auto",
+    model: "deepseek-flash",
+    requestTimeoutSeconds: 30,
+  });
+  assert.equal(JSON.stringify(native.calls).includes("私密正文"), false);
 });
 
 test("不支持的推理级别在调用 Native 前拒绝，失败不暴露凭据", async () => {

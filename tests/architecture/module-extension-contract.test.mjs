@@ -182,7 +182,17 @@ test("内置模块与 Presentation 不启用动态第三方执行，也不绕过
   const registry = source("src/modules/registry.ts");
   const builtins = source("src/modules/built-in-modules.ts");
   assert.doesNotMatch(`${registry}\n${builtins}`, /\beval\s*\(|new Function|import\s*\(/u);
-  assert.deepEqual(workplaceModuleRegistry.aiTools, []);
+  assert.deepEqual(
+    workplaceModuleRegistry.aiTools.map(({ id, effect }) => [id, effect]),
+    [
+      ["academic.upcoming", "read"],
+      ["planner.open-items", "read"],
+      ["routine.today", "read"],
+      ["weather.summary", "read"],
+      ["workspace.overview", "read"],
+      ["planner.schedule", "read"],
+    ],
+  );
   assert.doesNotMatch(source("src/modules/contracts.ts"), /execute\s*\(/u);
 
   for (const file of [

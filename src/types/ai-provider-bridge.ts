@@ -49,6 +49,44 @@ export interface NativeStructuredGenerationInput extends NativeGenerationInput {
   readonly jsonSchema: Readonly<Record<string, unknown>>;
 }
 
+export type NativeToolInputItem =
+  | { readonly kind: "message"; readonly role: "user"; readonly content: string }
+  | {
+      readonly kind: "functionCall";
+      readonly callId: string;
+      readonly name: string;
+      readonly arguments: string;
+    }
+  | { readonly kind: "functionCallOutput"; readonly callId: string; readonly output: string };
+
+export interface NativeToolDefinition {
+  readonly name: string;
+  readonly description: string;
+  readonly parameters: Readonly<Record<string, unknown>>;
+}
+
+export interface NativeToolTurnInput {
+  readonly id: string;
+  readonly intent: string;
+  readonly inputItems: readonly NativeToolInputItem[];
+  readonly tools: readonly NativeToolDefinition[];
+  readonly toolChoice: "none" | "auto";
+  readonly model: string;
+  readonly requestTimeoutSeconds: number;
+}
+
+export type NativeToolTurnResult =
+  | { readonly kind: "final"; readonly content: string; readonly model: string }
+  | {
+      readonly kind: "functionCalls";
+      readonly calls: readonly {
+        readonly callId: string;
+        readonly name: string;
+        readonly arguments: string;
+      }[];
+      readonly model: string;
+    };
+
 export interface NativeTextResult {
   readonly content: string;
   readonly model: string;
@@ -65,4 +103,5 @@ export interface AiNativeBridge {
   discoverModels(requestId: string, timeoutSeconds: number): Promise<readonly DeepSeekModel[]>;
   generateText(input: NativeGenerationInput): Promise<NativeTextResult>;
   generateStructured(input: NativeStructuredGenerationInput): Promise<unknown>;
+  generateToolTurn(input: NativeToolTurnInput): Promise<NativeToolTurnResult>;
 }

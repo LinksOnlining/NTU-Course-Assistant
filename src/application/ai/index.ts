@@ -8,4 +8,7 @@ export * from "./proposal.ts";
 export * from "./provider.ts";
 export * from "./settings.ts";
 export * from "./tool.ts";
+export * from "./tool-registry.ts";
+export * from "./tool-runtime.ts";
+export * from "./tool-runtime-registry.ts";
 export * from "./types.ts";

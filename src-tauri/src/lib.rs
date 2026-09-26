@@ -1214,6 +1214,7 @@ pub fn run() {
             ai::discover_deepseek_models,
             ai::generate_deepseek_text,
             ai::generate_deepseek_structured,
+            ai::generate_deepseek_tool_turn,
             load_courses,
             insert_course,
             import_courses,

@@ -135,6 +135,79 @@ test("Registry 拒绝重复 route id、permission id 与 capability key", () => 
   );
 });
 
+test("AI Tool contribution 校验 Provider 名称、效果、Schema 和模块权限归属", () => {
+  const permission = {
+    id: "workspace.read",
+    moduleId: "workspace",
+    action: "read",
+    label: "读取",
+    description: "只读权限",
+  };
+  const tool = {
+    id: "workspace.overview",
+    name: "workspace_get_overview",
+    moduleId: "workspace",
+    order: 10,
+    description: "读取工作台摘要",
+    effect: "read",
+    permissionIds: [permission.id],
+    inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+    outputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+  };
+  assert.doesNotThrow(() =>
+    createWorkplaceModuleRegistry([
+      moduleDefinition({ permissions: [permission], aiTools: [tool] }),
+    ]),
+  );
+  assert.throws(
+    () =>
+      createWorkplaceModuleRegistry([
+        moduleDefinition({
+          permissions: [permission],
+          aiTools: [tool, { ...tool, id: "workspace.other" }],
+        }),
+      ]),
+    /Duplicate AI tool provider name/u,
+  );
+  assert.throws(
+    () =>
+      createWorkplaceModuleRegistry([
+        moduleDefinition({
+          permissions: [permission],
+          aiTools: [{ ...tool, name: "invalid.name" }],
+        }),
+      ]),
+    /Invalid AI tool provider name/u,
+  );
+  assert.throws(
+    () =>
+      createWorkplaceModuleRegistry([
+        moduleDefinition({
+          permissions: [permission],
+          aiTools: [{ ...tool, permissionIds: ["planner.read"] }],
+        }),
+      ]),
+    /unknown permission/u,
+  );
+  assert.throws(
+    () =>
+      createWorkplaceModuleRegistry([
+        moduleDefinition({ permissions: [permission], aiTools: [{ ...tool, inputSchema: [] }] }),
+      ]),
+    /Invalid AI tool contribution/u,
+  );
+  assert.throws(
+    () =>
+      createWorkplaceModuleRegistry([
+        moduleDefinition({
+          permissions: [permission, { ...permission, id: "workspace.propose", action: "propose" }],
+          aiTools: [{ ...tool, effect: "read", permissionIds: ["workspace.propose"] }],
+        }),
+      ]),
+    /must use a read permission/u,
+  );
+});
+
 test("内置注册顺序明确且与输入数组顺序无关；返回的注册数据不可变", () => {
   const forward = createWorkplaceModuleRegistry(BUILT_IN_MODULES);
   const reversed = createWorkplaceModuleRegistry([...BUILT_IN_MODULES].reverse());
@@ -205,7 +278,17 @@ test("内置模块通过统一 registry 贡献 route、navigation、settings、s
     ["diary.context", "inbox.context", "weather.context", "routine.context"],
   );
   assert.ok(workplaceModuleRegistry.permissions.some(({ id }) => id === "diary.read"));
-  assert.deepEqual(workplaceModuleRegistry.aiTools, []);
+  assert.deepEqual(
+    workplaceModuleRegistry.aiTools.map(({ id }) => id),
+    [
+      "academic.upcoming",
+      "planner.open-items",
+      "routine.today",
+      "weather.summary",
+      "workspace.overview",
+      "planner.schedule",
+    ],
+  );
 });
 
 test("AI capability 权限引用必须存在且注册数据不可变", () => {
@@ -246,7 +329,15 @@ test("AI capability 权限引用必须存在且注册数据不可变", () => {
     [],
   );
   assert.equal(workplaceModuleRegistry.getModuleState("ai")?.available, false);
-  assert.deepEqual(workplaceModuleRegistry.aiTools, []);
+  assert.ok(Object.isFrozen(workplaceModuleRegistry.aiTools));
+  assert.ok(
+    workplaceModuleRegistry.aiTools.every(
+      ({ permissionIds, inputSchema, outputSchema }) =>
+        Object.isFrozen(permissionIds) &&
+        Object.isFrozen(inputSchema) &&
+        Object.isFrozen(outputSchema),
+    ),
+  );
 });
 
 test("不可用模块保留 unsupported route 语义，不会执行隐藏 renderer", () => {

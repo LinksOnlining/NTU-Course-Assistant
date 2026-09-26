@@ -4,6 +4,7 @@ import {
   loadAcademicHubData,
   loadAcademicSearchData,
   loadAcademicScheduleData,
+  loadAcademicTermConfig,
   resolveAcademicOccurrences,
 } from "../../src/application/academic/academic-application.ts";
 import { resolveCourseOccurrences } from "../../src/core/course-occurrence.ts";
@@ -18,6 +19,22 @@ const activeSemester = {
   createdAt: "",
   updatedAt: "",
 };
+
+test("legacy term configuration is read through the Academic Application query seam", async () => {
+  const termConfig = {
+    firstWeekMonday: "2026-09-07",
+    totalWeeks: 16,
+    timezone: "Asia/Shanghai",
+  };
+  assert.deepEqual(
+    await loadAcademicTermConfig({
+      async loadTermConfig() {
+        return termConfig;
+      },
+    }),
+    termConfig,
+  );
+});
 
 test("schedule loader returns courses, nullable period times, and storage warnings", async () => {
   const courses = [{ id: "course-1" }];

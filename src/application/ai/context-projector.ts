@@ -420,6 +420,10 @@ const SECRET_VALUE =
 
 function safeText(value: string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
+  return sanitizeAiText(value);
+}
+
+export function sanitizeAiText(value: string): string {
   return value.replace(WINDOWS_PATH, "[本地路径已省略]").replace(SECRET_VALUE, "[敏感值已省略]");
 }
 

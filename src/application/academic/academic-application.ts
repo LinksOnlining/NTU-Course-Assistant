@@ -5,6 +5,7 @@ import {
 import {
   loadStoredCourses,
   loadStoredPeriodTimes,
+  loadStoredReminderConfiguration,
   type LoadCoursesResult,
 } from "../../services/course-storage.ts";
 import {
@@ -20,6 +21,7 @@ import type { CourseOverride } from "../../types/course-override.ts";
 import type { Exam } from "../../types/exam.ts";
 import type { Semester } from "../../types/semester.ts";
 import type { PeriodTime } from "../../types/time.ts";
+import type { TermConfig } from "../../types/reminder.ts";
 import type { AcademicHubData, AcademicScheduleData } from "./types.ts";
 
 interface AcademicScheduleReader {
@@ -35,6 +37,10 @@ interface AcademicHubReader {
 }
 
 export interface AcademicSearchReader extends AcademicScheduleReader, AcademicHubReader {}
+
+export interface AcademicTermConfigReader {
+  loadTermConfig(): Promise<TermConfig | null>;
+}
 
 export interface AcademicSearchData {
   readonly schedule: AcademicScheduleData;
@@ -62,6 +68,18 @@ const hubReader: AcademicHubReader = {
 };
 
 const academicSearchReader: AcademicSearchReader = { ...scheduleReader, ...hubReader };
+const academicTermConfigReader: AcademicTermConfigReader = {
+  async loadTermConfig() {
+    return (await loadStoredReminderConfiguration()).termConfig;
+  },
+};
+
+/** Read the legacy term settings through the Academic Application boundary. */
+export function loadAcademicTermConfig(
+  reader: AcademicTermConfigReader = academicTermConfigReader,
+): Promise<TermConfig | null> {
+  return reader.loadTermConfig();
+}
 
 export function loadAcademicScheduleData(
   reader: AcademicScheduleReader = scheduleReader,

@@ -1,4 +1,257 @@
-import type { WorkplaceModule } from "./contracts.ts";
+import type { AIToolContribution, AIToolJsonValue, WorkplaceModule } from "./contracts.ts";
+
+const stringSchema = { type: "string", maxLength: 180 };
+const nullableStringSchema = { type: ["string", "null"], maxLength: 180 };
+const numberSchema = { type: "number" };
+const integerSchema = { type: "integer", minimum: 0 };
+const emptyObjectSchema = {
+  type: "object",
+  properties: {},
+  required: [],
+  additionalProperties: false,
+};
+const rangeInputSchema = {
+  type: "object",
+  properties: {
+    from: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    to: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    limit: { type: "integer", minimum: 1, maximum: 50 },
+  },
+  additionalProperties: false,
+};
+const listInputSchema = {
+  type: "object",
+  properties: { limit: { type: "integer", minimum: 1, maximum: 50 } },
+  additionalProperties: false,
+};
+const rowArraySchema = (
+  properties: Record<string, AIToolJsonValue>,
+  required: readonly string[],
+) => ({
+  type: "array",
+  maxItems: 50,
+  items: { type: "object", properties, required, additionalProperties: false },
+});
+const objectSchema = (
+  properties: Record<string, AIToolJsonValue>,
+  required: readonly string[] = Object.keys(properties),
+) => ({ type: "object", properties, required, additionalProperties: false });
+
+function readTool(
+  id: string,
+  name: string,
+  moduleId: AIToolContribution["moduleId"],
+  order: number,
+  permissionId: string,
+  description: string,
+  inputSchema: AIToolContribution["inputSchema"],
+  outputSchema: AIToolContribution["outputSchema"],
+): AIToolContribution {
+  return {
+    id,
+    name,
+    moduleId,
+    order,
+    description,
+    effect: "read",
+    permissionIds: [permissionId],
+    inputSchema,
+    outputSchema,
+  };
+}
+
+const overviewTool = readTool(
+  "workspace.overview",
+  "workspace_get_overview",
+  "workspace",
+  10,
+  "workspace.read",
+  "读取今天的工作台聚合状态与空闲时间摘要。",
+  emptyObjectSchema,
+  objectSchema({
+    date: stringSchema,
+    localTime: stringSchema,
+    todayScheduleCount: integerSchema,
+    remainingScheduleCount: integerSchema,
+    openTaskCount: integerSchema,
+    overdueTaskCount: integerSchema,
+    nextFreeTime: {
+      type: ["object", "null"],
+      properties: {
+        date: stringSchema,
+        start: stringSchema,
+        end: stringSchema,
+        durationMinutes: integerSchema,
+      },
+      required: ["date", "start", "end", "durationMinutes"],
+      additionalProperties: false,
+    },
+  }),
+);
+
+const upcomingTool = readTool(
+  "academic.upcoming",
+  "academic_get_upcoming",
+  "academic",
+  10,
+  "academic.read",
+  "读取有限日期范围内的课程、考试与学业截止事项。",
+  rangeInputSchema,
+  objectSchema({
+    courses: rowArraySchema(
+      {
+        title: stringSchema,
+        date: stringSchema,
+        teachingWeek: integerSchema,
+        start: stringSchema,
+        end: stringSchema,
+        room: nullableStringSchema,
+        teacher: nullableStringSchema,
+        status: stringSchema,
+      },
+      ["title", "date", "teachingWeek", "start", "end", "room", "teacher", "status"],
+    ),
+    exams: rowArraySchema(
+      {
+        title: stringSchema,
+        startsAt: stringSchema,
+        endsAt: nullableStringSchema,
+        location: nullableStringSchema,
+        status: stringSchema,
+      },
+      ["title", "startsAt", "endsAt", "location", "status"],
+    ),
+    deadlines: rowArraySchema(
+      {
+        title: stringSchema,
+        dueAt: stringSchema,
+        priority: numberSchema,
+        status: stringSchema,
+        type: stringSchema,
+      },
+      ["title", "dueAt", "priority", "status", "type"],
+    ),
+  }),
+);
+
+const openItemsTool = readTool(
+  "planner.open-items",
+  "planner_get_open_items",
+  "planner",
+  10,
+  "planner.read",
+  "读取未完成个人任务的必要摘要，不含描述或隐藏备注。",
+  listInputSchema,
+  objectSchema({
+    items: rowArraySchema(
+      {
+        title: stringSchema,
+        status: { type: "string", enum: ["open"] },
+        priority: { type: "string", enum: ["none", "low", "medium", "high"] },
+        deadlineDate: nullableStringSchema,
+        deadlineTime: nullableStringSchema,
+      },
+      ["title", "status", "priority", "deadlineDate", "deadlineTime"],
+    ),
+  }),
+);
+
+const plannerScheduleTool = readTool(
+  "planner.schedule",
+  "planner_get_schedule",
+  "planner",
+  20,
+  "planner.read",
+  "读取有限日期范围内的个人日程与任务时间块。",
+  rangeInputSchema,
+  objectSchema({
+    events: rowArraySchema(
+      {
+        title: stringSchema,
+        date: stringSchema,
+        start: stringSchema,
+        end: stringSchema,
+        location: nullableStringSchema,
+        occupiedStart: stringSchema,
+        occupiedEnd: stringSchema,
+      },
+      ["title", "date", "start", "end", "location", "occupiedStart", "occupiedEnd"],
+    ),
+    timeBlocks: rowArraySchema(
+      {
+        date: stringSchema,
+        start: stringSchema,
+        end: stringSchema,
+        occupiedStart: stringSchema,
+        occupiedEnd: stringSchema,
+      },
+      ["date", "start", "end", "occupiedStart", "occupiedEnd"],
+    ),
+    busyCount: integerSchema,
+  }),
+);
+
+const routineTodayTool = readTool(
+  "routine.today",
+  "routine_get_today",
+  "routine",
+  10,
+  "routine.read",
+  "读取今天适用的日常习惯及其完成安排状态。",
+  emptyObjectSchema,
+  objectSchema({
+    date: stringSchema,
+    items: rowArraySchema(
+      {
+        title: stringSchema,
+        targetDurationMinutes: integerSchema,
+        scheduledToday: { type: "boolean" },
+        preferredStartTime: nullableStringSchema,
+        preferredEndTime: nullableStringSchema,
+      },
+      [
+        "title",
+        "targetDurationMinutes",
+        "scheduledToday",
+        "preferredStartTime",
+        "preferredEndTime",
+      ],
+    ),
+  }),
+);
+
+const weatherSummaryTool = readTool(
+  "weather.summary",
+  "weather_get_summary",
+  "weather",
+  10,
+  "weather.read",
+  "读取本机缓存的当前与近期天气摘要，不含坐标或位置历史。",
+  emptyObjectSchema,
+  objectSchema({
+    location: nullableStringSchema,
+    current: {
+      type: ["object", "null"],
+      properties: {
+        time: stringSchema,
+        condition: stringSchema,
+        temperatureCelsius: numberSchema,
+        humidityPercent: { type: ["number", "null"] },
+      },
+      required: ["time", "condition", "temperatureCelsius", "humidityPercent"],
+      additionalProperties: false,
+    },
+    forecast: rowArraySchema(
+      {
+        time: stringSchema,
+        condition: stringSchema,
+        temperatureCelsius: numberSchema,
+        precipitationProbability: { type: ["number", "null"] },
+      },
+      ["time", "condition", "temperatureCelsius", "precipitationProbability"],
+    ),
+  }),
+);
 
 /** 编译期内置模块清单；不支持运行时安装或加载第三方代码。 */
 export const BUILT_IN_MODULES = [
@@ -79,6 +332,7 @@ export const BUILT_IN_MODULES = [
         priority: 10,
       },
     ],
+    aiTools: [overviewTool],
   },
   {
     id: "academic",
@@ -264,6 +518,7 @@ export const BUILT_IN_MODULES = [
         priority: 20,
       },
     ],
+    aiTools: [upcomingTool],
   },
   {
     id: "planner",
@@ -325,6 +580,7 @@ export const BUILT_IN_MODULES = [
         priority: 30,
       },
     ],
+    aiTools: [openItemsTool, plannerScheduleTool],
   },
   {
     id: "diary",
@@ -462,6 +718,7 @@ export const BUILT_IN_MODULES = [
         priority: 50,
       },
     ],
+    aiTools: [weatherSummaryTool],
   },
   {
     id: "routine",
@@ -500,6 +757,7 @@ export const BUILT_IN_MODULES = [
         priority: 40,
       },
     ],
+    aiTools: [routineTodayTool],
   },
   {
     id: "search",

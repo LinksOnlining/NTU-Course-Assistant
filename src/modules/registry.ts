@@ -72,9 +72,29 @@ function freezeItems<T extends object>(items: readonly T[]): readonly T[] {
       if ("requiredPermissions" in copy && Array.isArray(copy.requiredPermissions)) {
         Object.assign(copy, { requiredPermissions: Object.freeze([...copy.requiredPermissions]) });
       }
+      if ("inputSchema" in copy && isRecord(copy.inputSchema)) {
+        Object.assign(copy, { inputSchema: freezeJson(copy.inputSchema) });
+      }
+      if ("outputSchema" in copy && isRecord(copy.outputSchema)) {
+        Object.assign(copy, { outputSchema: freezeJson(copy.outputSchema) });
+      }
       return Object.freeze(copy);
     }),
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function freezeJson<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map(freezeJson)) as T;
+  }
+  if (!isRecord(value)) return value;
+  return Object.freeze(
+    Object.fromEntries(Object.entries(value).map(([key, item]) => [key, freezeJson(item)])),
+  ) as T;
 }
 
 export function createWorkplaceModuleRegistry(
@@ -147,6 +167,7 @@ export function createWorkplaceModuleRegistry(
   assertUnique(aiCapabilities, (capability) => capability.id, "AI capability id");
   assertUnique(aiContextProviders, (provider) => provider.id, "AI context provider id");
   assertUnique(aiTools, (tool) => tool.id, "AI tool id");
+  assertUnique(aiTools, (tool) => tool.name, "AI tool provider name");
 
   const routeOwners = new Map(routes.map((route) => [routeKey(route.route), route.moduleId]));
   for (const entry of navigation) {
@@ -165,9 +186,28 @@ export function createWorkplaceModuleRegistry(
     }
   }
   for (const tool of aiTools) {
+    if (!/^[a-zA-Z0-9_-]{1,128}$/u.test(tool.name)) {
+      throw new Error(`Invalid AI tool provider name: ${tool.name}`);
+    }
+    if (
+      !["read", "proposal", "mutation", "write"].includes(tool.effect) ||
+      !isRecord(tool.inputSchema) ||
+      !isRecord(tool.outputSchema) ||
+      tool.description.trim().length === 0 ||
+      tool.description.length > 512
+    ) {
+      throw new Error(`Invalid AI tool contribution: ${tool.id}`);
+    }
+    if (tool.permissionIds.length === 0) {
+      throw new Error(`AI tool ${tool.id} must declare a required permission`);
+    }
     for (const permissionId of tool.permissionIds) {
-      if (!permissionIds.has(permissionId)) {
+      const permission = permissionsById.get(permissionId);
+      if (!permissionIds.has(permissionId) || permission?.moduleId !== tool.moduleId) {
         throw new Error(`AI tool ${tool.id} references unknown permission ${permissionId}`);
+      }
+      if (tool.effect === "read" && permission.action !== "read") {
+        throw new Error(`Read AI tool ${tool.id} must use a read permission`);
       }
     }
   }

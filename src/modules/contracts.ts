@@ -95,13 +95,29 @@ export interface PermissionDefinition {
   readonly description: string;
 }
 
-/** 仅描述未来 AI 工具及所需权限；本阶段没有执行器或工具运行时。 */
+/** Provider-neutral JSON values used by module-contributed JSON Schemas. */
+export type AIToolJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly AIToolJsonValue[]
+  | { readonly [key: string]: AIToolJsonValue };
+
+/** Provider-neutral JSON Schema object contributed by an application module. */
+export type AIToolJsonSchema = Readonly<Record<string, AIToolJsonValue>>;
+
+/** AI 模块声明工具能力；执行器由 Application 按稳定 ID 绑定。 */
 export interface AIToolContribution {
   readonly id: string;
+  readonly name: string;
   readonly moduleId: ModuleId;
   readonly order: number;
   readonly description: string;
+  readonly effect: "read" | "proposal" | "mutation" | "write";
   readonly permissionIds: readonly string[];
+  readonly inputSchema: AIToolJsonSchema;
+  readonly outputSchema: AIToolJsonSchema;
 }
 
 /** 仅描述 AI 能力及其所需模块权限；不绑定实现或执行器。 */

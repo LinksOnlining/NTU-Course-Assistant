@@ -5,6 +5,8 @@ import type {
   DeepSeekModel,
   NativeGenerationInput,
   NativeStructuredGenerationInput,
+  NativeToolTurnInput,
+  NativeToolTurnResult,
   NativeTextResult,
 } from "../types/ai-provider-bridge.ts";
 
@@ -67,5 +69,9 @@ export class DeepSeekNativeBridge implements AiNativeBridge {
 
   generateStructured(input: NativeStructuredGenerationInput): Promise<unknown> {
     return call<unknown>("generate_deepseek_structured", { request: input });
+  }
+
+  generateToolTurn(input: NativeToolTurnInput): Promise<NativeToolTurnResult> {
+    return call<NativeToolTurnResult>("generate_deepseek_tool_turn", { request: input });
   }
 }

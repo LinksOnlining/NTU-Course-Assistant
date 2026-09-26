@@ -1,5 +1,9 @@
 import { AI_CAPABILITY_IDS } from "./capability.ts";
-import type { AIProvider } from "./provider.ts";
+import type {
+  AIProvider,
+  AiProviderToolTurnRequest,
+  AiProviderToolTurnResponse,
+} from "./provider.ts";
 import type { AiValueSchema } from "./tool.ts";
 import type { AiProviderId, AiRequest, AiResponse } from "./types.ts";
 import type { AiProviderSettings } from "./settings.ts";
@@ -9,6 +13,8 @@ import type {
   AiProviderFailure,
   DeepSeekModel,
   NativeGenerationInput,
+  NativeToolTurnInput,
+  NativeToolTurnResult,
 } from "../../types/ai-provider-bridge.ts";
 
 export type {
@@ -18,6 +24,8 @@ export type {
   DeepSeekModel,
   NativeGenerationInput,
   NativeStructuredGenerationInput,
+  NativeToolTurnInput,
+  NativeToolTurnResult,
   NativeTextResult,
 } from "../../types/ai-provider-bridge.ts";
 
@@ -156,6 +164,44 @@ export class DeepSeekProvider implements AIProvider {
           requestId: request.id,
         });
       }
+    } catch (caught: unknown) {
+      throw providerError(caught);
+    }
+  }
+
+  async generateToolTurn(request: AiProviderToolTurnRequest): Promise<AiProviderToolTurnResponse> {
+    const settings = this.getSettings();
+    if (
+      request.id.trim() === "" ||
+      request.id.length > 128 ||
+      request.inputItems.length === 0 ||
+      request.inputItems.length > 20 ||
+      request.tools.length > 12 ||
+      (request.toolChoice === "auto" && request.tools.length === 0)
+    ) {
+      throw new AiProviderError({ code: "invalidRequest", message: "AI 工具请求无效或过大。" });
+    }
+    const input: NativeToolTurnInput = {
+      id: request.id,
+      intent: request.intent,
+      inputItems: request.inputItems,
+      tools: request.tools,
+      toolChoice: request.toolChoice,
+      model: settings.selectedModel,
+      requestTimeoutSeconds: settings.requestTimeoutSeconds,
+    };
+    try {
+      const result: NativeToolTurnResult = await this.native.generateToolTurn(input);
+      return result.kind === "final"
+        ? { kind: "final", content: result.content }
+        : {
+            kind: "functionCalls",
+            calls: result.calls.map((call) => ({
+              callId: call.callId,
+              name: call.name,
+              arguments: call.arguments,
+            })),
+          };
     } catch (caught: unknown) {
       throw providerError(caught);
     }

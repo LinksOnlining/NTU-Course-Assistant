@@ -16,6 +16,10 @@ const aiFiles = [
   "src/application/ai/request-grant.ts",
   "src/application/ai/proposal.ts",
   "src/application/ai/tool.ts",
+  "src/application/ai/tool-registry.ts",
+  "src/application/ai/tool-runtime.ts",
+  "src/application/ai/tool-adapters.ts",
+  "src/application/ai/tool-runtime-registry.ts",
   "src/application/ai/mock-provider.ts",
   "src/application/ai/deepseek-provider.ts",
   "src/application/ai/index.ts",
@@ -48,6 +52,7 @@ test("Provider 通过可替换接口约束，接口层不绑定 Mock 实现", ()
   assert.match(provider, /export interface AIProvider/u);
   assert.match(provider, /generateText\(/u);
   assert.match(provider, /generateStructured</u);
+  assert.match(provider, /generateToolTurn\(/u);
   assert.match(provider, /checkAvailability\(/u);
   assert.doesNotMatch(provider, /MockAIProvider/u);
   assert.match(mock, /implements AIProvider/u);
@@ -90,7 +95,7 @@ test("AI Context 不可访问持久化，敏感授权工厂不可由 UI 调用",
   assert.doesNotMatch(source("src/services/ai-data-access-storage.ts"), /deepseek|apiKey|secret/iu);
 });
 
-test("AI Registry 仅有静态能力声明，不启用页面、导航或工具执行", () => {
+test("AI Registry 由模块贡献提供六项只读工具，不启用用户可见 AI 页面", () => {
   const capabilities = workplaceModuleRegistry.aiCapabilities;
   const permissions = new Set(workplaceModuleRegistry.permissions.map(({ id }) => id));
   assert.equal(capabilities.length, 4);
@@ -100,14 +105,28 @@ test("AI Registry 仅有静态能力声明，不启用页面、导航或工具�
         moduleId === "ai" && requiredPermissions.every((id) => permissions.has(id)),
     ),
   );
-  assert.deepEqual(workplaceModuleRegistry.aiTools, []);
+  assert.deepEqual(
+    workplaceModuleRegistry.aiTools.map(({ name, effect }) => [name, effect]),
+    [
+      ["academic_get_upcoming", "read"],
+      ["planner_get_open_items", "read"],
+      ["routine_get_today", "read"],
+      ["weather_get_summary", "read"],
+      ["workspace_get_overview", "read"],
+      ["planner_get_schedule", "read"],
+    ],
+  );
   assert.deepEqual(
     workplaceModuleRegistry.navigation.filter(({ moduleId }) => moduleId === "ai"),
     [],
   );
   assert.equal(workplaceModuleRegistry.getModuleState("ai")?.available, false);
-  assert.match(source("src/application/ai/tool.ts"), /interface AiTool/u);
-  assert.doesNotMatch(source("src/application/ai/tool.ts"), /execute\s*\(|handler\s*:/u);
+  assert.match(source("src/application/ai/tool.ts"), /interface AiToolDefinition/u);
+  assert.match(source("src/application/ai/tool-runtime.ts"), /tool\.execute\(/u);
+  assert.match(
+    source("src/application/ai/tool-runtime-registry.ts"),
+    /createAiToolRegistry\(AI_TOOL_ADAPTERS\)/u,
+  );
 });
 
 test("DeepSeek WebView 只使用专用 Native commands，不含直连网络或 Authorization", () => {
@@ -132,7 +151,43 @@ test("DeepSeek WebView 只使用专用 Native commands，不含直连网络或 A
   assert.match(bridge, /discover_deepseek_models/u);
   assert.match(bridge, /generate_deepseek_text/u);
   assert.match(bridge, /generate_deepseek_structured/u);
+  assert.match(bridge, /generate_deepseek_tool_turn/u);
   assert.doesNotMatch(bridge, /http_request|save_secret|get_secret/u);
+});
+
+test("Tool Runtime 保持 Provider-neutral、只读且由 WorkplaceModuleRegistry 驱动", () => {
+  const runtime = source("src/application/ai/tool-runtime.ts");
+  const registry = source("src/application/ai/tool-registry.ts");
+  const adapters = source("src/application/ai/tool-adapters.ts");
+  const queryFiles = [
+    "src/application/workspace/ai-read-query.ts",
+    "src/application/academic/ai-read-query.ts",
+    "src/application/planner/ai-read-query.ts",
+    "src/application/weather/ai-read-query.ts",
+  ]
+    .map(source)
+    .join("\n");
+  assert.match(registry, /modules\.aiTools/u);
+  assert.match(registry, /workplaceModuleRegistry/u);
+  assert.match(adapters, /readWorkspaceAiOverview/u);
+  assert.doesNotMatch(adapters, /Repository|sqlite|database|invoke\s*\(/iu);
+  assert.doesNotMatch(
+    `${runtime}\n${registry}\n${adapters}`,
+    /DeepSeekModel|NativeToolTurn|generate_deepseek/u,
+  );
+  assert.doesNotMatch(
+    `${runtime}\n${registry}\n${adapters}`,
+    /(?:^|[/\\])(?:repository|database|sqlite|db)\//imu,
+  );
+  assert.doesNotMatch(
+    queryFiles,
+    /diary\.body|inbox\.raw|task\.description|hiddenNotes|absolutePath|apiKey|secret/iu,
+  );
+  assert.match(runtime, /tool\.effect !== "read"/u);
+  assert.match(runtime, /gate\.require\(tool\.requiredPermission\)/u);
+  assert.match(runtime, /maxProviderRounds: 4/u);
+  assert.match(runtime, /maxToolCallsTotal: 8/u);
+  assert.match(runtime, /maxToolOutputBytes: 8 \* 1024/u);
 });
 
 test("API Key 仅有瞬态输入和专用凭据命令，不进入浏览器持久化", () => {

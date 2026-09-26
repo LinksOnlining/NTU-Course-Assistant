@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0、Phase 4.1 与 Phase 4.2 均 COMPLETE。** Phase 4.2 已建立默认拒绝的运行时读取权限、数据访问设置、请求级敏感授权契约与最小化 Context Builder；AI Tool Runtime、Proposal 应用及业务写入仍未实现。`POST /responses` 真实文本与结构化生成尚未执行，待首次正式 AI 工作流进行 smoke test。
+状态：**Phase 4.0、Phase 4.1、Phase 4.2 与 Phase 4.3 均 COMPLETE。** Phase 4.2 建立了默认拒绝的运行时读取权限、请求级敏感授权契约与最小化 Context Builder；Phase 4.3 增加了基于模块贡献的瞬态只读 Tool Runtime。Proposal 应用及业务写入仍未实现。DeepSeek `POST /responses` 的真实文本、结构化与 Tool Calling 尚未执行，待首次正式 AI 工作流进行 smoke test。
 
 ## 1. 产品定位
 
@@ -37,15 +37,15 @@ Repository / SQLite
 
 ## 3. Provider 架构
 
-`AIProvider` 是可替换接口，定义 `generateText`、经 schema 校验的 `generateStructured` 和 `checkAvailability`。`AiProviderId` 当前为 `mock | deepseek`；Mock 保持离线确定性行为，DeepSeek 实现为该接口的 production adapter。Phase 4.1 不引入 OpenAI SDK 或其他未实现 Provider。
+`AIProvider` 是可替换接口，定义 `generateText`、经 schema 校验的 `generateStructured`、Provider-neutral `generateToolTurn` 和 `checkAvailability`。`AiProviderId` 当前为 `mock | deepseek`；Mock 保持离线确定性行为，DeepSeek 实现为该接口的 production adapter。Phase 4.1 不引入 OpenAI SDK 或其他未实现 Provider。
 
 Mock 支持确定性成功、请求失败和不可用三种模式，用于验证消费者不依赖某个真实 Provider。
 
 ## 4. Capability 与 Registry
 
-`WorkplaceModuleRegistry` 新增只读 `aiCapabilities` 静态 contribution，包含摘要、规划、建议和分类能力。注册时检查 capability ID 唯一性、模块归属及所需 `module.action` 权限引用，并冻结元数据。
+`WorkplaceModuleRegistry` 暴露只读 `aiCapabilities` 与 `aiTools` 静态 contribution。Phase 4.3 的六项 Tool contribution 由所属模块声明；运行时 `AIToolRegistry` 仅按稳定 ID 将它们绑定到 Application read adapter，不建立第二套模块系统。注册检查 ID / Provider 名称唯一性、名称格式、模块归属、只读权限和 JSON Schema，并冻结元数据。
 
-Planner 增加 `planner.propose` 描述性权限。能力只声明所需权限，不构成授权或执行 Gate。AI 模块仍 `available=false`，不新增页面或导航；`aiTools` 仍为空。
+Planner 增加 `planner.propose` 描述性权限。能力只声明所需权限，不构成授权或执行 Gate。AI 模块仍 `available=false`，不新增页面或导航；模块 Tool contribution 只声明能力，执行器仅在 Application 层按稳定 ID 绑定。
 
 ## 5. Permission 模型
 
@@ -76,7 +76,7 @@ reviewRequired ───→ rejected / failed / stale
 approved ─────────→ failed / stale
 ```
 
-`applied` 只能表示未来模块 Application UseCase 成功后的状态；本阶段没有应用、写入或持久化 Proposal 的代码。`AiTool` 仅声明 ID、模块、类型、所需权限、输入/输出 schema 与 risk level，不包含 handler 或 `execute`。
+`applied` 只能表示未来模块 Application UseCase 成功后的状态；当前没有应用、写入或持久化 Proposal 的代码。Phase 4.0 的 `AiTool` 仍是无执行器的描述性契约；Phase 4.3 的独立 `AiToolDefinition` 才将只读贡献绑定至 Application read adapter。Runtime 仅暴露 `effect=read`，所有 proposal、mutation、write 工具都不发送给 Provider，也不执行。
 
 ## 8. Phase 4.1 Provider 基础
 
@@ -91,7 +91,7 @@ approved ─────────→ failed / stale
 
 SQLite schema 保持 **7**，migration **0**；Phase 4.1 未增加或读取任何 AI 数据库表，也未访问 Release 用户数据库。非敏感 AI provider settings 使用本地浏览器设置存储；API Key 仅在 Windows Credential Manager。
 
-Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久化与删除、断网处理验收。真实 `POST /responses` 文本与结构化生成尚未执行，待首次正式 AI 工作流验收。Phase 4.2 已完成 Context Runtime 与读取权限基础；没有 schema 变更、AI Tool 执行或 Proposal 应用。
+Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久化与删除、断网处理验收。真实 `POST /responses` 文本、结构化与 Tool Calling 尚未执行，待首次正式 AI 工作流验收。Phase 4.2 / 4.3 没有 schema 变更、持久化 Tool 状态或 Proposal 应用。
 
 ## 10. Phase 4.2 运行时实施边界
 
@@ -100,4 +100,15 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 - 总预算默认 32 KiB UTF-8、每模块 8 KiB、每字符串 512 字符、每模块最多 50 项、最多 20 个所选对象。超限会确定性裁剪，并在 budget 元数据中报告已用字节、省略数与受截断模块。
 - Windows 绝对路径和常见 secret/token 形态在投影中替换为安全占位符；Context 序列化前完成处理。
 - 关闭全部读取授权时，Builder 不调用模块 sources，且不改变 Phase 4.1 Provider 的既有行为。
-- 完整实现及验证结果记录于 [`v2-phase-4-2-verification.md`](v2-phase-4-2-verification.md)。Phase 4.3 仍未开始。
+- 完整实现及验证结果记录于 [`v2-phase-4-2-verification.md`](v2-phase-4-2-verification.md)。
+
+## 11. Phase 4.3 只读 Tool Runtime
+
+- 唯一 source 是 `WorkplaceModuleRegistry.aiTools`。Runtime 以稳定 module contribution 顺序绑定六个内建工具：`workspace_get_overview`、`academic_get_upcoming`、`planner_get_open_items`、`planner_get_schedule`、`routine_get_today`、`weather_get_summary`。每个工具均限定到所属模块的一个 `*.read` 权限。
+- 每次请求重新读取权限设置。未授权工具在发送给 Provider 前被过滤；无可用工具时使用 `tool_choice=none` 且不发送空 `tools` 数组。执行时再次检查同一 Permission Gate。未注册调用不会模糊匹配；所有非 `read` effect 永不暴露或执行。
+- Provider-neutral Runtime 位于 TypeScript Application Layer；只使用 `AiToolDefinition` 和固定 Application Query。它不导入 Repository、SQLite、Tauri DB command 或 DeepSeek Raw DTO。DeepSeek adapter 只映射为 Responses API function definitions；Rust 只处理专用、固定 DeepSeek HTTPS transport 与协议 DTO，不提供通用 Tool/HTTP/DB executor。
+- Provider function arguments 按不可信输入处理：JSON parse → JSON Schema → module domain validation → permission → 执行。每项 Tool 输出经过固定 allowlist projection、复用的路径/凭据脱敏、output schema 校验与稳定 UTF-8 预算；结果以真实 Provider `call_id` 配对回送。
+- Loop 限制：最多 4 次 Provider round、8 次 Tool call、每 round 4 次调用；调用按 Provider 响应顺序串行执行。完全相同的规范化 `tool name + args` 在单次请求内只执行一次。请求结束即释放 transient transcript/cache，不保存 prompt、call history、reasoning 或 Tool output；Tool 调用不自动重试。
+- 输出预算：每项最多 8 KiB、单次请求全部 Tool output 合计最多 24 KiB。超限按稳定规则裁剪并携带 `truncated` / `omittedCount`；错误采用最小安全错误对象，不暴露异常、数据库信息、本机路径或 secret。
+- Tool function parameters 与响应大小均受 Native 上限约束；Responses API `function_call` / `function_call_output` 使用真实、唯一且配对的 `call_id`。Tool loop 固定 `reasoning=none`，并告知 Provider Tool results 是不可信的应用数据。
+- 六项工具的字段、权限、loop/budget、自动化验证与 live 限制见 [`v2-phase-4-3-verification.md`](v2-phase-4-3-verification.md)。无用户可见 AI Prompt、Chat 或 Tool Debug UI；Diary body、Inbox raw、Search、generic DB/HTTP/file/shell、Proposal 与所有写入均未启用。
