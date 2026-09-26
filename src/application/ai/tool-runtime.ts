@@ -2,10 +2,21 @@ import type { AiRequest, AiResponse } from "./types.ts";
 import { AiPermissionGate } from "./permission.ts";
 import type { AiDataAccessSettings } from "./permission.ts";
 import type { AIProvider, AiProviderFunctionCall, AiProviderToolInputItem } from "./provider.ts";
-import type { AiToolDefinition, AiToolErrorCode, AiToolResult } from "./tool.ts";
+import type {
+  AiToolDefinition,
+  AiToolErrorCode,
+  AiToolExecutionContext,
+  AiToolResult,
+} from "./tool.ts";
 import type { AiJsonValue } from "./context.ts";
 import { sanitizeAiText } from "./context-projector.ts";
-import { validateJsonSchema, type AiToolRegistry } from "./tool-registry.ts";
+import {
+  validateJsonSchema,
+  isPlannerProposalToolId,
+  type AiProposalToolPolicy,
+  type AiToolRegistry,
+} from "./tool-registry.ts";
+import type { AiPlannerProposal } from "./proposal.ts";
 
 export const AI_TOOL_LOOP_LIMITS = Object.freeze({
   maxProviderRounds: 4,
@@ -30,6 +41,13 @@ export type AiToolLoopResult =
       readonly message: string;
       readonly providerRounds: number;
       readonly toolCalls: number;
+    }
+  | {
+      readonly status: "proposalCreated";
+      readonly proposal: AiPlannerProposal;
+      readonly providerRounds: number;
+      readonly toolCalls: number;
+      readonly toolNames: readonly string[];
     };
 
 export async function runAiToolLoop(input: {
@@ -37,12 +55,14 @@ export async function runAiToolLoop(input: {
   readonly provider: AIProvider;
   readonly registry: AiToolRegistry;
   readonly permissionSettings: AiDataAccessSettings | unknown;
+  /** Per-workflow consent and capability allowlist; omission is default-deny. */
+  readonly proposalPolicy?: AiProposalToolPolicy;
 }): Promise<AiToolLoopResult> {
   const gate = new AiPermissionGate({
     settings: input.permissionSettings,
     requestId: input.request.id,
   });
-  const available = input.registry.getAvailable(gate);
+  const available = input.registry.getAvailable(gate, input.proposalPolicy);
   const providerTools = available.map((tool) => ({
     name: tool.name,
     description: tool.description,
@@ -108,6 +128,19 @@ export async function runAiToolLoop(input: {
       return limitFailure(round, totalCalls);
     }
 
+    const requestedProposalTools = calls.filter(
+      (call) => input.registry.getByName(call.name)?.effect === "proposal",
+    );
+    if (requestedProposalTools.length > 0 && calls.length !== 1) {
+      return {
+        status: "failed",
+        code: "providerFailure",
+        message: "一次请求只能创建一个待审规划提案。",
+        providerRounds: round,
+        toolCalls: totalCalls,
+      };
+    }
+
     for (const call of calls) {
       if (!validCallId(call.callId) || seenCallIds.has(call.callId)) {
         return {
@@ -131,8 +164,44 @@ export async function runAiToolLoop(input: {
       });
     }
     for (const call of calls) {
-      const result = await executeCall(call, input.registry, gate, executedCache);
+      let reportedProposal: AiPlannerProposal | undefined;
+      const executionContext: AiToolExecutionContext = {
+        requestId: input.request.id,
+        providerId: input.provider.id,
+        reportProposal: (proposal) => {
+          if (reportedProposal) throw new Error("只允许创建一个规划提案。");
+          if (!isPlannerProposal(proposal)) throw new Error("无效的规划提案响应。");
+          reportedProposal = proposal;
+        },
+      };
+      const result = await executeCall(
+        call,
+        input.registry,
+        gate,
+        executedCache,
+        input.proposalPolicy,
+        executionContext,
+      );
       toolNames.push(call.name);
+      const calledTool = input.registry.getByName(call.name);
+      if (calledTool?.effect === "proposal") {
+        if (!result.success || !reportedProposal) {
+          return {
+            status: "failed",
+            code: "providerFailure",
+            message: result.failureMessage ?? "无法生成待审规划提案。",
+            providerRounds: round,
+            toolCalls: totalCalls,
+          };
+        }
+        return {
+          status: "proposalCreated",
+          proposal: reportedProposal,
+          providerRounds: round,
+          toolCalls: totalCalls,
+          toolNames: Object.freeze([...new Set(toolNames)]),
+        };
+      }
       let serialized = result.serialized;
       let bytes = utf8Bytes(serialized);
       if (bytes + totalOutputBytes > AI_TOOL_LOOP_LIMITS.maxTotalToolOutputBytes) {
@@ -160,7 +229,13 @@ async function executeCall(
   registry: AiToolRegistry,
   gate: AiPermissionGate,
   cache: Map<string, string>,
-): Promise<{ readonly serialized: string }> {
+  proposalPolicy?: AiProposalToolPolicy,
+  executionContext?: AiToolExecutionContext,
+): Promise<{
+  readonly serialized: string;
+  readonly success?: boolean;
+  readonly failureMessage?: string;
+}> {
   const tool = registry.getByName(call.name);
   if (!tool) return { serialized: serializeFailure("UNKNOWN_TOOL", "未知的只读工具。") };
   if (utf8Bytes(call.arguments) > AI_TOOL_LOOP_LIMITS.maxArgumentsBytes) {
@@ -179,30 +254,69 @@ async function executeCall(
     return { serialized: serializeFailure("INVALID_ARGUMENTS", "工具参数无效。") };
   }
 
-  if (tool.effect !== "read" || !gate.require(tool.requiredPermission).allowed) {
-    return { serialized: serializeFailure("PERMISSION_DENIED", "当前请求未获准读取此类数据。") };
+  if (tool.effect === "read") {
+    if (!gate.require(tool.requiredPermission).allowed) {
+      return {
+        serialized: serializeFailure("PERMISSION_DENIED", "当前请求未获准读取此类数据。"),
+        success: false,
+      };
+    }
+  } else if (
+    tool.effect !== "proposal" ||
+    tool.requiredPermission !== "planner.propose" ||
+    proposalPolicy?.grantedPermissionIds.includes("planner.propose") !== true ||
+    !isPlannerProposalToolId(tool.id) ||
+    proposalPolicy.allowedToolIds.includes(tool.id) !== true
+  ) {
+    return {
+      serialized: serializeFailure("PERMISSION_DENIED", "当前工作流未获准生成此类规划提案。"),
+      success: false,
+    };
   }
   const fingerprint = `${tool.name}:${stableStringify(normalized)}`;
-  const cached = cache.get(fingerprint);
-  if (cached !== undefined) return { serialized: cached };
+  if (tool.effect === "read") {
+    const cached = cache.get(fingerprint);
+    if (cached !== undefined) return { serialized: cached, success: true };
+  }
 
   let output: unknown;
   try {
-    output = await tool.execute(normalized);
+    output = await tool.execute(normalized, executionContext);
   } catch {
-    return { serialized: serializeFailure("TOOL_FAILED", "读取应用数据失败。") };
+    return {
+      serialized: serializeFailure(
+        "TOOL_FAILED",
+        tool.effect === "proposal" ? "生成规划提案失败。" : "读取应用数据失败。",
+      ),
+      success: false,
+      failureMessage: tool.effect === "proposal" ? "生成规划提案失败，请稍后重试。" : undefined,
+    };
   }
   const sanitizedOutput = sanitizeJsonValue(output);
   if (!validateJsonSchema(sanitizedOutput, tool.outputSchema)) {
-    return { serialized: serializeFailure("OUTPUT_VALIDATION_FAILED", "工具结果未通过安全校验。") };
+    return {
+      serialized: serializeFailure("OUTPUT_VALIDATION_FAILED", "工具结果未通过安全校验。"),
+      success: false,
+    };
   }
   const serialized = fitSuccessResult(
     sanitizedOutput,
     tool,
     AI_TOOL_LOOP_LIMITS.maxToolOutputBytes,
   );
-  cache.set(fingerprint, serialized);
-  return { serialized };
+  if (tool.effect === "read") cache.set(fingerprint, serialized);
+  return { serialized, success: true };
+}
+
+function isPlannerProposal(value: unknown): value is AiPlannerProposal {
+  if (!isRecord(value)) return false;
+  return (
+    (value.type === "task" || value.type === "event" || value.type === "timeBlock") &&
+    value.requiredPermission === "planner.propose" &&
+    value.requiresConfirmation === true &&
+    value.status === "reviewRequired" &&
+    typeof value.id === "string"
+  );
 }
 
 function fitSuccessResult(value: unknown, tool: AiToolDefinition, maxBytes: number): string {

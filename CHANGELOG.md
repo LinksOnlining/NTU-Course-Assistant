@@ -1,5 +1,16 @@
 # 变更记录
 
+## Links Workplace v2.0 development — Phase 4.4 — 2026-09-26
+
+### Added
+
+- 新增 Planner `planner.propose` 模块级授权下的任务、日程、时间块提案工具；每个 workflow 通过独立 Tool allowlist 获得最小 Proposal capability。
+- 新增短时内存态提案、可信本地预览、冲突/关联任务重新校验，以及用户确认后复用既有 Planner Application UseCase 的审阅组件。
+
+### Security
+
+- AI 不提供 Apply Tool，不直接写业务数据；无 `planner.propose` 或无 workflow allowlist 时不暴露 Proposal Tool。DeepSeek live Tool Calling 与用户可见 AI workflow 尚未启用。
+
 ## 1.3.1 — 2026-09-23
 
 ### Fixed

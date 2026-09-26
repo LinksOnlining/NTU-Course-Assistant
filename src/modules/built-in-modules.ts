@@ -253,6 +253,81 @@ const weatherSummaryTool = readTool(
   }),
 );
 
+function plannerProposalTool(
+  id: string,
+  name: string,
+  order: number,
+  description: string,
+  inputSchema: AIToolContribution["inputSchema"],
+  outputSchema: AIToolContribution["outputSchema"],
+): AIToolContribution {
+  return {
+    id,
+    name,
+    moduleId: "planner",
+    order,
+    description,
+    effect: "proposal",
+    permissionIds: ["planner.propose"],
+    inputSchema,
+    outputSchema,
+  };
+}
+
+const proposalOutputSchema = (proposalType: "task" | "event" | "timeBlock") =>
+  objectSchema({
+    status: { type: "string", enum: ["reviewRequired"] },
+    proposalId: { type: "string", minLength: 1, maxLength: 128 },
+    proposalType: { type: "string", enum: [proposalType] },
+  });
+
+const proposeTaskTool = plannerProposalTool(
+  "planner.propose-task",
+  "planner_propose_task",
+  30,
+  "创建一个待用户审阅的个人任务提案；不会直接写入任务。",
+  objectSchema({
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    deadlineDate: { type: ["string", "null"], pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    deadlineTime: { type: ["string", "null"], pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    priority: { type: "string", enum: ["none", "low", "medium", "high"] },
+  }),
+  proposalOutputSchema("task"),
+);
+
+const proposeEventTool = plannerProposalTool(
+  "planner.propose-event",
+  "planner_propose_event",
+  40,
+  "创建一个待用户审阅的日程提案；不会直接写入日程。",
+  objectSchema({
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    startTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    endTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    location: { type: ["string", "null"], maxLength: 200 },
+    bufferBeforeMinutes: { type: "integer", minimum: 0, maximum: 240 },
+    bufferAfterMinutes: { type: "integer", minimum: 0, maximum: 240 },
+  }),
+  proposalOutputSchema("event"),
+);
+
+const proposeTimeBlockTool = plannerProposalTool(
+  "planner.propose-time-block",
+  "planner_propose_time_block",
+  50,
+  "创建一个关联现有任务的待审时间块提案；不会直接写入时间块。",
+  objectSchema({
+    personalTaskId: { type: "string", minLength: 1, maxLength: 128 },
+    date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    startTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    endTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    bufferBeforeMinutes: { type: "integer", minimum: 0, maximum: 240 },
+    bufferAfterMinutes: { type: "integer", minimum: 0, maximum: 240 },
+  }),
+  proposalOutputSchema("timeBlock"),
+);
+
 /** 编译期内置模块清单；不支持运行时安装或加载第三方代码。 */
 export const BUILT_IN_MODULES = [
   {
@@ -580,7 +655,13 @@ export const BUILT_IN_MODULES = [
         priority: 30,
       },
     ],
-    aiTools: [openItemsTool, plannerScheduleTool],
+    aiTools: [
+      openItemsTool,
+      plannerScheduleTool,
+      proposeTaskTool,
+      proposeEventTool,
+      proposeTimeBlockTool,
+    ],
   },
   {
     id: "diary",

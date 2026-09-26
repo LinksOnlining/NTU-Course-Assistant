@@ -15,6 +15,8 @@ const aiFiles = [
   "src/application/ai/context-budget.ts",
   "src/application/ai/request-grant.ts",
   "src/application/ai/proposal.ts",
+  "src/application/ai/proposal-runtime.ts",
+  "src/application/ai/proposal-tool-adapters.ts",
   "src/application/ai/tool.ts",
   "src/application/ai/tool-registry.ts",
   "src/application/ai/tool-runtime.ts",
@@ -95,7 +97,7 @@ test("AI Context 不可访问持久化，敏感授权工厂不可由 UI 调用",
   assert.doesNotMatch(source("src/services/ai-data-access-storage.ts"), /deepseek|apiKey|secret/iu);
 });
 
-test("AI Registry 由模块贡献提供六项只读工具，不启用用户可见 AI 页面", () => {
+test("AI Registry 由模块贡献提供读取与受限提案工具，不启用用户可见 AI 页面", () => {
   const capabilities = workplaceModuleRegistry.aiCapabilities;
   const permissions = new Set(workplaceModuleRegistry.permissions.map(({ id }) => id));
   assert.equal(capabilities.length, 4);
@@ -114,7 +116,25 @@ test("AI Registry 由模块贡献提供六项只读工具，不启用用户可�
       ["weather_get_summary", "read"],
       ["workspace_get_overview", "read"],
       ["planner_get_schedule", "read"],
+      ["planner_propose_task", "proposal"],
+      ["planner_propose_event", "proposal"],
+      ["planner_propose_time_block", "proposal"],
     ],
+  );
+  assert.ok(
+    workplaceModuleRegistry.aiTools
+      .filter(({ effect }) => effect === "proposal")
+      .every(
+        ({ moduleId, permissionIds }) =>
+          moduleId === "planner" &&
+          permissionIds.length === 1 &&
+          permissionIds[0] === "planner.propose",
+      ),
+  );
+  assert.ok(
+    !workplaceModuleRegistry.aiTools.some(
+      ({ name, effect }) => effect === "write" || /apply/iu.test(name),
+    ),
   );
   assert.deepEqual(
     workplaceModuleRegistry.navigation.filter(({ moduleId }) => moduleId === "ai"),
@@ -183,7 +203,9 @@ test("Tool Runtime 保持 Provider-neutral、只读且由 WorkplaceModuleRegistr
     queryFiles,
     /diary\.body|inbox\.raw|task\.description|hiddenNotes|absolutePath|apiKey|secret/iu,
   );
-  assert.match(runtime, /tool\.effect !== "read"/u);
+  assert.match(runtime, /tool\.effect !== "proposal"/u);
+  assert.match(runtime, /allowedToolIds\.includes\(tool\.id\)/u);
+  assert.match(runtime, /tool\.requiredPermission !== "planner\.propose"/u);
   assert.match(runtime, /gate\.require\(tool\.requiredPermission\)/u);
   assert.match(runtime, /maxProviderRounds: 4/u);
   assert.match(runtime, /maxToolCallsTotal: 8/u);

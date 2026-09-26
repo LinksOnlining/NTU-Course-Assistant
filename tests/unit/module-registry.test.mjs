@@ -287,6 +287,9 @@ test("内置模块通过统一 registry 贡献 route、navigation、settings、s
       "weather.summary",
       "workspace.overview",
       "planner.schedule",
+      "planner.propose-task",
+      "planner.propose-event",
+      "planner.propose-time-block",
     ],
   );
 });

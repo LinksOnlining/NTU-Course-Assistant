@@ -191,6 +191,9 @@ test("内置模块与 Presentation 不启用动态第三方执行，也不绕过
       ["weather.summary", "read"],
       ["workspace.overview", "read"],
       ["planner.schedule", "read"],
+      ["planner.propose-task", "proposal"],
+      ["planner.propose-event", "proposal"],
+      ["planner.propose-time-block", "proposal"],
     ],
   );
   assert.doesNotMatch(source("src/modules/contracts.ts"), /execute\s*\(/u);

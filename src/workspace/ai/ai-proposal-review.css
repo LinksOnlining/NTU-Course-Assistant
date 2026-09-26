@@ -1,0 +1,174 @@
+.ai-proposal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(17 30 25 / 42%);
+  backdrop-filter: blur(3px);
+}
+
+.ai-proposal-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(560px, 100%);
+  max-height: min(720px, calc(100vh - 40px));
+  overflow: hidden;
+  color: var(--text-primary);
+  background: var(--surface-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-medium);
+  outline: none;
+}
+
+.ai-proposal-dialog > header,
+.ai-proposal-dialog > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 20px 24px;
+}
+
+.ai-proposal-dialog > header {
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-dialog-header);
+}
+
+.ai-proposal-eyebrow {
+  margin: 0 0 var(--space-1);
+  color: var(--text-accent-muted);
+  font-size: var(--font-size-secondary);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.ai-proposal-dialog h2 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: 20px;
+}
+
+.ai-proposal-close {
+  width: 36px;
+  height: 36px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.ai-proposal-content {
+  overflow: auto;
+  padding: 20px 24px;
+}
+
+.ai-proposal-disclosure {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.ai-proposal-fields {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.ai-proposal-fields > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.36fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px 13px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+}
+
+.ai-proposal-fields dt {
+  color: var(--text-muted);
+}
+
+.ai-proposal-fields dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.ai-proposal-previous {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.ai-proposal-warnings,
+.ai-proposal-refresh,
+.ai-proposal-error,
+.ai-proposal-success {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-card);
+}
+
+.ai-proposal-warnings,
+.ai-proposal-refresh {
+  color: var(--warning);
+  background: var(--warning-subtle);
+  border: 1px solid color-mix(in srgb, var(--warning) 24%, transparent);
+}
+
+.ai-proposal-warnings p {
+  margin: 6px 0 0;
+}
+
+.ai-proposal-warnings ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.ai-proposal-error {
+  color: var(--danger);
+  background: var(--danger-subtle);
+}
+
+.ai-proposal-success {
+  color: var(--success);
+  background: var(--success-subtle);
+}
+
+.ai-proposal-dialog > footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ai-proposal-dialog > footer button:focus-visible,
+.ai-proposal-close:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (max-width: 540px) {
+  .ai-proposal-backdrop {
+    padding: 10px;
+  }
+
+  .ai-proposal-dialog {
+    max-height: calc(100vh - 20px);
+  }
+
+  .ai-proposal-dialog > header,
+  .ai-proposal-content,
+  .ai-proposal-dialog > footer {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .ai-proposal-fields > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

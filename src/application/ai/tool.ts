@@ -16,6 +16,12 @@ export type AiRiskLevel = "low" | "medium" | "high";
 
 export type AiToolEffect = "read" | "proposal" | "mutation" | "write";
 
+export interface AiToolExecutionContext {
+  readonly requestId: string;
+  readonly providerId: string;
+  readonly reportProposal?: (proposal: unknown) => void;
+}
+
 /** Runtime-only binding of a module contribution to an Application read adapter. */
 export interface AiToolDefinition<Input = unknown, Output = unknown> {
   readonly id: string;
@@ -27,7 +33,7 @@ export interface AiToolDefinition<Input = unknown, Output = unknown> {
   readonly inputSchema: AiJsonObject;
   readonly outputSchema: AiJsonObject;
   parseInput(value: unknown): Input;
-  execute(input: Input): Promise<Output> | Output;
+  execute(input: Input, context?: AiToolExecutionContext): Promise<Output> | Output;
 }
 
 export type AiToolErrorCode =

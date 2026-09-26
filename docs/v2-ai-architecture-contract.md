@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0、Phase 4.1、Phase 4.2 与 Phase 4.3 均 COMPLETE。** Phase 4.2 建立了默认拒绝的运行时读取权限、请求级敏感授权契约与最小化 Context Builder；Phase 4.3 增加了基于模块贡献的瞬态只读 Tool Runtime。Proposal 应用及业务写入仍未实现。DeepSeek `POST /responses` 的真实文本、结构化与 Tool Calling 尚未执行，待首次正式 AI 工作流进行 smoke test。
+状态：**Phase 4.0–4.4 COMPLETE。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次只读 Tool Runtime；Phase 4.4 建立 Planner Proposal 生成、预览、重校验及本地确认后复用 Application UseCase 的基础。没有 AI Apply Tool，也没有用户可见 AI 工作流入口。DeepSeek `POST /responses` 文本、结构化及 Tool Calling live 请求尚未执行，需待首次正式 AI 工作流 smoke test。
 
 ## 1. 产品定位
 
@@ -31,7 +31,7 @@ Repository / SQLite
 - AI Application 不依赖 Repository、SQLite、Tauri DB command、Rust 业务或网络 SDK。
 - 模型输入、Provider 输出和 Proposal payload 均是不可信数据；结构化输出经调用方 `AiValueSchema.parse` 校验。
 - AI 不拥有业务事实；不得直接创建或修改 Course、CourseOverride、Exam deadline、Task、Event、TimeBlock、Diary 或 Inbox 数据。
-- 缺少明确授权时默认拒绝。`propose` / `apply` 权限即使已授权，也始终要求独立用户确认。
+- 缺少明确授权时默认拒绝。Planner 提案仅通过 `planner.propose` 与本地 workflow Tool allowlist 生成；任何业务写入都只能在用户明确确认后经既有 Application UseCase 发起，不提供 AI 可调用的 Apply、Mutation 或 Write Tool。
 - `workspace.read` 仅允许有限工作台汇总，不是跨模块超级权限；Academic、Planner、Routine、Weather 分别授权。Diary 正文与 Inbox 原文使用独立的一次性请求授权。
 - AI Context 只能从调用方显式指定的 scope、时间窗口和对象引用，以及已授权模块公开的 Application Query 构造；不得自行扫描数据库。Provider 只接收已完成权限筛选、投影和预算处理的 `AiContextBundle`。
 
@@ -43,7 +43,7 @@ Mock 支持确定性成功、请求失败和不可用三种模式，用于验证
 
 ## 4. Capability 与 Registry
 
-`WorkplaceModuleRegistry` 暴露只读 `aiCapabilities` 与 `aiTools` 静态 contribution。Phase 4.3 的六项 Tool contribution 由所属模块声明；运行时 `AIToolRegistry` 仅按稳定 ID 将它们绑定到 Application read adapter，不建立第二套模块系统。注册检查 ID / Provider 名称唯一性、名称格式、模块归属、只读权限和 JSON Schema，并冻结元数据。
+`WorkplaceModuleRegistry` 暴露只读 `aiCapabilities` 与 `aiTools` 静态 contribution。Phase 4.3 的六项只读 Tool 与 Phase 4.4 的三个 Planner Proposal Tool 均由所属模块声明；运行时 `AIToolRegistry` 按稳定 ID 绑定 Application adapter，不建立第二套模块系统。注册检查 ID / Provider 名称唯一性、名称格式、模块归属、effect 与 permission 的对应关系、JSON Schema，并冻结元数据。
 
 Planner 增加 `planner.propose` 描述性权限。能力只声明所需权限，不构成授权或执行 Gate。AI 模块仍 `available=false`，不新增页面或导航；模块 Tool contribution 只声明能力，执行器仅在 Application 层按稳定 ID 绑定。
 
@@ -53,7 +53,7 @@ AI 权限使用来源模块的 `module.action` 稳定标识。运行时 `AiPermi
 
 Diary 正文 `diary.body.read` 与 Inbox 原文 `inbox.raw.read` 只能使用受信任 Application orchestration 在用户针对特定对象明确同意后签发的一次性 grant；grant 绑定单个 request ID 与对象、只在内存中消费一次，不存在“以后都允许”开关。当前没有对应 AI 工作流/同意弹窗，因此并未授权任何实际敏感数据请求。
 
-`propose` / `apply` 权限及所有 mutation 请求在 Phase 4.2 仍为 inactive / DENY；本阶段不启用 Tool、Proposal 执行或业务写入。旧的宽泛 `diary.read` / `inbox.read` 元数据不会授权 Diary body / Inbox raw。
+`planner.propose` 是 Planner 模块级 Proposal authorization，不等同于业务写入。Phase 4.2 初始 Runtime Gate 尚未开放 Proposal；Phase 4.4 在每次 orchestration 中另行接收本地 workflow grant 与 proposal-tool allowlist。旧的宽泛 `diary.read` / `inbox.read` 元数据不会授权 Diary body / Inbox raw。
 
 ## 6. Context Boundary
 
@@ -65,7 +65,7 @@ Workspace 仅包含本地日期/时间、安排与任务计数、下一空闲时
 
 ## 7. Proposal 与 Tool Contract
 
-`AiProposal` 是纯应用层建议，不是业务对象或数据库记录。类型包括 Text、Task、Event、TimeBlock、Inbox 和 DiarySuggestion；每个 Proposal 的 `requiresConfirmation` 固定为 `true`。
+`AiProposal` 是纯应用层建议，不是业务对象或数据库记录。类型包括 Text、Task、Event、TimeBlock、Inbox 和 DiarySuggestion；Planner Proposal 的 `requiresConfirmation` 固定为 `true`。
 
 状态模型：
 
@@ -76,7 +76,7 @@ reviewRequired ───→ rejected / failed / stale
 approved ─────────→ failed / stale
 ```
 
-`applied` 只能表示未来模块 Application UseCase 成功后的状态；当前没有应用、写入或持久化 Proposal 的代码。Phase 4.0 的 `AiTool` 仍是无执行器的描述性契约；Phase 4.3 的独立 `AiToolDefinition` 才将只读贡献绑定至 Application read adapter。Runtime 仅暴露 `effect=read`，所有 proposal、mutation、write 工具都不发送给 Provider，也不执行。
+`applied` 仅表示用户明确确认后，既有 Planner Application UseCase 成功完成。Proposal 本身仅存于内存，默认 15 分钟过期；不持久化为业务记录。见 Phase 4.4 的双层授权与 workflow allowlist 约束。Provider 不能直接触发 Apply、Mutation 或 Write Tool。
 
 ## 8. Phase 4.1 Provider 基础
 
@@ -102,13 +102,23 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 - 关闭全部读取授权时，Builder 不调用模块 sources，且不改变 Phase 4.1 Provider 的既有行为。
 - 完整实现及验证结果记录于 [`v2-phase-4-2-verification.md`](v2-phase-4-2-verification.md)。
 
-## 11. Phase 4.3 只读 Tool Runtime
+## 11. Phase 4.3 Tool Runtime
 
-- 唯一 source 是 `WorkplaceModuleRegistry.aiTools`。Runtime 以稳定 module contribution 顺序绑定六个内建工具：`workspace_get_overview`、`academic_get_upcoming`、`planner_get_open_items`、`planner_get_schedule`、`routine_get_today`、`weather_get_summary`。每个工具均限定到所属模块的一个 `*.read` 权限。
-- 每次请求重新读取权限设置。未授权工具在发送给 Provider 前被过滤；无可用工具时使用 `tool_choice=none` 且不发送空 `tools` 数组。执行时再次检查同一 Permission Gate。未注册调用不会模糊匹配；所有非 `read` effect 永不暴露或执行。
+- 唯一 source 是 `WorkplaceModuleRegistry.aiTools`。Phase 4.3 将六项内建只读工具按稳定 module contribution 顺序绑定至 Application Query；每个工具均限定到所属模块的一个 `*.read` 权限。
+- 每次请求重新读取权限设置。未授权只读工具在发送给 Provider 前被过滤；无可用工具时使用 `tool_choice=none` 且不发送空 `tools` 数组。执行时再次校验权限。Proposal tools 另见 Phase 4.4。
 - Provider-neutral Runtime 位于 TypeScript Application Layer；只使用 `AiToolDefinition` 和固定 Application Query。它不导入 Repository、SQLite、Tauri DB command 或 DeepSeek Raw DTO。DeepSeek adapter 只映射为 Responses API function definitions；Rust 只处理专用、固定 DeepSeek HTTPS transport 与协议 DTO，不提供通用 Tool/HTTP/DB executor。
-- Provider function arguments 按不可信输入处理：JSON parse → JSON Schema → module domain validation → permission → 执行。每项 Tool 输出经过固定 allowlist projection、复用的路径/凭据脱敏、output schema 校验与稳定 UTF-8 预算；结果以真实 Provider `call_id` 配对回送。
+- Provider function arguments 按不可信输入处理：JSON parse → JSON Schema → module domain validation → permission/capability → 执行。只读 Tool 输出经过固定 allowlist projection、复用的路径/凭据脱敏、output schema 校验与稳定 UTF-8 预算；结果以真实 Provider `call_id` 配对回送。
 - Loop 限制：最多 4 次 Provider round、8 次 Tool call、每 round 4 次调用；调用按 Provider 响应顺序串行执行。完全相同的规范化 `tool name + args` 在单次请求内只执行一次。请求结束即释放 transient transcript/cache，不保存 prompt、call history、reasoning 或 Tool output；Tool 调用不自动重试。
 - 输出预算：每项最多 8 KiB、单次请求全部 Tool output 合计最多 24 KiB。超限按稳定规则裁剪并携带 `truncated` / `omittedCount`；错误采用最小安全错误对象，不暴露异常、数据库信息、本机路径或 secret。
 - Tool function parameters 与响应大小均受 Native 上限约束；Responses API `function_call` / `function_call_output` 使用真实、唯一且配对的 `call_id`。Tool loop 固定 `reasoning=none`，并告知 Provider Tool results 是不可信的应用数据。
-- 六项工具的字段、权限、loop/budget、自动化验证与 live 限制见 [`v2-phase-4-3-verification.md`](v2-phase-4-3-verification.md)。无用户可见 AI Prompt、Chat 或 Tool Debug UI；Diary body、Inbox raw、Search、generic DB/HTTP/file/shell、Proposal 与所有写入均未启用。
+- 六项读取工具的字段、权限、loop/budget、自动化验证与 live 限制见 [`v2-phase-4-3-verification.md`](v2-phase-4-3-verification.md)。无用户可见 AI Prompt、Chat 或 Tool Debug UI；Diary body、Inbox raw、Search、generic DB/HTTP/file/shell 与业务写入均未开放。
+
+## 12. Phase 4.4 Planner Proposal Runtime
+
+- Planner Proposal permission 统一为 `planner.propose`，表示模块级 Proposal authorization；不按 Proposal 对象类型拆分权限。
+- Tool 粒度由本地 workflow capability allowlist 控制：`planner.propose` 未获准时不暴露任何 Proposal Tool；已获准但没有 workflow proposal capability 时同样不暴露；task/event/timeBlock workflow 各自只暴露对应的 `planner_propose_task`、`planner_propose_event` 或 `planner_propose_time_block`。Provider 直接伪造注册名也会在执行入口重新校验 allowlist。
+- 三个 Proposal Tool 只校验参数并创建短时内存态 proposal。Provider 无 Apply 工具；多 Proposal 调用在执行前拒绝；proposal tool 结束后 orchestration 停止，不让 Provider 对刚生成的 proposal 追加执行操作。
+- Proposal review 组件是可复用本地 UI，没有挂载为生产 AI 对话/工作流入口。预览字段与冲突提示由本地应用生成；冲突为 warn-but-allow。确认时检查 proposal 状态、过期时间、权限、预览 revision 和关联任务/日程变化。外部日程或关联任务变化时更新预览并要求二次确认；过期或关联任务失效则标 stale。
+- 用户点击本地确认后，仅调用现有 `createPersonalTask`、`createPlannerEvent` 或 `createTimeBlock` Application UseCase；取消、未确认和 stale 路径不写入。确认结果只在 UseCase 成功后标记 applied；同一 proposal 的并发确认被 single-flight 保护，失败为终态以避免不确定写入的自动重试。无 SQLite schema/migration 变化，proposal 不持久化。
+- 单元及 Mock UI E2E 覆盖权限与 allowlist、Provider 伪造调用、创建/预览/取消/确认、重校验、冲突刷新、过期/失败及幂等行为。DeepSeek 真实 `POST /responses` Tool Calling 未执行；未启用正式用户 workflow。
+- 验证记录：[`v2-phase-4-4-verification.md`](v2-phase-4-4-verification.md)。

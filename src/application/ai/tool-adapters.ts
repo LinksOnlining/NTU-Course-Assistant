@@ -7,6 +7,7 @@ import {
 import { readWeatherAiSummary } from "../weather/ai-read-query.ts";
 import { readWorkspaceAiOverview } from "../workspace/ai-read-query.ts";
 import type { AiToolAdapter } from "./tool-registry.ts";
+import { AI_PROPOSAL_TOOL_ADAPTERS } from "./proposal-tool-adapters.ts";
 
 interface DateRangeLimit {
   readonly from: string;
@@ -101,7 +102,10 @@ const adapters: AiToolAdapter[] = [
   },
 ];
 
-export const AI_TOOL_ADAPTERS: readonly AiToolAdapter[] = Object.freeze(adapters);
+export const AI_TOOL_ADAPTERS: readonly AiToolAdapter[] = Object.freeze([
+  ...adapters,
+  ...AI_PROPOSAL_TOOL_ADAPTERS,
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

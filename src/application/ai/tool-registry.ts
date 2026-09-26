@@ -1,22 +1,44 @@
 import { workplaceModuleRegistry, type WorkplaceModuleRegistry } from "../../modules/registry.ts";
 import type { AIToolContribution, AIToolJsonSchema } from "../../modules/contracts.ts";
 import type { AiPermissionId } from "./permission.ts";
-import type { AiToolDefinition, AiToolEffect } from "./tool.ts";
+import type { AiToolDefinition, AiToolEffect, AiToolExecutionContext } from "./tool.ts";
 
 const SCHEMA_TYPES = new Set(["object", "array", "string", "integer", "number", "boolean", "null"]);
 
 export interface AiToolAdapter<Input = unknown, Output = unknown> {
   readonly id: string;
   parseInput(value: unknown): Input;
-  execute(input: Input): Promise<Output> | Output;
+  execute(input: Input, context?: AiToolExecutionContext): Promise<Output> | Output;
+}
+
+export const AI_PLANNER_PROPOSAL_TOOL_IDS = Object.freeze([
+  "planner.propose-task",
+  "planner.propose-event",
+  "planner.propose-time-block",
+] as const);
+
+export type AiPlannerProposalToolId = (typeof AI_PLANNER_PROPOSAL_TOOL_IDS)[number];
+
+export function isPlannerProposalToolId(value: string): value is AiPlannerProposalToolId {
+  return (AI_PLANNER_PROPOSAL_TOOL_IDS as readonly string[]).includes(value);
+}
+
+export interface AiProposalToolPolicy {
+  /** One request's explicit module-level proposal consent; defaults to deny. */
+  readonly grantedPermissionIds: readonly string[];
+  /** Workflow capability allowlist; prevents unrelated proposal tools being exposed. */
+  readonly allowedToolIds: readonly AiPlannerProposalToolId[];
 }
 
 export interface AiToolRegistry {
   readonly tools: readonly AiToolDefinition[];
   getByName(name: string): AiToolDefinition | undefined;
-  getAvailable(permissionGate: {
-    require(id: string): { allowed: boolean };
-  }): readonly AiToolDefinition[];
+  getAvailable(
+    permissionGate: {
+      require(id: string): { allowed: boolean };
+    },
+    proposalPolicy?: AiProposalToolPolicy,
+  ): readonly AiToolDefinition[];
 }
 
 export function createAiToolRegistry(
@@ -51,7 +73,8 @@ export function createAiToolRegistry(
       inputSchema: contribution.inputSchema,
       outputSchema: contribution.outputSchema,
       parseInput: adapter.parseInput.bind(adapter),
-      execute: (input: unknown) => Promise.resolve(adapter.execute(input)),
+      execute: (input: unknown, context?: AiToolExecutionContext) =>
+        Promise.resolve(adapter.execute(input, context)),
     } satisfies AiToolDefinition);
   });
 
@@ -64,14 +87,24 @@ export function createAiToolRegistry(
   return Object.freeze({
     tools: Object.freeze(tools),
     getByName: (name: string) => byName.get(name),
-    getAvailable: (permissionGate: { require(id: string): { allowed: boolean } }) =>
+    getAvailable: (
+      permissionGate: { require(id: string): { allowed: boolean } },
+      proposalPolicy?: AiProposalToolPolicy,
+    ) =>
       Object.freeze(
-        tools.filter(
-          (tool) =>
-            tool.effect === "read" &&
-            modules.getModuleState(tool.moduleId)?.available === true &&
-            permissionGate.require(tool.requiredPermission).allowed,
-        ),
+        tools.filter((tool) => {
+          if (modules.getModuleState(tool.moduleId)?.available !== true) return false;
+          if (tool.effect === "read")
+            return permissionGate.require(tool.requiredPermission).allowed;
+          if (tool.effect !== "proposal" || tool.requiredPermission !== "planner.propose") {
+            return false;
+          }
+          return (
+            proposalPolicy?.grantedPermissionIds.includes("planner.propose") === true &&
+            isPlannerProposalToolId(tool.id) &&
+            proposalPolicy.allowedToolIds.includes(tool.id)
+          );
+        }),
       ),
   });
 }
@@ -94,6 +127,17 @@ function validateContribution(
   }
   if (contribution.effect === "read" && permission.action !== "read") {
     throw new Error(`Read AI tool must use a read permission: ${contribution.id}`);
+  }
+  if (
+    contribution.effect === "proposal" &&
+    (contribution.moduleId !== "planner" ||
+      contribution.permissionIds[0] !== "planner.propose" ||
+      permission.action !== "propose")
+  ) {
+    throw new Error(`Planner proposal tool must use planner.propose: ${contribution.id}`);
+  }
+  if (contribution.effect === "mutation" || contribution.effect === "write") {
+    throw new Error(`AI mutation tools are not executable: ${contribution.id}`);
   }
   if (!isJsonSchema(contribution.inputSchema) || !isJsonSchema(contribution.outputSchema)) {
     throw new Error(`Invalid AI tool schema: ${contribution.id}`);

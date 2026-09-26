@@ -6,8 +6,8 @@
 
 - 当前 v2 产品需求单一事实来源：[`PROJECT_BRIEF.md`](PROJECT_BRIEF.md)。
 - 当前 v2 架构及依赖方向契约：[`docs/v2-architecture-contract.md`](docs/v2-architecture-contract.md)。
-- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0 AI Operation Layer architecture contract、Phase 4.1 Provider 基础和 Phase 4.2 Runtime Permission / Context Engine 均 COMPLETE。DeepSeek 通过 Native Rust transport，API Key 使用 Windows Credential Manager；模型发现仅在用户操作时触发。Phase 4.2 的五项普通数据读取授权在通用设置页默认关闭，敏感 Diary / Inbox 内容只定义一次性、请求级授权；Context 经模块 allowlist 投影、脱敏及预算后才可传给未来 Provider。当前没有 Tool Runtime、Proposal Apply 或 AI 对话工作流；真实文本及结构化 `POST /responses` smoke test 待首次正式 AI 工作流。SQLite schema 仍为 7、migration 0。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md)、[`docs/v2-phase-4-1-verification.md`](docs/v2-phase-4-1-verification.md) 与 [`docs/v2-phase-4-2-verification.md`](docs/v2-phase-4-2-verification.md)。
-- 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。Phase 4.2 只实现受限读取 Context，不表示 AI Tool、Proposal 执行或 AI 工作流已实现。
+- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0–4.4 均 COMPLETE：DeepSeek 通过 Native Rust transport，API Key 使用 Windows Credential Manager；数据读取默认关闭；Tool Runtime 包含六项只读工具与受 `planner.propose` + workflow Tool allowlist 双重约束的三个 Planner Proposal Tool。Proposal 仅进入内存态预览，只有用户本地确认才调用现有 Planner Application UseCase；没有 Apply Tool 或用户可见 AI 工作流入口。DeepSeek `POST /responses` 文本、结构化、Tool Calling live smoke 尚未执行。SQLite schema 仍为 7、migration 0。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md) 与 [`docs/v2-phase-4-4-verification.md`](docs/v2-phase-4-4-verification.md)。
+- 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。Phase 4.4 完成提案审阅基础，不代表公开 AI 工作流或 DeepSeek live Tool Calling 已启用。
 
 ## 技术方案
 
@@ -138,6 +138,7 @@ Phase 8 使用官方 Tauri 2 Tray API。在 setup 中只创建一个 `main-tray`
 TEST_TIMETABLE 明确标为测试用，包含测试轴、当前周、像素比例和两条节次样例；Phase 1 UI 只展示同样明确标注的测试课程。它们不代表学校作息。完整课程运行时校验、正式学期和节次设置仍待后续阶段。
 
 开发检查使用 Node 内置 node:test 和 Playwright；oxc-parser 仅用于 AST 架构守卫，oxlint 与 Prettier 负责静态及格式检查。tsconfig.core.json 不提供 DOM 或 Node 全局类型，类型反例测试纳入主 typecheck；所有 core/types/config 禁止 any。
+
 # Version 2.0 预留：日程功能
 
 Version 1.0 不实现日程功能，继续按照当前开发路线完成：

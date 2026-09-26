@@ -115,10 +115,11 @@ function outputItems(turn) {
   return turn.inputItems.filter((item) => item.kind === "functionCallOutput");
 }
 
-test("生产 AIToolRegistry 只从 WorkspaceModuleRegistry 获取六个只读贡献且顺序稳定", () => {
+test("生产 AIToolRegistry 从 WorkspaceModuleRegistry 获取六项读取与三项提案工具且顺序稳定", () => {
   const definitions = workplaceModuleRegistry.aiTools;
-  assert.equal(definitions.length, 6);
-  assert.ok(definitions.every(({ effect }) => effect === "read"));
+  assert.equal(definitions.length, 9);
+  assert.equal(definitions.filter(({ effect }) => effect === "read").length, 6);
+  assert.equal(definitions.filter(({ effect }) => effect === "proposal").length, 3);
   assert.deepEqual(
     definitions.map(({ name }) => name),
     [
@@ -128,6 +129,9 @@ test("生产 AIToolRegistry 只从 WorkspaceModuleRegistry 获取六个只读贡
       "weather_get_summary",
       "workspace_get_overview",
       "planner_get_schedule",
+      "planner_propose_task",
+      "planner_propose_event",
+      "planner_propose_time_block",
     ],
   );
   assert.ok(
@@ -140,6 +144,16 @@ test("生产 AIToolRegistry 只从 WorkspaceModuleRegistry 获取六个只读贡
   );
   assert.ok(definitions.every(({ name }) => /^[a-zA-Z0-9_-]{1,128}$/u.test(name)));
   assert.ok(
+    definitions
+      .filter(({ effect }) => effect === "proposal")
+      .every(
+        ({ moduleId, permissionIds }) =>
+          moduleId === "planner" &&
+          permissionIds.length === 1 &&
+          permissionIds[0] === "planner.propose",
+      ),
+  );
+  assert.ok(
     !definitions.some(({ id, name }) => /diary|inbox|search|database|http/iu.test(`${id} ${name}`)),
   );
   const runtime = createAiToolRegistry(AI_TOOL_ADAPTERS);
@@ -147,6 +161,87 @@ test("生产 AIToolRegistry 只从 WorkspaceModuleRegistry 获取六个只读贡
     runtime.tools.map(({ id }) => id),
     definitions.map(({ id }) => id),
   );
+});
+
+test("planner.propose 与 workflow 工具 allowlist 共同决定仅暴露对应 Proposal Tool", () => {
+  const runtime = createAiToolRegistry(AI_TOOL_ADAPTERS);
+  const noReadPermissions = { require: () => ({ allowed: false }) };
+  const proposalNames = (policy) =>
+    runtime
+      .getAvailable(noReadPermissions, policy)
+      .filter(({ effect }) => effect === "proposal")
+      .map(({ name }) => name);
+
+  assert.deepEqual(
+    proposalNames({
+      grantedPermissionIds: [],
+      allowedToolIds: [
+        "planner.propose-task",
+        "planner.propose-event",
+        "planner.propose-time-block",
+      ],
+    }),
+    [],
+    "planner.propose OFF must expose no Planner Proposal Tool",
+  );
+  assert.deepEqual(
+    proposalNames({
+      grantedPermissionIds: ["planner.propose"],
+      allowedToolIds: ["planner.propose-task"],
+    }),
+    ["planner_propose_task"],
+  );
+  assert.deepEqual(
+    proposalNames({
+      grantedPermissionIds: ["planner.propose"],
+      allowedToolIds: ["planner.propose-event"],
+    }),
+    ["planner_propose_event"],
+  );
+  assert.deepEqual(
+    proposalNames({
+      grantedPermissionIds: ["planner.propose"],
+      allowedToolIds: ["planner.propose-time-block"],
+    }),
+    ["planner_propose_time_block"],
+  );
+  assert.deepEqual(
+    proposalNames({ grantedPermissionIds: ["planner.propose"], allowedToolIds: [] }),
+    [],
+    "permission alone cannot expose Proposal Tools without workflow capability",
+  );
+});
+
+test("每个 Proposal Tool 的输出 schema 只接受自身 Proposal 类型", () => {
+  const proposals = workplaceModuleRegistry.aiTools.filter(({ effect }) => effect === "proposal");
+  for (const [toolName, proposalType] of [
+    ["planner_propose_task", "task"],
+    ["planner_propose_event", "event"],
+    ["planner_propose_time_block", "timeBlock"],
+  ]) {
+    const tool = proposals.find(({ name }) => name === toolName);
+    const schema = tool.outputSchema;
+    assert.deepEqual(schema.properties.proposalType.enum, [proposalType]);
+    assert.equal(
+      validateJsonSchema(
+        { status: "reviewRequired", proposalId: "proposal-1", proposalType },
+        schema,
+      ),
+      true,
+    );
+    for (const otherType of ["task", "event", "timeBlock"].filter(
+      (type) => type !== proposalType,
+    )) {
+      assert.equal(
+        validateJsonSchema(
+          { status: "reviewRequired", proposalId: "proposal-1", proposalType: otherType },
+          schema,
+        ),
+        false,
+        `${toolName} must reject ${otherType} output`,
+      );
+    }
+  }
 });
 
 test("权限关闭的工具不会发给 Provider；无工具时选择 none；新请求读取新权限", async () => {
@@ -295,32 +390,42 @@ test("未知、未授权、JSON/Schema/Domain 无效和工具异常均安全失�
   assert.throws(() => domainAdapter.parseInput({ from: "2026-09-01", limit: 5 }), /partial/u);
 });
 
-test("权限被关闭时下一请求立即过滤；proposal/mutation 始终不暴露或执行", async () => {
-  const declaration = {
-    id: "workspace.proposal-test",
-    name: "workspace_proposal_test",
-    moduleId: "workspace",
-    order: 10,
-    description: "禁止执行的 proposal",
-    effect: "proposal",
-    permissionIds: ["workspace.read"],
-    inputSchema: TOOL_INPUT,
-    outputSchema: TOOL_OUTPUT,
-  };
-  const state = fixture({ declarations: [declaration] });
-  assert.deepEqual(state.registry.getAvailable({ require: () => ({ allowed: true }) }), []);
+test("未提供 workflow proposal capability 时 Provider 伪造调用也不能执行", async () => {
+  const planner = BUILT_IN_MODULES.find(({ id }) => id === "planner");
+  const declaration = planner.aiTools.find(({ id }) => id === "planner.propose-task");
+  const modules = createWorkplaceModuleRegistry([{ ...planner, aiTools: [declaration] }]);
+  let executions = 0;
+  const registry = createAiToolRegistry(
+    [
+      {
+        id: declaration.id,
+        parseInput: (value) => value,
+        execute: () => {
+          executions += 1;
+          return { status: "reviewRequired", proposalId: "unexpected", proposalType: "task" };
+        },
+      },
+    ],
+    modules,
+  );
   const ai = provider([
-    functionCalls(call("call-proposal", "workspace_proposal_test")),
-    { kind: "final", content: "拒绝" },
+    functionCalls(
+      call(
+        "call-proposal",
+        "planner_propose_task",
+        JSON.stringify({ title: "任务", deadlineDate: null, deadlineTime: null, priority: "none" }),
+      ),
+    ),
   ]);
-  await runAiToolLoop({
+  const result = await runAiToolLoop({
     request: request(),
     provider: ai,
-    registry: state.registry,
+    registry,
     permissionSettings: ALLOWED,
   });
-  assert.equal(JSON.parse(outputItems(ai.calls[1])[0].output).error.code, "PERMISSION_DENIED");
-  assert.deepEqual(state.executions, []);
+  assert.equal(result.status, "failed");
+  assert.equal(executions, 0);
+  assert.equal(ai.calls.length, 1);
 });
 
 test("输出 Schema 拒绝敏感哨兵；裁剪显式标记 truncated/omittedCount", async () => {
