@@ -224,12 +224,20 @@ export function InboxSensitiveAiPanel({
               <dd>{interpretation.title ?? "未识别"}</dd>
             </div>
             <div>
+              <dt>详细说明</dt>
+              <dd>{interpretation.description || "未识别"}</dd>
+            </div>
+            <div>
               <dt>日期 / 时间</dt>
               <dd>{formatDateTime(interpretation)}</dd>
             </div>
             <div>
               <dt>截止</dt>
               <dd>{formatDeadline(interpretation)}</dd>
+            </div>
+            <div>
+              <dt>地点</dt>
+              <dd>{interpretation.location ?? "未识别"}</dd>
             </div>
           </dl>
           {interpretation.uncertainties.length > 0 && (
@@ -459,14 +467,14 @@ export function InboxSensitiveAiPanel({
 function draftFromInterpretation(result: InboxInterpretationResult): InboxRecognitionDraft {
   return {
     title: result.title ?? "",
-    description: "",
+    description: result.description,
     priority: "none",
     deadlineDate: result.deadlineDate ?? "",
     deadlineTime: result.deadlineTime ?? "",
     date: result.date ?? "",
     startTime: result.startTime ?? "",
     endTime: result.endTime ?? "",
-    location: "",
+    location: result.location ?? "",
   };
 }
 

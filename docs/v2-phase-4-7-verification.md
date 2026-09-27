@@ -9,8 +9,8 @@ SQLite：schema `7`，migration `0`
 
 - Phase 4.7 Implementation：**COMPLETE**
 - Phase 4.7 Automated：**PASS**（以本记录中的完整门禁结果为准）
-- Phase 4.7 DeepSeek Live：**PENDING**（未发起真实请求）
-- Phase 4.7 Overall：**PENDING**（等待用户后续 DeepSeek / Windows 人工验收）
+- Phase 4.7 DeepSeek / Windows Live：**PASS**（Ethan 已确认真实验收通过）
+- Phase 4.7 Overall：**COMPLETE**
 - Phase 4.8：**NOT STARTED**
 
 ## 权限、同意与对象绑定
@@ -64,15 +64,7 @@ SQLite：schema `7`，migration `0`
 
 ## 人工与 Live 状态
 
-以下均为 **NOT EXECUTED**，不能标记为 PASS：
-
-- Diary selected workflow 的真实 DeepSeek 请求与 Consent 体验。
-- Inbox selected workflow 的真实 DeepSeek 请求与 Consent 体验。
-- 真实 Prompt Injection 对抗响应。
-- 真实 Inbox Task / Event Proposal 预览、确认与写入闭环。
-- Windows 开发态 / 安装态人工验收。
-
-自动验证使用本地 mock/fake provider；未读取真实 API Key、未发起真实 DeepSeek 请求、未运行 production EXE/installer，也未访问 Release 用户数据库。
+Ethan 已确认 Phase 4.7 的真实 Windows / DeepSeek 人工验收 **PASS**。自动化仍使用本地 mock/fake provider；本条 Live 结果来自用户完成的真实验收确认，不代表本轮自动化直接读取 API Key 或重复执行真实请求。
 
 ## 数据库与发布边界
 
@@ -94,8 +86,8 @@ SQLite：schema `7`，migration `0`
 
 - Implementation：**COMPLETE**
 - Automated：**PASS**
-- Windows / DeepSeek Manual Acceptance：**PENDING**（等待 Ethan 人工验收）
-- Overall：**PENDING**
+- Windows / DeepSeek Manual Acceptance：**PASS**（Ethan 已确认）
+- Overall：**COMPLETE**
 - Phase 4.8：**NOT STARTED**
 
 ### 修改与 Proposal 根因
@@ -132,3 +124,37 @@ SQLite：schema `7`，migration `0`
 - 未改产品身份、版本号、SQLite schema、migration、AI 权限或原始 Inbox 内容；README / CHANGELOG 未修改。
 - 未运行 production EXE；未安装 NSIS/MSI；未访问 Release 用户数据库；未发起真实 DeepSeek 请求。
 - 等待 Ethan 检查 Diary / Inbox 样式、Inbox 草稿字段编辑与 Proposal 确认、Task 新建/编辑及 TimeBlock 弹窗视觉。自动化结果不代表 Windows 人工验收通过。
+
+### Inbox AI 语义拆分与标题归一化补充（2026-09-27）
+
+- Interpretation 结构增加独立 `description` 与 `location`；指令要求模型拆分核心动作/对象、来源、时间、补充说明，并将 Inbox 原文视为不可信资料。
+- 本地归一化再校验标题：清理来源套话、时间、地点、时长及补充要求；可确定的周几、中文日期/时间、地点和持续时长由本地解析；模糊日期保留不确定提示，不猜日期。模型把原文作为标题时会回退到本地拆分，并显示“AI 没有充分拆分这条通知，请检查标题和详细信息。”；无法形成安全标题时留空并要求用户编辑。
+- 描述、截止/活动时间、地点进入当前可编辑草稿；Proposal 继续只使用当前编辑草稿。raw Inbox 内容、Inbox parse payload 与持久化均未更改；没有 schema/migration 变更。
+
+#### 针对性验证
+
+| 检查 | 结果 |
+|---|---|
+| `node --test tests/unit/ai-sensitive-workflows.test.mjs tests/unit/inbox.test.mjs` | **PASS** — 32/32 |
+| `npm run test:arch` | **PASS** — 135/135 |
+| Inbox editable UI regression（隔离端口） | **PASS** — 1/1；可见标题/说明字段、编辑恢复、Proposal 草稿和原文只读 |
+| `npm run typecheck` | **PASS** |
+| `npm run lint` | **PASS** |
+| changed-file Prettier check | **PASS** |
+| 完整 `npm run verify` / Production Build | 本补充当时未运行；最终关闭门禁结果见下方“最终关闭门禁” |
+
+#### Ethan 人工验收
+
+Ethan 已确认 Phase 4.7 / 4.7-P 的真实 Windows + DeepSeek 验收通过，范围包括 Inbox 语义拆分、可编辑草稿、Proposal、Prompt Injection / 安全边界及 UI 修整。具体验收观察由 Ethan 实机完成；本记录不将其表述为 Codex 自动 GUI 测试。
+
+### 最终关闭门禁（2026-09-27）
+
+| 检查 | 结果 |
+|---|---|
+| `npm run verify` | **PASS** — unit 366/366；architecture 135/135；Playwright 1038 passed、15 skipped；typecheck、lint、Prettier、frontend build PASS |
+| Rust 源码变更 | **无** — 本次待提交差异未修改 Rust，因此本轮未重复 Cargo 门禁 |
+| SQLite schema / migration | **schema 7 / 新增 migration 0** |
+| `npm run tauri build` | **PASS** — 当前工作区构建 EXE、MSI、NSIS 和 MSI/NSIS updater `.sig`；仅构建，未运行 EXE、未安装安装包、未访问 Release 数据库 |
+| 工作区差异检查 | `git diff --check` **PASS** |
+
+最终构建资产位于被忽略的 `src-tauri/target/release`，不纳入 Git。Phase 4.7 与 Phase 4.7-P 现正式关闭；Phase 4.8 在本次关闭提交时仍为 **NOT STARTED**。

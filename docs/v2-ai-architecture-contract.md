@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0–4.6 COMPLETE；Phase 4.7 Implementation COMPLETE、Automated PASS、DeepSeek Live PENDING、Overall PENDING；Phase 4.8 NOT STARTED。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 增加一次性 Today Assistant；Phase 4.6 扩展本地可信 Planner 路由与未来日期提案；Phase 4.7 增加单条 Diary / Inbox 的 Consent-gated 工作流。无 AI Apply Tool、聊天历史或持久化 AI 状态。Phase 4.7 DeepSeek Live 尚未执行。
+状态：**Phase 4.0–4.7-P COMPLETE；Phase 4.7 / 4.7-P 自动门禁 PASS，Ethan 确认 DeepSeek / Windows 人工验收 PASS；Phase 4.8 在阶段关闭时 NOT STARTED。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 增加一次性 Today Assistant；Phase 4.6 扩展本地可信 Planner 路由与未来日期提案；Phase 4.7 增加单条 Diary / Inbox 的 Consent-gated 工作流。无 AI Apply Tool、聊天历史或持久化 AI 状态。
 
 ## 1. 产品定位
 
@@ -156,5 +156,6 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 - Diary / Inbox 正文、完整 prompt、模型输出、Proposal payload 和 API Key 不进入应用日志或持久存储。请求与结果只存在本次运行内存；无 history、memory、RAG、vector DB、后台扫描或自动请求。
 - Inbox 解释不会自动产生 Proposal。用户必须在识别结果后第二次点击任务/活动 CTA；task 与 event 分别只暴露自身 Proposal Tool，不开放 TimeBlock Tool，也不向 Proposal/Preview 传递完整 raw。Proposal 仍须本地预览、重校验、用户确认后调用 Inbox Application UseCase；重复确认服从既有 idempotency。
 - Phase 4.7-P 的 Inbox 识别草稿只存在当前 UI 会话内，用户可本地编辑标题、描述及对应 Task/Event 字段；原始 Inbox 内容保持只读，不把编辑结果写回 raw 或 parse payload。生成 Proposal 时仅传当前选择的类型级 Tool，Proposal payload 采用经过本地校验的编辑草稿；确认仍要求既有 Review、Revalidate 与用户明确确认。
+- Inbox 语义归一化把模型返回视作不可信候选：本地校验标题、提取可确定的日期/时间/地点/时长并拆出补充说明；原文 passthrough 会回退为本地拆分并提示人工检查，模糊时间不猜测。Proposal 仍只使用当前可编辑 Draft，不从 rawText 重建。
 - Inbox AI 确认可原子转换 `pending` 且无 parse kind 的原始捕获，或 `needs_review/unknown` 项目；此路径只在本地 AI Proposal 确认后调用，不修改原始文本或解析结果。现有 `ready` 项仍必须与目标类型匹配，忽略项仍拒绝转换；SQLite schema/migration 不变。已知后端状态错误只映射为白名单用户提示，未知存储异常不回显数据库路径或内部细节。
-- Phase 4.7 与 4.7-P 的实现及 automated gate 记录见 [`v2-phase-4-7-verification.md`](v2-phase-4-7-verification.md)。Phase 4.7 DeepSeek Live：PENDING；Phase 4.7-P Windows Manual Acceptance：PENDING；Phase 4.8：NOT STARTED。
+- Phase 4.7 与 4.7-P 的实现、自动门禁和 Ethan 确认的 Windows / DeepSeek 人工验收见 [`v2-phase-4-7-verification.md`](v2-phase-4-7-verification.md)。Phase 4.7 Overall：COMPLETE；Phase 4.7-P Overall：COMPLETE；Phase 4.8：NOT STARTED（本契约更新时）。

@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4.0–4.6 COMPLETE；Phase 4.7 Implementation COMPLETE、Automated PASS、DeepSeek Live PENDING、Overall PENDING；Phase 4.7-P Implementation COMPLETE、Automated PASS、Manual Acceptance PENDING、Overall PENDING；Phase 4.8 NOT STARTED。** Phase 4.7-P 为 Diary / Inbox / Task 弹窗体验精修及 Inbox 识别草稿本地编辑；Proposal 确认根因已修复，schema 仍为 7、migration 0。Phase 4.7 原有敏感工作流与权限边界保持不变，详细自动验证和未执行的人工验收见 `docs/v2-phase-4-7-verification.md`。
+- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4.0–4.6 COMPLETE；Phase 4.7 COMPLETE（Implementation COMPLETE、Automated PASS、DeepSeek / Windows Manual PASS）；Phase 4.7-P COMPLETE（Implementation COMPLETE、Automated PASS、Manual Acceptance PASS）；Phase 4.8 NOT STARTED。** Ethan 已确认 Phase 4.7 / 4.7-P 真实 Windows + DeepSeek 验收通过，涵盖 Inbox 语义拆分、可编辑草稿、Proposal、安全边界与 UI；raw Inbox 仍只读、Proposal 仍只用用户可编辑草稿，schema=7、migration=0。阶段及最终关闭门禁记录见 `docs/v2-phase-4-7-verification.md`。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 是唯一外网能力且默认关闭，手动搜索仅在提交后请求 Photon 并只保存最终选中地点，当前位置需明确同意、系统授权和坐标模糊化；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 

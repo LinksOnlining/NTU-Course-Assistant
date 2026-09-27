@@ -13,6 +13,9 @@ test("Inbox AI 识别草稿可本地编辑、切换为活动后生成建议且�
 
   const editor = page.getByRole("region", { name: "可编辑识别草稿" });
   await expect(editor).toBeVisible();
+  await expect(editor.getByLabel("标题")).toHaveValue("AI 识别标题");
+  await expect(editor.getByLabel("描述")).toHaveValue("AI 识别说明");
+  await expect(page.getByText("详细说明", { exact: true })).toBeVisible();
   await editor.getByLabel("整理为").selectOption("event");
   await editor.getByLabel("标题").fill("临时修改");
   await editor.getByRole("button", { name: "恢复 AI 原始识别" }).click();
