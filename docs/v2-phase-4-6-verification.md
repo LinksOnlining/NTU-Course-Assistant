@@ -66,7 +66,7 @@ UI tests 中 15 项为既有条件跳过；Playwright 可能记录 Tauri mock `c
 | `NTU Course Assistant_1.3.1_x64-setup.exe` | 52,433,468 | `4F9F84A0710E26D367F06851E3A7EF26F90A4A86D6AA6DBC7FC149CCC4A52309` |
 | `NTU Course Assistant_1.3.1_x64-setup.exe.sig` | 436 | `9015B61ECACFB1D817E0D7E358C7E526F2E5C34F309B3868DC39C9DD54B474A1` |
 
-**没有运行 EXE、没有安装 installer、没有访问 Release 用户数据库、没有执行真实 DeepSeek 请求。** 本 build 仅证明当前工作树可完成 production packaging；不是新版本 Release。只读核验的数据库是独立 `dev-v2` 数据库，仅得到任务匹配计数 `0`。
+**本机 build 核验未运行 EXE、未安装 installer、未访问 Release 用户数据库，也未发起真实 DeepSeek 请求。** 这些限制仅描述构建验证范围；Ethan 后续单独完成的 Windows / DeepSeek Live 验收结果见下文。该 build 仅证明当前工作树可完成 production packaging；不是新版本 Release。只读核验的数据库是独立 `dev-v2` 数据库，仅得到任务匹配计数 `0`。
 
 ## Ethan Windows / DeepSeek 人工验收结果
 
