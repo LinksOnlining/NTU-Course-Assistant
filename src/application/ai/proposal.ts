@@ -55,6 +55,7 @@ export interface AiProposalBase<
 
 export interface TaskProposalPayload {
   readonly title: string;
+  readonly description?: string;
   readonly deadlineDate: string | null;
   readonly deadlineTime: string | null;
   readonly priority: "none" | "low" | "medium" | "high";
@@ -62,6 +63,7 @@ export interface TaskProposalPayload {
 
 export interface EventProposalPayload {
   readonly title: string;
+  readonly description?: string;
   readonly date: string;
   readonly startTime: string;
   readonly endTime: string;

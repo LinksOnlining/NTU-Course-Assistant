@@ -68,7 +68,7 @@ export function TimeBlockEditor({
   return (
     <div className="workspace-task-backdrop">
       <section
-        className="workspace-task-dialog"
+        className="workspace-task-dialog workspace-task-dialog--time-block"
         role="dialog"
         aria-modal="true"
         aria-label={block ? "编辑任务时间" : "安排任务时间"}

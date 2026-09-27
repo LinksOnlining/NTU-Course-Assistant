@@ -283,6 +283,37 @@
   margin-top: var(--space-2);
 }
 
+.workspace-task-dialog--editor {
+  padding: 30px;
+}
+
+.workspace-task-dialog--editor > header {
+  margin-bottom: var(--space-2);
+}
+
+.workspace-task-dialog--editor form {
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.workspace-task-dialog--editor label {
+  gap: var(--space-2);
+}
+
+.workspace-task-dialog--editor .workspace-task-deadline-fields {
+  gap: var(--space-4);
+}
+
+.workspace-task-dialog--editor footer {
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+.workspace-task-dialog--editor .workspace-task-close:hover {
+  background: var(--surface-hover);
+}
+
 .workspace-task-button:focus-visible,
 .workspace-task-row button:focus-visible,
 .workspace-task-tabs button:focus-visible,
@@ -301,5 +332,9 @@
 
   .workspace-task-row-actions {
     flex-direction: column;
+  }
+
+  .workspace-task-dialog--editor {
+    padding: 24px;
   }
 }

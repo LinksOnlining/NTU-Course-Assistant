@@ -108,8 +108,8 @@ export function validateInboxTaskProposal(proposal: InboxProposal): string | nul
     Object.values(
       validatePersonalTaskDraft({
         title: proposal.title,
-        description: "",
-        priority: "none",
+        description: proposal.description ?? "",
+        priority: proposal.priority ?? "none",
         deadlineDate: proposal.deadlineDate ?? "",
         deadlineTime: proposal.deadlineTime ?? "",
       }),
@@ -122,11 +122,11 @@ export function validateInboxEventProposal(proposal: InboxProposal): string | nu
     Object.values(
       validatePlannerEventDraft({
         title: proposal.title,
-        description: "",
+        description: proposal.description ?? "",
         date: proposal.date ?? "",
         startTime: proposal.startTime ?? "",
         endTime: proposal.endTime ?? "",
-        location: "",
+        location: proposal.location ?? "",
         bufferBeforeMinutes: 0,
         bufferAfterMinutes: 0,
       }),
@@ -158,9 +158,9 @@ export async function confirmInboxTaskById(
   return repository.confirmInboxAsTask(inboxItemId, {
     id,
     title: proposal.title.trim(),
-    description: null,
+    description: proposal.description?.trim() || null,
     status: "open",
-    priority: "none",
+    priority: proposal.priority ?? "none",
     deadlineDate: proposal.deadlineDate,
     deadlineTime: proposal.deadlineTime,
     createdAt: timestamp,
@@ -193,11 +193,11 @@ export async function confirmInboxEventById(
   return repository.confirmInboxAsEvent(inboxItemId, {
     id,
     title: proposal.title.trim(),
-    description: null,
+    description: proposal.description?.trim() || null,
     date: proposal.date ?? "",
     startTime: proposal.startTime ?? "",
     endTime: proposal.endTime ?? "",
-    location: null,
+    location: proposal.location?.trim() || null,
     bufferBeforeMinutes: 0,
     bufferAfterMinutes: 0,
     createdAt: timestamp,

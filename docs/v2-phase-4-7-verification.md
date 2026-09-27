@@ -80,3 +80,55 @@ SQLite：schema `7`，migration `0`
 - README / CHANGELOG：未修改。
 - v2.0 未发布；本阶段不 push、不创建 tag、不发布 Release。
 - Phase 4.8、AI Final Acceptance、Conversation Persistence、AI Memory、RAG、Vector Database 均未开始。
+
+---
+
+## Phase 4.7-P — AI / Inbox / Task UI Polish + Inbox Editable Recognition
+
+日期：2026-09-27<br>
+分支：`v2/workspace-rebase`<br>
+起始基线：`6759c9f3d9626c58aab12c427cd2d23d858984cc`<br>
+SQLite：schema `7`，migration `0`
+
+### 阶段状态
+
+- Implementation：**COMPLETE**
+- Automated：**PASS**
+- Windows / DeepSeek Manual Acceptance：**PENDING**（等待 Ethan 人工验收）
+- Overall：**PENDING**
+- Phase 4.8：**NOT STARTED**
+
+### 修改与 Proposal 根因
+
+- Diary 的 AI 操作按钮沿用次级按钮样式；整理结果改为有留白的卡片与受限行长。Inbox AI 按钮、识别结果卡片及本地草稿编辑区统一为产品控件样式。
+- Inbox 识别结果可在当前会话中编辑：任务支持标题、描述、优先级、截止日期/时间；活动支持标题、描述、日期、起止时间与地点；类型不明时可手动选任务或活动，并可恢复 AI 初始识别草稿。原始 Inbox 文本保持只读，编辑值不写回 Inbox 或解析存储。
+- Proposal 确认红字的后端根因：AI Inbox 解释不会调用 parser preview / `saveInboxParseResult`，原始项仍为 `pending`（parse kind 为空）或 `needs_review/unknown`；Rust 原子确认原先只接受 `ready` 且 parse kind 与目标一致，因而拒绝确认。前端此前又把 Tauri 的字符串错误降级为通用错误。
+- 修复：保留事务、幂等与 ready 类型匹配约束；支持经本地 Proposal Review 后确认 pending/unknown 项而不改 raw/parse 数据；补 Rust 回归。确认失败仅将已知状态错误映射为具体提示，未知 backend 错误继续隐藏内部信息/路径。
+- 任务新建/编辑与 TimeBlock 弹窗增加局部内边距、字段组间距、标签间距及 footer 留白；Diary / Inbox 按钮及结果呈现完成小范围样式调整。未修改字段顺序、业务校验、schema 或版本号。
+
+### 自动验证
+
+| 检查 | 结果 |
+|---|---|
+| `npm run verify` | **PASS** — unit 356/356；architecture 135/135；UI 1038 passed、15 skipped；typecheck、lint、Prettier、frontend build PASS |
+| Inbox editable UI regression | **PASS** — 本地切换类型、编辑/恢复草稿、按编辑值生成活动 Proposal，原始 Inbox 不变；页面无运行时错误 |
+| Inbox task Proposal adapter | **PASS** — 只采用本地规范草稿；Provider 返回不匹配参数时拒绝 |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | **PASS** — 98 passed，0 failed |
+| `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` | **PASS** |
+| `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` | **PASS** |
+| `npm run tauri build` | **PASS** — Windows x64 EXE、MSI、NSIS 与 MSI/NSIS updater `.sig` 生成；仅构建 |
+
+当前 build 资产位于 `src-tauri/target/release/bundle`，均为本地未跟踪构建产物：
+
+| 文件 | 大小 |
+|---|---:|
+| `NTU Course Assistant_1.3.1_x64_en-US.msi` | 54,398,976 bytes |
+| `NTU Course Assistant_1.3.1_x64_en-US.msi.sig` | 436 bytes |
+| `NTU Course Assistant_1.3.1_x64-setup.exe` | 52,412,274 bytes |
+| `NTU Course Assistant_1.3.1_x64-setup.exe.sig` | 436 bytes |
+
+### 范围与人工验收
+
+- 未改产品身份、版本号、SQLite schema、migration、AI 权限或原始 Inbox 内容；README / CHANGELOG 未修改。
+- 未运行 production EXE；未安装 NSIS/MSI；未访问 Release 用户数据库；未发起真实 DeepSeek 请求。
+- 等待 Ethan 检查 Diary / Inbox 样式、Inbox 草稿字段编辑与 Proposal 确认、Task 新建/编辑及 TimeBlock 弹窗视觉。自动化结果不代表 Windows 人工验收通过。

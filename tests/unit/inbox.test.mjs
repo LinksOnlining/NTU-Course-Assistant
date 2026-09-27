@@ -167,6 +167,8 @@ test("reviewed proposal fields are used for task and event confirmation", async 
   const taskProposal = {
     kind: "task",
     title: "用户编辑后的任务",
+    description: "补充了任务说明",
+    priority: "high",
     date: null,
     startTime: null,
     endTime: null,
@@ -176,6 +178,8 @@ test("reviewed proposal fields are used for task and event confirmation", async 
   const eventProposal = {
     kind: "event",
     title: "用户编辑后的日程",
+    description: "补充了活动说明",
+    location: "图书馆",
     date: "2026-09-26",
     startTime: "10:00",
     endTime: "11:00",
@@ -197,7 +201,11 @@ test("reviewed proposal fields are used for task and event confirmation", async 
     "event-id",
   );
   assert.equal(createdTask.title, "用户编辑后的任务");
+  assert.equal(createdTask.description, "补充了任务说明");
+  assert.equal(createdTask.priority, "high");
   assert.equal(createdTask.deadlineDate, "2026-09-25");
   assert.equal(createdEvent.date, "2026-09-26");
   assert.equal(createdEvent.endTime, "11:00");
+  assert.equal(createdEvent.description, "补充了活动说明");
+  assert.equal(createdEvent.location, "图书馆");
 });

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { aiToolRegistry } from "../../src/application/ai/tool-runtime-registry.ts";
+import { AI_PROPOSAL_TOOL_ADAPTERS } from "../../src/application/ai/proposal-tool-adapters.ts";
+import { aiPlannerProposalRuntime } from "../../src/application/ai/proposal-runtime.ts";
 import {
   createSensitiveAiService,
   diaryReflectionSchema,
@@ -148,7 +150,12 @@ function makeProposalTestRuntime() {
     async execute(value, context) {
       let proposal;
       if (definition.id === "planner.propose-task") {
-        proposal = await runtime.proposeTask(value, "deepseek");
+        const constraint = context.proposalConstraint;
+        const payload =
+          constraint?.toolId === "planner.propose-task" && constraint.canonicalPayload
+            ? constraint.canonicalPayload
+            : value;
+        proposal = await runtime.proposeTask(payload, "deepseek");
       } else {
         const candidateId = value.candidateId;
         const constraint = context.proposalConstraint;
@@ -181,6 +188,48 @@ function makeProposalTestRuntime() {
   };
   return { proposalRuntime: runtime, registry };
 }
+
+test("Inbox Task Proposal adapter uses the canonical edited draft and rejects altered tool arguments", async () => {
+  const adapter = AI_PROPOSAL_TOOL_ADAPTERS.find(({ id }) => id === "planner.propose-task");
+  assert.ok(adapter);
+  const proposals = [];
+  const canonicalPayload = {
+    title: "编辑后的任务",
+    description: "本地草稿说明",
+    deadlineDate: "2030-09-25",
+    deadlineTime: "17:30",
+    priority: "high",
+  };
+  const context = {
+    requestId: "inbox-task-adapter-test",
+    providerId: "deepseek",
+    proposalConstraint: {
+      toolId: "planner.propose-task",
+      arguments: {
+        title: canonicalPayload.title,
+        deadlineDate: canonicalPayload.deadlineDate,
+        deadlineTime: canonicalPayload.deadlineTime,
+        priority: canonicalPayload.priority,
+      },
+      canonicalPayload,
+    },
+    reportProposal: (proposal) => proposals.push(proposal),
+  };
+  try {
+    await adapter.execute(context.proposalConstraint.arguments, context);
+    assert.deepEqual(proposals[0].payload, canonicalPayload);
+    await assert.rejects(
+      adapter.execute(
+        { ...context.proposalConstraint.arguments, title: "Provider 篡改标题" },
+        context,
+      ),
+      /本地核验草稿不一致/u,
+    );
+    assert.equal(proposals.length, 1);
+  } finally {
+    if (proposals[0]?.id) aiPlannerProposalRuntime.cancel(proposals[0].id);
+  }
+});
 
 test("敏感正文不属于持久权限；Diary request 只投影被选中的 untrusted envelope", async () => {
   assert.equal(AI_PERSISTENT_READ_PERMISSION_IDS.includes("diary.body.read"), false);
@@ -299,8 +348,25 @@ test("Inbox 解释阶段不暴露 Proposal Tool；显式任务操作只暴露任
   const interpreted = await service.interpretSelectedInbox(item);
   assert.equal(toolRequests.length, 0);
   assert.equal(interpreted.status, "ready");
-  const proposal = await service.proposeInboxTask({ id: item.id }, interpreted.result);
+  const proposal = await service.proposeInboxTask({ id: item.id }, interpreted.result, {
+    title: "整理复习材料",
+    description: "先整理课程讲义，再列出待复习章节。",
+    priority: "high",
+    deadlineDate: "2026-09-25",
+    deadlineTime: "19:30",
+    date: "",
+    startTime: "",
+    endTime: "",
+    location: "",
+  });
   assert.equal(proposal.status, "ready");
+  assert.deepEqual(proposal.proposal.payload, {
+    title: "整理复习材料",
+    description: "先整理课程讲义，再列出待复习章节。",
+    deadlineDate: "2026-09-25",
+    deadlineTime: "19:30",
+    priority: "high",
+  });
   assert.deepEqual(
     toolRequests[0].tools.map((tool) => tool.name),
     ["planner_propose_task"],
@@ -323,7 +389,9 @@ test("Inbox 解释阶段不暴露 Proposal Tool；显式任务操作只暴露任
   assert.equal(confirmed.status, "applied");
   assert.equal(applicationWrites.length, 1);
   assert.equal(applicationWrites[0].itemId, item.id);
-  assert.equal(applicationWrites[0].proposal.title, "整理材料");
+  assert.equal(applicationWrites[0].proposal.title, "整理复习材料");
+  assert.equal(applicationWrites[0].proposal.description, "先整理课程讲义，再列出待复习章节。");
+  assert.equal(applicationWrites[0].proposal.priority, "high");
   const repeated = await service.confirmInboxProposal(item.id, proposal.proposal);
   assert.equal(repeated.status, "alreadyApplied");
   assert.equal(applicationWrites.length, 1);
@@ -381,6 +449,31 @@ test("取消 Inbox Proposal 后，即使尝试确认也不会调用 Application 
   assert.equal(applicationWrites.length, 0);
 });
 
+test("本地识别草稿缺少必要字段时在调用 Provider 前给出明确提示", async () => {
+  const { service, toolRequests } = makeService({ structured: inboxResult });
+  const item = {
+    id: "inbox-draft-validation",
+    rawText: "准备安排一项活动",
+    createdAt: "2026-09-23T04:00:00.000Z",
+  };
+  const interpreted = await service.interpretSelectedInbox(item);
+  assert.equal(interpreted.status, "ready");
+  const task = await service.proposeInboxTask({ id: item.id }, interpreted.result, {
+    title: "   ",
+    description: "",
+    priority: "none",
+    deadlineDate: "",
+    deadlineTime: "",
+    date: "",
+    startTime: "",
+    endTime: "",
+    location: "",
+  });
+  assert.equal(task.status, "failed");
+  assert.match(task.message, /任务标题/u);
+  assert.equal(toolRequests.length, 0);
+});
+
 test("显式活动提案只暴露 Event Tool；没有本地明确时间时不得生成活动提案", async () => {
   const { service, toolRequests } = makeService({ structured: inboxResult });
   const vague = await service.proposeInboxEvent({ id: "inbox-vague" }, inboxResult);
@@ -426,8 +519,29 @@ test("显式活动提案只暴露 Event Tool；没有本地明确时间时不得
   const event = await eventTool.service.proposeInboxEvent(
     { id: explicitItem.id },
     interpreted.result,
+    {
+      title: "晨间慢跑",
+      description: "沿河跑步，结束后拉伸。",
+      priority: "none",
+      deadlineDate: "",
+      deadlineTime: "",
+      date: "2026-09-25",
+      startTime: "07:00",
+      endTime: "07:45",
+      location: "滨河步道",
+    },
   );
   assert.equal(event.status, "ready");
+  assert.deepEqual(event.proposal.payload, {
+    title: "晨间慢跑",
+    description: "沿河跑步，结束后拉伸。",
+    date: "2026-09-25",
+    startTime: "07:00",
+    endTime: "07:45",
+    location: "滨河步道",
+    bufferBeforeMinutes: 0,
+    bufferAfterMinutes: 0,
+  });
   assert.deepEqual(
     eventCalls[0].tools.map((tool) => tool.name),
     ["planner_propose_event"],
@@ -436,7 +550,7 @@ test("显式活动提案只暴露 Event Tool；没有本地明确时间时不得
   assert.doesNotMatch(JSON.stringify(event.proposal), /PRIVATE_EVENT_SENTINEL/u);
   assert.deepEqual(
     event.proposal.preview.fields.map(({ value }) => value),
-    ["慢跑"],
+    ["晨间慢跑"],
   );
 });
 

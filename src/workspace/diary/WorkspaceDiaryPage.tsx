@@ -296,7 +296,7 @@ export function WorkspaceDiaryPage({
             {body.trim() && (
               <button
                 type="button"
-                className="workspace-diary-ai-button"
+                className="secondary-button workspace-diary-ai-button"
                 onClick={() => void requestDiaryAi()}
                 disabled={aiBusy || loading || switching}
               >

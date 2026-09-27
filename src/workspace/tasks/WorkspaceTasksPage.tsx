@@ -89,7 +89,7 @@ function TaskEditor({
   return (
     <div className="workspace-task-backdrop">
       <section
-        className="workspace-task-dialog"
+        className="workspace-task-dialog workspace-task-dialog--editor"
         role="dialog"
         aria-modal="true"
         aria-label={task ? "编辑个人任务" : "新建个人任务"}

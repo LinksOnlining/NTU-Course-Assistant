@@ -35,8 +35,9 @@ test("只有单次授权回调可以启动 Diary / Inbox 敏感请求，取消�
   assert.match(diary, /onAllowOnce=\{\(\) => void allowDiaryAiOnce\(\)\}/u);
   assert.match(diary, /sensitiveAiService\.reflectSelectedDiary\(selectedEntry\)/u);
   assert.match(diary, /onDismiss=\{\(\) => setAiConsentDate\(null\)\}/u);
+  assert.match(inbox, /const service = aiService \?\? sensitiveAiService/u);
   assert.match(inbox, /onAllowOnce=\{\(\) => void allowOnce\(\)\}/u);
-  assert.match(inbox, /sensitiveAiService\.interpretSelectedInbox\(item\)/u);
+  assert.match(inbox, /service\.interpretSelectedInbox\(item\)/u);
   assert.match(inbox, /onDismiss=\{\(\) => setConsentOpen\(false\)\}/u);
 });
 

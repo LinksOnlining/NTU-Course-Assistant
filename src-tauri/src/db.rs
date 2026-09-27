@@ -2163,7 +2163,14 @@ fn ensure_inbox_can_confirm(
             "已忽略的收件箱内容不能转换".into(),
         ));
     }
-    if record.0 != "ready" || record.1.as_deref() != Some(expected_kind) {
+    let preview_matches = record.0 == "ready" && record.1.as_deref() == Some(expected_kind);
+    // AI-assisted Inbox proposals are reviewed in the application before this
+    // atomic confirmation command. They may originate from an unparsed capture
+    // (pending) or a locally ambiguous capture (needs_review/unknown); no parse
+    // metadata is written because the original Inbox text remains the source.
+    let ai_review_matches = (record.0 == "pending" && record.1.is_none())
+        || (record.0 == "needs_review" && record.1.as_deref() == Some("unknown"));
+    if !preview_matches && !ai_review_matches {
         return Err(StorageError::InvalidData(
             "收件箱内容尚未完成对应类型的预览确认".into(),
         ));
@@ -3655,10 +3662,19 @@ mod tests {
         assert_eq!(database.load_personal_tasks().unwrap().len(), 1);
 
         database
-            .create_inbox_item("inbox-unparsed", "raw only", "2026-09-24T08:00:00Z")
+            .create_inbox_item("inbox-wrong-kind", "raw only", "2026-09-24T08:00:00Z")
+            .unwrap();
+        database
+            .save_inbox_parse_result(
+                "inbox-wrong-kind",
+                "event",
+                r#"{"kind":"event","title":"raw only"}"#,
+                "inbox-parser-v1",
+                "2026-09-24T08:00:01Z",
+            )
             .unwrap();
         assert!(database
-            .confirm_inbox_as_task("inbox-unparsed", &personal_task("unparsed-task"))
+            .confirm_inbox_as_task("inbox-wrong-kind", &personal_task("wrong-kind-task"))
             .is_err());
         assert_eq!(database.load_personal_tasks().unwrap().len(), 1);
         assert_eq!(
@@ -3697,6 +3713,57 @@ mod tests {
         assert_eq!(
             database
                 .load_planner_events("2026-09-25", "2026-09-25")
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn ai_inbox_confirmation_accepts_unparsed_and_ambiguous_items_without_changing_raw_text() {
+        let database = database();
+        database
+            .create_inbox_item("ai-pending-task", "任务：复习材料", "2026-09-24T08:00:00Z")
+            .unwrap();
+        let task = personal_task("ai-task-target");
+        database
+            .confirm_inbox_as_task("ai-pending-task", &task)
+            .expect("confirmed AI task proposal can atomically use a fresh Inbox capture");
+        let confirmed_task = database
+            .load_inbox_item("ai-pending-task")
+            .unwrap()
+            .unwrap();
+        assert_eq!(confirmed_task.raw_text, "任务：复习材料");
+        assert_eq!(confirmed_task.status, "confirmed");
+        assert_eq!(confirmed_task.parse_kind, None);
+
+        database
+            .create_inbox_item("ai-ambiguous-event", "周末去图书馆", "2026-09-24T08:00:00Z")
+            .unwrap();
+        database
+            .save_inbox_parse_result(
+                "ai-ambiguous-event",
+                "unknown",
+                r#"{"kind":"unknown","title":"周末去图书馆"}"#,
+                "inbox-parser-v1",
+                "2026-09-24T08:00:01Z",
+            )
+            .unwrap();
+        let event = planner_event("ai-event-target", "2026-09-26");
+        database
+            .confirm_inbox_as_event("ai-ambiguous-event", &event)
+            .expect("confirmed AI event proposal can resolve an ambiguous Inbox capture");
+        let confirmed_event = database
+            .load_inbox_item("ai-ambiguous-event")
+            .unwrap()
+            .unwrap();
+        assert_eq!(confirmed_event.raw_text, "周末去图书馆");
+        assert_eq!(confirmed_event.status, "confirmed");
+        assert_eq!(confirmed_event.parse_kind.as_deref(), Some("unknown"));
+        assert_eq!(database.load_personal_tasks().unwrap().len(), 1);
+        assert_eq!(
+            database
+                .load_planner_events("2026-09-26", "2026-09-26")
                 .unwrap()
                 .len(),
             1

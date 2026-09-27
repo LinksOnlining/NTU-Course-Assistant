@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4.0–4.6 COMPLETE；Phase 4.7 Implementation COMPLETE、Automated PASS、DeepSeek Live PENDING、Overall PENDING；Phase 4.8 NOT STARTED。** Phase 4.7 新增经单次对象级同意的 Diary 整理与 Inbox 识别；敏感 grant 仅绑定一次 request 和单一对象、只在内存消费，不保存正文、结果或历史。Inbox 的任务/活动提案必须由用户再次单独发起，分别只开放一个 Proposal Tool，并沿用本地 Preview、Revalidate、确认与 Application UseCase；无 Apply Tool、全量扫描、后台请求、RAG 或 AI Memory。Prompt Injection 内容按不可信数据封装，DeepSeek Live 尚未执行。SQLite schema 维持 7、migration 0；详见 `docs/v2-phase-4-7-verification.md`。
+- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4.0–4.6 COMPLETE；Phase 4.7 Implementation COMPLETE、Automated PASS、DeepSeek Live PENDING、Overall PENDING；Phase 4.7-P Implementation COMPLETE、Automated PASS、Manual Acceptance PENDING、Overall PENDING；Phase 4.8 NOT STARTED。** Phase 4.7-P 为 Diary / Inbox / Task 弹窗体验精修及 Inbox 识别草稿本地编辑；Proposal 确认根因已修复，schema 仍为 7、migration 0。Phase 4.7 原有敏感工作流与权限边界保持不变，详细自动验证和未执行的人工验收见 `docs/v2-phase-4-7-verification.md`。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 是唯一外网能力且默认关闭，手动搜索仅在提交后请求 Photon 并只保存最终选中地点，当前位置需明确同意、系统授权和坐标模糊化；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 

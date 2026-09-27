@@ -342,6 +342,52 @@ test("过期提案和写入失败均不会形成重复写入；失败状态为�
   );
 });
 
+test("Proposal 将已知 Tauri Inbox 状态错误映射为安全且可理解的提示", async () => {
+  const runtime = createAiPlannerProposalRuntime({ ports: runtimePorts().ports });
+  const proposal = await runtime.proposeTask(
+    {
+      title: "从收件箱创建任务",
+      deadlineDate: null,
+      deadlineTime: null,
+      priority: "none",
+    },
+    "deepseek",
+  );
+  const failureMessage = "收件箱内容尚未完成对应类型的预览确认";
+  const result = await runtime.apply({
+    id: proposal.id,
+    confirmed: true,
+    expectedPreviewRevision: proposal.preview.revision,
+    permissionIds: ["planner.propose"],
+    applicationCommit: async () => {
+      throw failureMessage;
+    },
+  });
+  assert.equal(result.status, "failed");
+  assert.equal(result.message, "收件箱识别状态已变化，无法确认这条提案。请重新识别后再试。");
+  const unknownFailure = await runtime.proposeTask(
+    {
+      title: "另一个任务",
+      deadlineDate: null,
+      deadlineTime: null,
+      priority: "none",
+    },
+    "deepseek",
+  );
+  const unknownResult = await runtime.apply({
+    id: unknownFailure.id,
+    confirmed: true,
+    expectedPreviewRevision: unknownFailure.preview.revision,
+    permissionIds: ["planner.propose"],
+    applicationCommit: async () => {
+      throw "D:\\private\\database.sqlite: sensitive backend detail";
+    },
+  });
+  assert.equal(unknownResult.status, "failed");
+  assert.equal(unknownResult.message, "保存提案失败，请检查当前数据后重试。");
+  assert.doesNotMatch(unknownResult.message, /database\.sqlite/u);
+});
+
 test("同一 Proposal 并发双确认最多只调用一次 Application UseCase", async () => {
   const fixture = runtimePorts({
     createTask: async (draft) => {

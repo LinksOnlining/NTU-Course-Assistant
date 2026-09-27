@@ -155,4 +155,6 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 - 敏感预算：Diary 正文最多 16 KiB UTF-8，Inbox 原文最多 8 KiB UTF-8，单个模块 envelope 最多 18 KiB，Context 最多 32 KiB；截断保留 `truncated` 与省略字节数，并在结果限制中展示。返回 schema 对未知字段、无效日期/时间及超长文本拒绝。
 - Diary / Inbox 正文、完整 prompt、模型输出、Proposal payload 和 API Key 不进入应用日志或持久存储。请求与结果只存在本次运行内存；无 history、memory、RAG、vector DB、后台扫描或自动请求。
 - Inbox 解释不会自动产生 Proposal。用户必须在识别结果后第二次点击任务/活动 CTA；task 与 event 分别只暴露自身 Proposal Tool，不开放 TimeBlock Tool，也不向 Proposal/Preview 传递完整 raw。Proposal 仍须本地预览、重校验、用户确认后调用 Inbox Application UseCase；重复确认服从既有 idempotency。
-- 本阶段实现与 automated gate 记录见 [`v2-phase-4-7-verification.md`](v2-phase-4-7-verification.md)。Phase 4.7 DeepSeek Live：PENDING；Phase 4.8：NOT STARTED。
+- Phase 4.7-P 的 Inbox 识别草稿只存在当前 UI 会话内，用户可本地编辑标题、描述及对应 Task/Event 字段；原始 Inbox 内容保持只读，不把编辑结果写回 raw 或 parse payload。生成 Proposal 时仅传当前选择的类型级 Tool，Proposal payload 采用经过本地校验的编辑草稿；确认仍要求既有 Review、Revalidate 与用户明确确认。
+- Inbox AI 确认可原子转换 `pending` 且无 parse kind 的原始捕获，或 `needs_review/unknown` 项目；此路径只在本地 AI Proposal 确认后调用，不修改原始文本或解析结果。现有 `ready` 项仍必须与目标类型匹配，忽略项仍拒绝转换；SQLite schema/migration 不变。已知后端状态错误只映射为白名单用户提示，未知存储异常不回显数据库路径或内部细节。
+- Phase 4.7 与 4.7-P 的实现及 automated gate 记录见 [`v2-phase-4-7-verification.md`](v2-phase-4-7-verification.md)。Phase 4.7 DeepSeek Live：PENDING；Phase 4.7-P Windows Manual Acceptance：PENDING；Phase 4.8：NOT STARTED。

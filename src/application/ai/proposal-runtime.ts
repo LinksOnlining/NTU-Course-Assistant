@@ -249,7 +249,7 @@ export function createAiPlannerProposalRuntime(
       const payload = normalizeTaskPayload(raw);
       const draft: PersonalTaskDraft = {
         title: payload.title,
-        description: "",
+        description: payload.description ?? "",
         priority: payload.priority,
         deadlineDate: payload.deadlineDate ?? "",
         deadlineTime: payload.deadlineTime ?? "",
@@ -262,6 +262,7 @@ export function createAiPlannerProposalRuntime(
         title: "建议创建任务",
         fields: [
           { label: "任务", value: payload.title },
+          ...(payload.description ? [{ label: "描述", value: payload.description }] : []),
           { label: "优先级", value: priorityLabel(payload.priority) },
           { label: "截止日期", value: payload.deadlineDate ?? "未设置" },
           { label: "截止时间", value: payload.deadlineTime ?? "未设置" },
@@ -272,7 +273,7 @@ export function createAiPlannerProposalRuntime(
       const payload = normalizeEventPayload(raw);
       const draft: PlannerEventDraft = {
         title: payload.title,
-        description: "",
+        description: payload.description ?? "",
         date: payload.date,
         startTime: payload.startTime,
         endTime: payload.endTime,
@@ -389,7 +390,7 @@ export function createAiPlannerProposalRuntime(
         const payload = approved.payload as TaskProposalPayload;
         const created = await ports.createTask({
           title: payload.title,
-          description: "",
+          description: payload.description ?? "",
           priority: payload.priority,
           deadlineDate: payload.deadlineDate ?? "",
           deadlineTime: payload.deadlineTime ?? "",
@@ -399,7 +400,7 @@ export function createAiPlannerProposalRuntime(
         const payload = approved.payload as EventProposalPayload;
         const created = await ports.createEvent({
           title: payload.title,
-          description: "",
+          description: payload.description ?? "",
           date: payload.date,
           startTime: payload.startTime,
           endTime: payload.endTime,
@@ -480,6 +481,7 @@ export const aiPlannerProposalRuntime = createAiPlannerProposalRuntime();
 function normalizeTaskPayload(input: TaskProposalPayload): TaskProposalPayload {
   return Object.freeze({
     title: normalizeText(input.title, 200),
+    ...(input.description?.trim() ? { description: normalizeText(input.description, 5000) } : {}),
     deadlineDate: input.deadlineDate ? validateDate(input.deadlineDate) : null,
     deadlineTime: input.deadlineTime ? validateTime(input.deadlineTime) : null,
     priority: input.priority,
@@ -489,6 +491,7 @@ function normalizeTaskPayload(input: TaskProposalPayload): TaskProposalPayload {
 function normalizeEventPayload(input: EventProposalPayload): EventProposalPayload {
   return Object.freeze({
     title: normalizeText(input.title, 200),
+    ...(input.description?.trim() ? { description: normalizeText(input.description, 5000) } : {}),
     date: validateDate(input.date),
     startTime: validateTime(input.startTime),
     endTime: validateTime(input.endTime),
@@ -543,6 +546,7 @@ function assertNoErrors(errors: Readonly<Record<string, string | undefined>>): v
 function eventFields(payload: EventProposalPayload): AiProposalPreview["fields"] {
   return Object.freeze([
     { label: "活动", value: payload.title },
+    ...(payload.description ? [{ label: "描述", value: payload.description }] : []),
     { label: "日期", value: payload.date },
     { label: "时间", value: `${payload.startTime}–${payload.endTime}` },
     { label: "时长", value: `${durationMinutes(payload)} 分钟` },
@@ -616,6 +620,23 @@ function pruneExpired(store: AiProposalStore, now: number): void {
 }
 
 function safeErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.length <= 240) return error.message;
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : typeof error === "object" &&
+            error !== null &&
+            "message" in error &&
+            typeof error.message === "string"
+          ? error.message
+          : "";
+  const normalized = message.trim();
+  if (normalized === "收件箱内容尚未完成对应类型的预览确认") {
+    return "收件箱识别状态已变化，无法确认这条提案。请重新识别后再试。";
+  }
+  if (normalized === "已忽略的收件箱内容不能转换") {
+    return "这条收件箱内容已忽略，无法转换。";
+  }
   return "保存提案失败，请检查当前数据后重试。";
 }

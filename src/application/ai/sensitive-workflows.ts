@@ -1,7 +1,13 @@
 import type { ObjectRef } from "../../navigation/types.ts";
 import type { DiaryEntry } from "../../types/diary.ts";
-import type { InboxItem, InboxParseKind } from "../../types/inbox.ts";
-import { confirmInboxEventById, confirmInboxTaskById } from "../inbox/inbox.ts";
+import type { InboxItem, InboxParseKind, InboxProposal } from "../../types/inbox.ts";
+import type { PersonalTaskPriority } from "../../types/personal-task.ts";
+import {
+  confirmInboxEventById,
+  confirmInboxTaskById,
+  validateInboxEventProposal,
+  validateInboxTaskProposal,
+} from "../inbox/inbox.ts";
 import { parseInboxText } from "../inbox/inbox-parser.ts";
 import { getShanghaiDate } from "../../core/reminder.ts";
 import { aiContextProvider, serializeAiContext } from "./context-builder.ts";
@@ -59,6 +65,19 @@ export interface InboxInterpretationResult {
   readonly limitations: readonly string[];
 }
 
+/** Local-only edits to a genuine, selected Inbox recognition result. */
+export interface InboxRecognitionDraft {
+  readonly title: string;
+  readonly description: string;
+  readonly priority: PersonalTaskPriority;
+  readonly deadlineDate: string;
+  readonly deadlineTime: string;
+  readonly date: string;
+  readonly startTime: string;
+  readonly endTime: string;
+  readonly location: string;
+}
+
 export type SensitiveAiResult<Value> =
   | {
       readonly status: "ready";
@@ -87,10 +106,12 @@ export interface SensitiveAiService {
   proposeInboxTask(
     item: Pick<InboxItem, "id">,
     result: InboxInterpretationResult,
+    draft?: InboxRecognitionDraft,
   ): Promise<InboxProposalResult>;
   proposeInboxEvent(
     item: Pick<InboxItem, "id">,
     result: InboxInterpretationResult,
+    draft?: InboxRecognitionDraft,
   ): Promise<InboxProposalResult>;
   confirmInboxProposal(itemId: string, proposal: AiPlannerProposal): Promise<AiProposalApplyResult>;
   cancelProposal(proposal: AiPlannerProposal): void;
@@ -385,6 +406,7 @@ export function createSensitiveAiService(input: {
     kind: "task" | "event",
     item: Pick<InboxItem, "id">,
     result: InboxInterpretationResult,
+    draftInput?: InboxRecognitionDraft,
   ): Promise<InboxProposalResult> {
     const key = `proposal:${kind}:${item.id}`;
     if (!validObjectId(item.id) || running.has(key)) return { status: "busy" };
@@ -395,9 +417,38 @@ export function createSensitiveAiService(input: {
     try {
       if (!(await isConfigured())) return { status: "unavailable" };
       const validated = inboxInterpretationSchema.parse(result);
-      const safeTitle = validated.title?.trim() ?? "";
-      if (!safeTitle || safeTitle.length > 200)
-        return { status: "failed", message: "识别结果缺少有效标题，无法生成提案。" };
+      const draft = draftInput ?? inboxRecognitionDraftFromResult(validated);
+      const title = draft.title.trim();
+      const description = draft.description.trim();
+      const proposalInput: InboxProposal =
+        kind === "task"
+          ? {
+              kind,
+              title,
+              description,
+              priority: draft.priority,
+              date: null,
+              startTime: null,
+              endTime: null,
+              deadlineDate: draft.deadlineDate.trim() || null,
+              deadlineTime: draft.deadlineTime.trim() || null,
+            }
+          : {
+              kind,
+              title,
+              description,
+              date: draft.date.trim() || null,
+              startTime: draft.startTime.trim() || null,
+              endTime: draft.endTime.trim() || null,
+              location: draft.location.trim() || null,
+              deadlineDate: null,
+              deadlineTime: null,
+            };
+      const validation =
+        kind === "task"
+          ? validateInboxTaskProposal(proposalInput)
+          : validateInboxEventProposal(proposalInput);
+      if (validation) return { status: "failed", message: validation };
       const requestId = createRequestId();
       const requestedAt = now();
       const timeContext = localTimeContext(requestedAt);
@@ -416,29 +467,33 @@ export function createSensitiveAiService(input: {
       const payload: TaskProposalPayload | EventProposalPayload =
         kind === "task"
           ? {
-              title: safeTitle,
-              deadlineDate: validated.deadlineDate,
-              deadlineTime: validated.deadlineTime,
-              priority: "none",
+              title,
+              description,
+              deadlineDate: proposalInput.deadlineDate,
+              deadlineTime: proposalInput.deadlineTime,
+              priority: proposalInput.priority ?? "none",
             }
           : {
-              title: safeTitle,
-              date: validated.date ?? "",
-              startTime: validated.startTime ?? "",
-              endTime: validated.endTime ?? "",
-              location: null,
+              title,
+              description,
+              date: proposalInput.date ?? "",
+              startTime: proposalInput.startTime ?? "",
+              endTime: proposalInput.endTime ?? "",
+              location: proposalInput.location ?? null,
               bufferBeforeMinutes: 0,
               bufferAfterMinutes: 0,
             };
-      if (kind === "event" && (!validated.date || !validated.startTime || !validated.endTime)) {
-        return {
-          status: "failed",
-          message: "活动建议需要可核实的日期、开始和结束时间；请先在本地整理预览中补全。",
-        };
-      }
       const toolId = kind === "task" ? "planner.propose-task" : "planner.propose-event";
       const candidateId = `inbox-${requestId.slice(0, 54)}`;
-      const toolArguments = kind === "task" ? payload : { candidateId };
+      const toolArguments =
+        kind === "task"
+          ? {
+              title,
+              deadlineDate: proposalInput.deadlineDate,
+              deadlineTime: proposalInput.deadlineTime,
+              priority: proposalInput.priority ?? "none",
+            }
+          : { candidateId };
       const intent: AiIntent = kind === "task" ? "inboxProposeTask" : "inboxProposeEvent";
       const request: AiRequest = Object.freeze({
         id: requestId,
@@ -458,7 +513,7 @@ export function createSensitiveAiService(input: {
         proposalConstraint: {
           toolId,
           arguments: toolArguments as unknown as AiJsonValue,
-          ...(kind === "event" ? { canonicalPayload: payload as unknown as AiJsonValue } : {}),
+          canonicalPayload: payload as unknown as AiJsonValue,
         },
       });
       if (resultOfLoop.status !== "proposalCreated" || resultOfLoop.proposal.type !== kind) {
@@ -500,11 +555,11 @@ export function createSensitiveAiService(input: {
           "请仅识别当前这一条 Inbox 内容的摘要、可能类型、标题以及明确写出的日期、时间或截止信息。模糊表达不得猜测，缺少信息时返回 null 并说明不确定项；不得创建任务或日程。",
       });
     },
-    proposeInboxTask(item, result) {
-      return proposalFromInbox("task", item, result);
+    proposeInboxTask(item, result, draft) {
+      return proposalFromInbox("task", item, result, draft);
     },
-    proposeInboxEvent(item, result) {
-      return proposalFromInbox("event", item, result);
+    proposeInboxEvent(item, result, draft) {
+      return proposalFromInbox("event", item, result, draft);
     },
     confirmInboxProposal(itemId, proposal) {
       if (proposalInboxItems.get(proposal.id) !== itemId)
@@ -522,6 +577,8 @@ export function createSensitiveAiService(input: {
               const confirmation = await confirmTask(itemId, {
                 kind: "task",
                 title: payload.title,
+                description: payload.description ?? "",
+                priority: payload.priority,
                 date: null,
                 startTime: null,
                 endTime: null,
@@ -536,6 +593,8 @@ export function createSensitiveAiService(input: {
               const confirmation = await confirmEvent(itemId, {
                 kind: "event",
                 title: payload.title,
+                description: payload.description ?? "",
+                location: payload.location,
                 date: payload.date,
                 startTime: payload.startTime,
                 endTime: payload.endTime,
@@ -726,6 +785,20 @@ function firstSensitiveEnvelope(
 
 function safeNonNegativeInteger(value: unknown): number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function inboxRecognitionDraftFromResult(result: InboxInterpretationResult): InboxRecognitionDraft {
+  return {
+    title: result.title ?? "",
+    description: "",
+    priority: "none",
+    deadlineDate: result.deadlineDate ?? "",
+    deadlineTime: result.deadlineTime ?? "",
+    date: result.date ?? "",
+    startTime: result.startTime ?? "",
+    endTime: result.endTime ?? "",
+    location: "",
+  };
 }
 
 function shanghaiDateFromIso(value: string): string | null {

@@ -15,7 +15,7 @@ const adapters: readonly AiToolAdapter[] = [
     execute: async (value, context) => {
       requireProposalReporter(context);
       const proposal = await aiPlannerProposalRuntime.proposeTask(
-        value as TaskProposalPayload,
+        canonicalTaskPayload(value as TaskProposalPayload, context),
         source(context),
       );
       context.reportProposal(proposal);
@@ -96,4 +96,26 @@ function canonicalSchedulePayload<Value>(
     throw new Error("规划候选已失效，请重新生成提案。");
   }
   return constraint.canonicalPayload as Value;
+}
+
+function canonicalTaskPayload(
+  selection: TaskProposalPayload,
+  context: AiToolExecutionContext,
+): TaskProposalPayload {
+  const constraint = context.proposalConstraint;
+  if (!constraint?.canonicalPayload) return selection;
+  const argumentsRecord =
+    typeof constraint.arguments === "object" && constraint.arguments !== null
+      ? (constraint.arguments as Record<string, unknown>)
+      : null;
+  if (
+    constraint.toolId !== "planner.propose-task" ||
+    argumentsRecord?.title !== selection.title ||
+    argumentsRecord.deadlineDate !== selection.deadlineDate ||
+    argumentsRecord.deadlineTime !== selection.deadlineTime ||
+    argumentsRecord.priority !== selection.priority
+  ) {
+    throw new Error("任务提案参数与本地核验草稿不一致。");
+  }
+  return constraint.canonicalPayload as unknown as TaskProposalPayload;
 }
