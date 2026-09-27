@@ -756,15 +756,23 @@ impl GeocodingState {
             .await
             .map_err(|_| ProviderError::Unavailable)?;
         if !response.status().is_success() {
+            let status = response.status();
+            let error = if status == StatusCode::TOO_MANY_REQUESTS {
+                ProviderError::RateLimited
+            } else if status.is_client_error() {
+                ProviderError::Unauthorized
+            } else {
+                ProviderError::Unavailable
+            };
             trace_provider(
                 "amap",
                 "static_map",
-                "http_error",
+                &status.to_string(),
                 started.elapsed(),
-                "unavailable",
+                "http_error",
                 None,
             );
-            return Err(ProviderError::Unavailable);
+            return Err(error);
         }
         let mime_type = response
             .headers()
@@ -775,6 +783,10 @@ impl GeocodingState {
             .trim()
             .to_ascii_lowercase();
         if mime_type != "image/png" && mime_type != "image/jpeg" {
+            let body = read_limited(response, MAX_RESPONSE_BYTES).await?;
+            let error = serde_json::from_slice::<Value>(&body)
+                .map(|value| amap_error(&value))
+                .unwrap_or(ProviderError::Unavailable);
             trace_provider(
                 "amap",
                 "static_map",
@@ -783,7 +795,7 @@ impl GeocodingState {
                 "invalid_content_type",
                 None,
             );
-            return Err(ProviderError::Unavailable);
+            return Err(error);
         }
         let image = read_limited(response, MAX_MAP_BYTES).await?;
         if image.is_empty()
@@ -910,7 +922,7 @@ pub async fn get_weather_map_image(
     state
         .map_image(latitude, longitude, zoom, &key)
         .await
-        .map_err(|_| "mapUnavailable".to_owned())
+        .map_err(GeocodingState::command_error)
 }
 
 #[tauri::command]
@@ -2167,5 +2179,67 @@ mod tests {
         assert!(request.contains("key=secret-test-key"));
         assert_eq!(response[0].display_name, "王村");
         assert_eq!(response[0].coordinate_system, "gcj02");
+    }
+
+    #[test]
+    #[ignore = "requires configured Windows AMap credentials and live network access"]
+    fn live_amap_weather_search_and_static_map_smoke() {
+        let amap_key = credential(AMAP_ACCOUNT)
+            .expect("Windows credential storage should be available")
+            .filter(|key| !key.trim().is_empty())
+            .expect("configure an AMap Web Service key in Weather settings first");
+        let state = GeocodingState::new().expect("create live provider client");
+        let cancellation = AtomicBool::new(false);
+        let mut search_pass = true;
+        let mut xuzhou_center = (34.2044, 117.2841);
+
+        for (label, query) in [("city", "徐州市"), ("county", "丰县"), ("town", "邢楼镇")] {
+            match tauri::async_runtime::block_on(state.search_with_keys(
+                query,
+                None,
+                Some(&amap_key),
+                None,
+                &cancellation,
+            )) {
+                Ok(locations) => {
+                    let amap_count = locations
+                        .iter()
+                        .filter(|location| location.provider == "amap")
+                        .count();
+                    eprintln!("live AMap {label} search: {amap_count} candidates");
+                    if query == "徐州市" {
+                        if let Some(location) = locations.first() {
+                            xuzhou_center = (location.latitude, location.longitude);
+                        }
+                    }
+                    search_pass &= !locations.is_empty();
+                }
+                Err(error) => {
+                    eprintln!("live AMap {label} search failed: {error:?}");
+                    search_pass = false;
+                }
+            }
+        }
+
+        let map_result = tauri::async_runtime::block_on(state.map_image(
+            xuzhou_center.0,
+            xuzhou_center.1,
+            7,
+            &amap_key,
+        ));
+        match &map_result {
+            Ok(image) => eprintln!(
+                "live AMap static map: {} bytes ({})",
+                image.bytes.len(),
+                image.mime_type
+            ),
+            Err(error) => eprintln!("live AMap static map failed: {error:?}"),
+        }
+
+        assert!(
+            search_pass,
+            "one or more live city/county/town searches failed"
+        );
+        assert!(map_result.is_ok(), "live AMap static map request failed");
     }
 }

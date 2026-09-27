@@ -185,7 +185,15 @@ async function seedDashboardRuntime(
             }
             if (command === "cancel_weather_location_search") return null;
             if (command === "get_weather_map_image") {
-              return { mimeType: "image/png", bytes: [137, 80, 78, 71, 13, 10, 26, 10] };
+              return {
+                mimeType: "image/png",
+                bytes: [
+                  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0,
+                  1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 8, 29, 99, 248,
+                  207, 192, 0, 0, 3, 1, 1, 0, 201, 254, 146, 239, 0, 0, 0, 0, 73, 69, 78, 68, 174,
+                  66, 96, 130,
+                ],
+              };
             }
             if (command === "search_weather_location") {
               geocodingCalls.push({ command, args });
@@ -1074,9 +1082,7 @@ test("今日总结自动生成 AI 预览；编辑多行内容后只在明确保�
   ).toBeNull();
 
   await page.evaluate(() => (window as any).__workspaceDashboardTest.releaseDailySummaryAi());
-  await expect(
-    dialog.getByText("AI 已根据今天的安排生成总结。尚未保存。", { exact: true }),
-  ).toBeVisible();
+  await expect(dialog.getByText("AI 已生成今日总结，尚未保存。", { exact: true })).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "今日概览" })).toBeVisible();
   await expect(dialog.getByText("今天安排清晰，完成事项后还可以继续推进一项任务。")).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "今日完成" })).toBeVisible();
@@ -1104,7 +1110,7 @@ test("今日总结自动生成 AI 预览；编辑多行内容后只在明确保�
   await dialog.getByRole("button", { name: "返回预览" }).click();
   await expect(dialog.getByText("整理实验笔记")).toBeVisible();
   await dialog.getByRole("button", { name: "保存总结" }).click();
-  await expect(dialog.getByText("今日总结已保存。", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("今天的总结已保存。", { exact: true })).toBeVisible();
   await expect(dialog.locator("textarea")).toHaveCount(0);
   expect(
     await page.evaluate(() =>
@@ -1128,12 +1134,20 @@ test("今日总结自动生成 AI 预览；编辑多行内容后只在明确保�
   ).toBe(1);
 });
 
-test("AI 不可用时自动显示本地总结并允许编辑、保存", async ({ page }) => {
+test("未配置 DeepSeek 时显示本地总结并允许编辑、保存", async ({ page }) => {
   await seedDashboardRuntime(page);
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "links-workplace.ai.data-access",
+      JSON.stringify({ persistentGrants: ["academic.read", "planner.read", "routine.read"] }),
+    );
+  });
   const dialog = page.getByTestId("daily-summary-dialog");
   await page.getByTestId("daily-summary-open").click();
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText(/AI 暂时不可用，已根据本地日程生成基础总结/u)).toBeVisible();
+  await expect(
+    dialog.getByText("尚未配置 DeepSeek，已使用本地基础总结。尚未保存。", { exact: true }),
+  ).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "今日概览" })).toBeVisible();
   await expect(dialog.locator("textarea")).toHaveCount(0);
   expect(
@@ -1142,7 +1156,7 @@ test("AI 不可用时自动显示本地总结并允许编辑、保存", async ({
   await dialog.getByRole("button", { name: "编辑" }).click();
   await dialog.getByTestId("daily-summary-overview").fill("根据本地安排整理的总结。");
   await dialog.getByRole("button", { name: "保存总结" }).click();
-  await expect(dialog.getByText("今日总结已保存。", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("今天的总结已保存。", { exact: true })).toBeVisible();
   expect(
     await page.evaluate(
       () => (window as any).__workspaceDashboardTest.getDailySummary("2026-09-23")?.overview,
@@ -1157,17 +1171,46 @@ test("DeepSeek 请求失败后显示本地总结并允许重新尝试", async ({
   });
   const dialog = page.getByTestId("daily-summary-dialog");
   await page.getByTestId("daily-summary-open").click();
-  await expect(dialog.getByText(/AI 暂时不可用，已根据本地日程生成基础总结/u)).toBeVisible();
+  await expect(
+    dialog.getByText("AI 生成失败：网络不可用，请检查连接后重试。已使用本地基础总结。尚未保存。", {
+      exact: true,
+    }),
+  ).toBeVisible();
   expect(
     await page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryAiCalls()),
   ).toBe(1);
 
   await dialog.getByRole("button", { name: "重新生成" }).click();
-  await expect(dialog.getByText(/AI 暂时不可用，已根据本地日程生成基础总结/u)).toBeVisible();
+  await expect(
+    dialog.getByText("AI 生成失败：网络不可用，请检查连接后重试。已使用本地基础总结。尚未保存。", {
+      exact: true,
+    }),
+  ).toBeVisible();
   await expect(dialog.getByRole("button", { name: "重新生成" })).toBeEnabled();
   expect(
     await page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryAiCalls()),
   ).toBe(2);
+});
+
+test("DeepSeek 已配置但未授予数据权限时准确说明本地降级原因", async ({ page }) => {
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, {}, {}, [], { configured: true });
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "links-workplace.ai.data-access",
+      JSON.stringify({ persistentGrants: [] }),
+    );
+  });
+
+  const dialog = page.getByTestId("daily-summary-dialog");
+  await page.getByTestId("daily-summary-open").click();
+  await expect(
+    dialog.getByText("未授予生成总结所需的数据权限，已使用本地基础总结。尚未保存。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryAiCalls()),
+  ).toBe(0);
 });
 
 test("已保存总结优先显示；AI 重新整理只替换 Draft，保存后才覆盖", async ({ page }) => {
@@ -1195,9 +1238,7 @@ test("已保存总结优先显示；AI 重新整理只替换 Draft，保存后�
   ).toBe(0);
 
   await dialog.getByRole("button", { name: "AI 重新整理" }).click();
-  await expect(
-    dialog.getByText("AI 已根据今天的安排生成总结。尚未保存。", { exact: true }),
-  ).toBeVisible();
+  await expect(dialog.getByText("AI 已生成今日总结，尚未保存。", { exact: true })).toBeVisible();
   expect(
     await page.evaluate(() =>
       (window as any).__workspaceDashboardTest.getDailySummary("2026-09-23"),
@@ -1779,6 +1820,9 @@ test("Weather map picker and manual coordinates keep coordinate-only locations u
   const mapPicker = settings.getByRole("region", { name: "地图选点" });
   const map = mapPicker.getByRole("button", { name: "地图，点击选择坐标或拖动平移" });
   await expect(map).toBeVisible();
+  await expect
+    .poll(() => map.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBeGreaterThan(0);
   await map.click({ position: { x: 100, y: 120 } });
   await mapPicker.getByRole("button", { name: "使用此地图位置" }).click();
   await expect(settings.getByLabel("当前天气设置")).toContainText("地图选定位置");

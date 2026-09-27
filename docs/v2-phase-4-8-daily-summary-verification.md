@@ -198,3 +198,11 @@ Phase 4.8.1 仍需 Ethan 完成 DeepSeek Live 与 Windows Manual 验收后才能
 - Windows Manual：**PENDING**。
 - Phase 4.8.1 Overall：**PENDING**。
 - Phase 4.9：**NOT STARTED**。
+
+## 2026-09-28 回归修复复验（等待 Ethan 人工复验）
+
+- 根因：UI 将 `AiWorkflowOrchestrator.run()` 的所有非 `ready` 结果（未配置、无权限、无上下文、忙碌、需澄清、真实失败）统一显示为“AI 暂时不可用”，因此会把权限/上下文降级误报成 Provider 故障。现在按真实结果状态显示分因中文提示；AI 成功草稿、已保存、编辑未保存、保存中/失败、读取失败、本地降级各有独立状态。真实 DeepSeek live generation 本轮未执行，不能据此声称 DeepSeek 实机可用。
+- UI 根因：Header、Body、Footer 使用了不存在的 `--space-5` token，导致相应 padding 声明无效；现改用有效的 `--space-6`，增加四个内容分区、标题和操作区的局部间距，仍保留独立滚动 body、固定可达 footer 和小窗口响应式规则。
+- 自动回归：AI 成功 Draft / 保存 / 已保存重开、未配置、无权限、真实失败与重试，以及 720×520 滚动/按钮可达均覆盖并通过。
+- 最新完整验证：`npm run verify` PASS（390 unit、141 architecture、1,227 UI PASS / 15 skipped；typecheck、lint、Prettier、Vite build PASS）。
+- 当前门禁：Implementation 与 Automated PASS；DeepSeek Live 及 Ethan Windows 人工复验仍 PENDING；Overall 仍 PENDING；schema=8、migration 无变化；Phase 4.9 NOT STARTED。

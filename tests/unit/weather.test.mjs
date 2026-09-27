@@ -349,6 +349,34 @@ test("native weather transport sends text only to Rust and normalizes backend re
   assert.deepEqual(await provider.reverseGeocode(34.7, 116.2), nativeLocation());
 });
 
+test("nullable optional fields in native AMap responses do not discard valid city results", async () => {
+  const city = nativeLocation({
+    displayName: "徐州市",
+    displayAddress: "江苏省 · 徐州市",
+    latitude: 34.2044,
+    longitude: 117.2841,
+    admin3: null,
+    admin4: null,
+    county: null,
+    street: null,
+    providerId: null,
+    type: "城市",
+    precision: "city",
+  });
+  const provider = createNativeWeatherLocationProvider(async (command) =>
+    command === "search_weather_location" ? [city] : null,
+  );
+
+  const results = await provider.searchLocation("徐州市");
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0].displayName, "徐州市");
+  assert.equal(results[0].coordinateSystem, "gcj02");
+  assert.equal(results[0].provider, "amap");
+  assert.equal("admin3" in results[0], false);
+  assert.equal(normalizeWeatherLocation({ ...city, county: 7 }), null);
+});
+
 test("aborted native search requests cancel the backend and discard stale responses", async () => {
   let finishSearch;
   const calls = [];

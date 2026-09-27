@@ -21,6 +21,7 @@ import {
 } from "../../services/weather-location-transport.ts";
 import type { TemperatureUnit, WeatherCoordinateSystem } from "../../types/weather.ts";
 import type { WorkspaceWeatherController } from "./use-workspace-weather.ts";
+import { weatherErrorCategory, weatherErrorMessage } from "./weather-errors.ts";
 import "./weather.css";
 
 interface WeatherSettingsPanelProps {
@@ -517,14 +518,17 @@ function WeatherMapPicker({
         nextUrl = URL.createObjectURL(image);
         setImageUrl(nextUrl);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (active) {
           setImageUrl("");
-          setError("地图暂时不可用。你仍可在上方使用经纬度输入选择位置。");
+          const category = weatherErrorCategory(error, "mapUnavailable");
+          setError(
+            category === "mapUnavailable"
+              ? "地图服务暂时不可用，请检查高德 Web Service 密钥与地图服务权限；也可使用经纬度输入。"
+              : weatherErrorMessage(category),
+          );
+          setLoading(false);
         }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
       });
     return () => {
       active = false;
@@ -589,6 +593,7 @@ function WeatherMapPicker({
           type="button"
           className={"weather-map-canvas" + (drag.current ? " is-dragging" : "")}
           aria-label="地图，点击选择坐标或拖动平移"
+          disabled={loading}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
             drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
@@ -618,6 +623,14 @@ function WeatherMapPicker({
             alt="高德地图"
             draggable={false}
             style={{ transform: "translate(" + dragOffset.x + "px, " + dragOffset.y + "px)" }}
+            onLoad={() => setLoading(false)}
+            onError={(event) => {
+              const source = event.currentTarget.currentSrc;
+              if (source.startsWith("blob:")) URL.revokeObjectURL(source);
+              setImageUrl("");
+              setLoading(false);
+              setError("地图图片无法显示，请重试；也可使用经纬度输入选择位置。");
+            }}
           />
           <span
             className="weather-map-marker"

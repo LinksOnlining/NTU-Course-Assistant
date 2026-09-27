@@ -21,6 +21,96 @@ type SummaryEditorText = {
   tomorrowNotes: string;
 };
 type SummaryOrigin = "saved" | "ai" | "local";
+type SummaryStatus =
+  | { readonly kind: "idle" | "reading" | "generating" | "ai-draft" | "saved" | "saving" }
+  | { readonly kind: "edited"; readonly source: SummaryOrigin }
+  | { readonly kind: "save-failed" | "validation-error"; readonly message: string }
+  | {
+      readonly kind: "local-fallback";
+      readonly reason:
+        | "not-configured"
+        | "no-permissions"
+        | "no-context"
+        | "busy"
+        | "clarification"
+        | "ai-failed"
+        | "invalid-result"
+        | "read-failed"
+        | "request-failed";
+      readonly detail?: string;
+    };
+
+function localFallbackStatus(
+  result: Awaited<ReturnType<AiWorkflowOrchestrator["run"]>>,
+): SummaryStatus {
+  switch (result.status) {
+    case "notConfigured":
+      return { kind: "local-fallback", reason: "not-configured" };
+    case "noPermissions":
+      return { kind: "local-fallback", reason: "no-permissions" };
+    case "noContext":
+      return { kind: "local-fallback", reason: "no-context" };
+    case "busy":
+      return { kind: "local-fallback", reason: "busy" };
+    case "clarification":
+      return { kind: "local-fallback", reason: "clarification", detail: result.message };
+    case "failed":
+      return { kind: "local-fallback", reason: "ai-failed", detail: result.message };
+    case "ready":
+      return { kind: "local-fallback", reason: "invalid-result" };
+  }
+}
+
+function summaryStatusText(status: SummaryStatus): string {
+  switch (status.kind) {
+    case "idle":
+      return "尚未保存。";
+    case "reading":
+      return "正在读取今天的总结……";
+    case "generating":
+      return "正在整理今天……";
+    case "ai-draft":
+      return "AI 已生成今日总结，尚未保存。";
+    case "saved":
+      return "今天的总结已保存。";
+    case "saving":
+      return "正在保存今日总结……";
+    case "edited":
+      return status.source === "ai"
+        ? "AI 总结已修改，尚未保存。"
+        : status.source === "local"
+          ? "本地草稿已修改，尚未保存。"
+          : "已保存的总结已修改，尚未保存。";
+    case "save-failed":
+    case "validation-error":
+      return status.message;
+    case "local-fallback":
+      switch (status.reason) {
+        case "not-configured":
+          return "尚未配置 DeepSeek，已使用本地基础总结。尚未保存。";
+        case "no-permissions":
+          return "未授予生成总结所需的数据权限，已使用本地基础总结。尚未保存。";
+        case "no-context":
+          return "当前没有可供 AI 使用的授权数据，已使用本地基础总结。尚未保存。";
+        case "busy":
+          return "AI 正在处理其他请求，已使用本地基础总结。尚未保存。";
+        case "clarification":
+          return status.detail
+            ? `AI 需要补充信息：${status.detail.replace(/[。！？；]+$/u, "")}。已使用本地基础总结。尚未保存。`
+            : "AI 需要补充信息，已使用本地基础总结。尚未保存。";
+        case "ai-failed":
+          return status.detail
+            ? `AI 生成失败：${status.detail.replace(/[。！？；]+$/u, "")}。已使用本地基础总结。尚未保存。`
+            : "AI 生成失败，已使用本地基础总结。尚未保存。";
+        case "invalid-result":
+          return "AI 返回内容不完整，已使用本地基础总结。尚未保存。";
+        case "read-failed":
+          return "无法读取已保存总结，已使用本地基础总结。尚未保存。";
+        case "request-failed":
+          return "AI 请求未能完成，已使用本地基础总结。尚未保存。";
+      }
+  }
+}
 
 function editorText(summary: SummaryText): SummaryEditorText {
   return {
@@ -70,7 +160,7 @@ export function DailySummaryPanel({
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<SummaryStatus>({ kind: "idle" });
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -103,7 +193,7 @@ export function DailySummaryPanel({
   async function generateDraft(base: DailySummary, requestId: number) {
     if (generating || saving) return;
     setGenerating(true);
-    setMessage("正在整理今天……");
+    setStatus({ kind: "generating" });
     try {
       const result = await service.run({ workflowId: "dailySummary.generate" });
       if (generationRef.current !== requestId) return;
@@ -114,14 +204,23 @@ export function DailySummaryPanel({
       ) {
         const generated = { ...base, ...result.result.dailySummary };
         const validation = validateDailySummaryDraft(generated);
-        if (validation) throw new Error(validation);
+        if (validation) {
+          setDraft(base);
+          setOrigin("local");
+          setSaved(false);
+          setEditor(null);
+          setEdited(false);
+          setEditing(false);
+          setStatus({ kind: "local-fallback", reason: "invalid-result" });
+          return;
+        }
         setDraft(generated);
         setOrigin("ai");
         setSaved(false);
         setEditor(null);
         setEdited(false);
         setEditing(false);
-        setMessage("AI 已根据今天的安排生成总结。尚未保存。 ");
+        setStatus({ kind: "ai-draft" });
       } else {
         setDraft(base);
         setOrigin("local");
@@ -129,7 +228,7 @@ export function DailySummaryPanel({
         setEditor(null);
         setEdited(false);
         setEditing(false);
-        setMessage("AI 暂时不可用，已根据本地日程生成基础总结。尚未保存。");
+        setStatus(localFallbackStatus(result));
       }
     } catch {
       if (generationRef.current !== requestId) return;
@@ -139,7 +238,7 @@ export function DailySummaryPanel({
       setEditor(null);
       setEdited(false);
       setEditing(false);
-      setMessage("AI 暂时不可用，已根据本地日程生成基础总结。尚未保存。");
+      setStatus({ kind: "local-fallback", reason: "request-failed" });
     } finally {
       if (generationRef.current === requestId) setGenerating(false);
     }
@@ -156,7 +255,7 @@ export function DailySummaryPanel({
     setEdited(false);
     setEditing(false);
     setLoading(true);
-    setMessage("正在读取今天的总结……");
+    setStatus({ kind: "reading" });
     try {
       const existing = await getDailySummaryByDate(model.date);
       if (generationRef.current !== requestId) return;
@@ -164,13 +263,12 @@ export function DailySummaryPanel({
         setDraft(existing);
         setOrigin("saved");
         setSaved(true);
-        setMessage("今天的总结已保存。");
+        setStatus({ kind: "saved" });
         return;
       }
       const local = buildLocalDraft();
       setDraft(local);
       setOrigin("local");
-      setMessage("正在整理今天……");
       setLoading(false);
       await generateDraft(local, requestId);
     } catch {
@@ -179,7 +277,7 @@ export function DailySummaryPanel({
       setDraft(local);
       setOrigin("local");
       setSaved(false);
-      setMessage("无法读取已保存总结；已根据本地日程生成基础总结。尚未保存。");
+      setStatus({ kind: "local-fallback", reason: "read-failed" });
     } finally {
       if (generationRef.current === requestId) setLoading(false);
     }
@@ -212,7 +310,7 @@ export function DailySummaryPanel({
     setEditing(false);
     setLoading(false);
     setGenerating(false);
-    setMessage("");
+    setStatus({ kind: "idle" });
     dialogRef.current?.close();
   }
 
@@ -231,11 +329,11 @@ export function DailySummaryPanel({
     };
     const validation = validateDailySummaryDraft(candidate);
     if (validation) {
-      setMessage(validation);
+      setStatus({ kind: "validation-error", message: validation });
       return;
     }
     setSaving(true);
-    setMessage("正在保存今日总结……");
+    setStatus({ kind: "saving" });
     try {
       const savedSummary = await saveDailySummary(candidate);
       setDraft(savedSummary);
@@ -244,9 +342,12 @@ export function DailySummaryPanel({
       setSaved(true);
       setEdited(false);
       setEditing(false);
-      setMessage("今日总结已保存。");
+      setStatus({ kind: "saved" });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "保存失败；编辑内容仍保留。");
+      setStatus({
+        kind: "save-failed",
+        message: error instanceof Error ? error.message : "保存失败；编辑内容仍保留。",
+      });
     } finally {
       setSaving(false);
     }
@@ -293,7 +394,7 @@ export function DailySummaryPanel({
           </div>
           <div className="daily-summary-dialog-header-actions">
             <p className="daily-summary-status" role="status" aria-live="polite">
-              {message || (saved && !edited ? "今天的总结已保存。" : "尚未保存。")}
+              {summaryStatusText(status)}
             </p>
             <button
               type="button"
@@ -325,7 +426,7 @@ export function DailySummaryPanel({
                   setEditor((current) => ({ ...(current ?? editorText(preview)), overview }));
                   setEdited(true);
                   setSaved(false);
-                  setMessage("尚未保存。");
+                  setStatus({ kind: "edited", source: origin ?? "local" });
                 }}
               />
               <SummaryEditorField
@@ -337,7 +438,7 @@ export function DailySummaryPanel({
                   setEditor((current) => ({ ...(current ?? editorText(preview)), highlights }));
                   setEdited(true);
                   setSaved(false);
-                  setMessage("尚未保存。");
+                  setStatus({ kind: "edited", source: origin ?? "local" });
                 }}
               />
               <SummaryEditorField
@@ -349,7 +450,7 @@ export function DailySummaryPanel({
                   setEditor((current) => ({ ...(current ?? editorText(preview)), unfinished }));
                   setEdited(true);
                   setSaved(false);
-                  setMessage("尚未保存。");
+                  setStatus({ kind: "edited", source: origin ?? "local" });
                 }}
               />
               <SummaryEditorField
@@ -361,7 +462,7 @@ export function DailySummaryPanel({
                   setEditor((current) => ({ ...(current ?? editorText(preview)), tomorrowNotes }));
                   setEdited(true);
                   setSaved(false);
-                  setMessage("尚未保存。");
+                  setStatus({ kind: "edited", source: origin ?? "local" });
                 }}
               />
             </div>

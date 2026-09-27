@@ -55,9 +55,11 @@ test("Weather forecast stays separate from the native AMap/Baidu location resolv
 
   const config = read("src-tauri/tauri.conf.json");
   const connectSrc = config.match(/connect-src ([^";]+)/u)?.[1] ?? "";
+  const imageSrc = config.match(/img-src ([^";]+)/u)?.[1] ?? "";
   assert.match(connectSrc, /https:\/\/api\.open-meteo\.com/u);
   assert.doesNotMatch(connectSrc, /amap|baidu|photon|nominatim|geocoding-api/u);
   assert.doesNotMatch(connectSrc, /\*/u);
+  assert.match(imageSrc, /\bblob:/u, "the map image is rendered from a Blob object URL");
 });
 
 test("Weather UI/application boundary cannot read personal repositories or send their contents", () => {

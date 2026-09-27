@@ -54,7 +54,9 @@ export function normalizeWeatherLocation(value: unknown): WeatherLocation | null
     "type",
   ];
   if (
-    stringFields.some((key) => value[key] !== undefined && typeof value[key] !== "string") ||
+    stringFields.some(
+      (key) => value[key] !== undefined && value[key] !== null && typeof value[key] !== "string",
+    ) ||
     (precision !== undefined &&
       ![
         "house",

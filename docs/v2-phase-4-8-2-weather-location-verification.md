@@ -5,9 +5,9 @@
 - 基线：`v2/workspace-rebase`，起始 HEAD `5e4d7955b45b99a5d0cd1ef0ae09c2e52f240489`
 - 实现：COMPLETE
 - 自动验证：PASS
-- AMap / Baidu 实际凭据调用：PENDING
+- AMap live 回归 smoke：PASS（城市/区县/乡镇 + 静态地图接口）；Baidu live：PENDING
 - Windows 人工验收：PENDING
-- Phase 4.8.2 Overall：PENDING（等待 provider live 与 Windows 人工验收）
+- Phase 4.8.2 Overall：PENDING（等待更完整 provider 覆盖与 Windows 人工复验）
 - SQLite schema：8；Migration：0
 - 应用元数据版本保持 `1.3.1`
 - Phase 4.9：NOT STARTED
@@ -76,8 +76,29 @@ Live 验收至少需要：3 个省份的乡镇、5 个农村地点、2 个农村
 
 ## 尚未执行 / 已知限制
 
-- 未提供或验证 AMap / Baidu production credential，因此没有真实 provider live 结果，也没有真实农村地点覆盖 PASS 结论。
-- 未进行 Windows 安装态或真实窗口 GUI 验收；未运行 build 出来的 EXE / installer。需 Ethan 配置 provider Key 并在 Windows 开发/安装态完成一次农村地点、重名地点、地图选点、当前位置、离线降级与天气预报的人工验收。
+- 尚未完成完整 provider live 覆盖（多省乡镇、农村地点、重名地点、真实地址及地图选点天气查询）；最新 AMap 回归 smoke 范围见本文后附记录。Baidu fallback 也尚未进行真实凭据验收。
+- 未进行 Windows 安装态或真实窗口 GUI 验收；未运行 build 出来的 EXE / installer。需 Ethan 在 Windows 开发/安装态验收搜索、地图渲染/缩放/选点、当前位置、离线降级与天气预报。
 - 无 AMap Key 时地图底图不可用，但手动坐标路径仍保留；当前不提供地图瓦片离线包。
 - QWeather 未采用；应用天气预报继续使用 Open-Meteo。Phase 4.8.1 Daily Summary 的 DeepSeek Live / Windows Manual 仍为 PENDING，本阶段没有改变其状态。
 - 未创建 tag、未 push、未发布 Release；没有新增 schema 或 migration。
+
+## 2026-09-28 回归修复复验（等待 Ethan Windows 人工复验）
+
+### 根因与修复
+
+- 搜索回归：Rust `Option<String>` 的地点响应会把缺省字段序列化为 JSON `null`；前端 `normalizeWeatherLocation` 将所有非 `undefined` 且非 string 字段判为无效，导致真实高德城市/区县结果被整条丢弃。现允许可选字段为 `null`（归一化时仍只保留实际 string），错误类型仍会拒绝。
+- 地图空白：Rust 已成功返回 PNG，但地图使用 `URL.createObjectURL(blob)` 渲染，而生产 CSP 的 `img-src` 未允许 `blob:`，WebView 因此阻止了图片；现加入 `blob:` 并处理图片解码/加载错误，给出可操作提示。高德静态地图 Web Service 确实要求 Web 服务 Key，后端真实请求仍需遵守该接口边界。[高德静态地图接口](https://lbs.amap.com/api/webservice/guide/api/staticmaps)；[Tauri CSP](https://tauri.app/security/csp/)
+- 地图请求错误现在按 HTTP 限流/客户端错误及高德 JSON 错误码返回现有可识别错误分类，不再一律压成“地图不可用”。
+
+### 真实 Provider 与自动验证
+
+- 使用本机凭据存储中的高德 Key 运行真实网络 smoke（未输出 Key）：`徐州市` 城市、`丰县` 区县、`邢楼镇` 乡镇搜索均收到 HTTP 200 且各有 2 个高德候选；静态地图请求 HTTP 200，收到 58,131 字节 `image/png`。这不是 mock。
+- targeted Weather unit：16 PASS；包含 `null` 可选字段回归。Rust live AMap smoke：1 PASS。Weather/Daily Summary targeted UI：7 PASS；地图 PNG 实际解码宽度非零，摘要状态及窄窗滚动覆盖。
+- 完整 `npm run verify`：PASS（390 unit、141 architecture、1,227 UI PASS / 15 skipped；typecheck、lint、Prettier、Vite build PASS）。Rust：106 passed / 0 failed / 1 ignored（ignored 项为需真实 Key 的 live smoke，另行执行并 PASS）；fmt 与 clippy PASS。
+- `npm run tauri build`：PASS；当前变更构建了 Windows EXE、NSIS、MSI 及 updater signatures。未启动 EXE 或执行安装态 GUI 验收。
+
+### 当前 gate
+
+- Implementation：回归修复 COMPLETE；Automated：PASS；AMap provider live smoke：PASS（限城市/区县/乡镇 + 静态图接口范围）。
+- Windows WebView 地图渲染、真实点击缩放选点、fallback 用户流程：Ethan 人工复验 PENDING；完整 provider 覆盖仍未验收。
+- Phase 4.8.2 Overall：**PENDING**；Phase 4.8.1 Daily Summary Overall：**PENDING**；schema=8，migration 无变化；Phase 4.9：**NOT STARTED**。
