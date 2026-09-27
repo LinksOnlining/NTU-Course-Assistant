@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0–4.7-P COMPLETE；Phase 4.8 Daily Brief Core 实现、自动质量门、Rust 检查及本地 Tauri production build PASS；DeepSeek Live / Windows Manual PENDING；Recent Daily Summary BLOCKED（待 migration approval）；Phase 4.8 Overall PENDING；Phase 4.9 NOT STARTED。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 增加一次性 Today Assistant；Phase 4.6 扩展本地可信 Planner 路由与未来日期提案；Phase 4.7 增加单条 Diary / Inbox 的 Consent-gated 工作流；Phase 4.8 增加有界、只读的每日简报核心。无 AI Apply Tool、聊天历史或持久化 AI 状态。
+状态：**Phase 4.0–4.7-P COMPLETE；Phase 4.8 Core Implementation / Automated / DeepSeek Live / Windows Manual：COMPLETE / PASS；Phase 4.8 Core：COMPLETE。Phase 4.8.1 Daily Summary：Migration Impact Review COMPLETE；Implementation BLOCKED — 等待 Ethan 明确批准 Schema 8；当前 schema=7、migration=0。Phase 4.9 NOT STARTED。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 增加一次性 Today Assistant；Phase 4.6 扩展本地可信 Planner 路由与未来日期提案；Phase 4.7 增加单条 Diary / Inbox 的 Consent-gated 工作流；Phase 4.8 增加有界、只读的每日简报核心。无 AI Apply Tool、聊天历史或持久化 AI 状态。
 
 ## 1. 产品定位
 
@@ -166,5 +166,5 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 - Academic 与 Planner 快照仅投影今日安排及有限近期截止事项；逾期事项按最近逾期优先并有界截断，无有效截止日期的事项不当作近期任务。Weather 仅使用位置匹配的本地缓存；Routine 仅使用当天启用项。无授权数据时不查询凭据、不调用 Provider；Provider 故障保留本机 fallback。
 - AI 结果使用结构化 JSON Schema 与本地 parser 双重校验；任务 ID / 空闲候选 ID 必须来自当前有限本地上下文。Daily Brief 工作流本身只生成建议。用户主动点击安排建议后才进入现有 `planner.route`，重新计算本地候选并经过既有 Proposal Review、重校验与用户确认。
 - 自动简报默认关闭，按 Asia/Shanghai 日期最多自动展示一次；只在重要日展示完整弹窗，空白日显示紧凑本地提示且不自动请求 AI。设置打开时不在后方弹出简报。手动入口可随时重试，不改变自动展示 gate。偏好只包含非敏感 UI 状态。
-- `DailySummary` / 等价正式实体、表、查询边界均不存在。Recent Daily Summary 不读取 Diary、AI 历史、Inbox 或 localStorage 大文本来冒充；该选项保持不可用。若未来确认需要 durable DailySummary，须先单独审查 schema 7→8 的 domain/repository/query、数据保留与隐私、迁移事务/备份/恢复/回滚及 fresh DB 路径，等待 Ethan 明确批准后才能实施。本阶段 schema 仍为 7，migration 为 0。
-- 自动验证、Production Build 与阶段状态见 [`v2-phase-4-8-verification.md`](v2-phase-4-8-verification.md)。当前 DeepSeek Live / Windows Manual 尚未执行，Phase 4.8 Overall 仍 PENDING；Phase 4.9 NOT STARTED。
+- `DailySummary` / 等价正式实体、表、Repository 与 Application Query 均不存在。Recent Daily Summary 不读取 Diary、AI 历史、Inbox 或 localStorage 大文本来冒充；该选项保持不可用。单独的 Phase 4.8.1 Migration Impact Review 已判断 durable DailySummary 必须使用 schema 8 / migration 7→8；明确批准前不实施。本阶段当前仍是 schema 7、migration 0。
+- Phase 4.8 Core 的自动验证、Production Build 与用户确认的 DeepSeek Live / Windows Manual 记录见 [`v2-phase-4-8-verification.md`](v2-phase-4-8-verification.md)。DailySummary 的未实施边界及迁移审查见 [`v2-phase-4-8-daily-summary-verification.md`](v2-phase-4-8-daily-summary-verification.md)。Phase 4.8 Core COMPLETE；Phase 4.9 NOT STARTED。

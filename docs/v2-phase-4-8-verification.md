@@ -5,16 +5,19 @@
 - 起始基线：`47bff6671c4fd97559657894af2aa2013ef89065`（`fix: refine inbox ai workflow and workspace ui`）
 - 分支：`v2/workspace-rebase`
 - Phase 4.7 / 4.7-P：用户确认人工验收 PASS；未在本阶段重做。
-- Daily Brief Core 实现：**COMPLETE**
-- 自动化质量门：**PASS**
+- Phase 4.8 Core Implementation：**COMPLETE**
+- Phase 4.8 Core Automated：**PASS**
 - Rust 检查：**PASS**
 - 本地 Tauri production build：**PASS**（仅构建，未运行或安装）
-- DeepSeek Live：**PENDING**；本阶段未使用真实 API Key / 网络调用
-- Windows GUI Manual：**PENDING**；未使用 Computer Use
-- Recent Daily Summary：**BLOCKED — Migration approval required**
-- Phase 4.8 Overall：**PENDING**
+- Phase 4.8 DeepSeek Live：**PASS**（Ethan 已确认）
+- Phase 4.8 Windows Manual：**PASS**（Ethan 已确认）
+- Phase 4.8 Core：**COMPLETE**
+- Recent Daily Summary：**NOT IMPLEMENTED**；转入独立 Phase 4.8.1，等待 Schema 8 审批
+- Phase 4.8.1 Migration Impact Review：**COMPLETE**；Implementation **BLOCKED — SCHEMA 8 APPROVAL REQUIRED**
 - Phase 4.9：**NOT STARTED**
 - SQLite：schema **7**；本阶段 migration **0**
+
+UI polish commit：`e7b0ce95d6d8bbf6d65211cca9319a2bf8eee2e4`。日期/时间中文显示与个人任务删除弹窗留白修改通过 targeted UI（8 项）、相关单元测试（39 项）、typecheck、lint、Prettier 和 `git diff --check`；无 schema / migration / Rust 修改。
 
 ## 实现范围
 
@@ -36,15 +39,7 @@
 - “参考最近每日总结（最近 3 天）”选项保持不可用，并在设置中解释原因。
 - 不增加 schema 8，不修改迁移代码；schema 维持 7，migration 维持 0。
 
-若以后决定增加 durable DailySummary，至少需要单独审查：
-
-1. Domain 实体、字段来源、生成时机、幂等键与用户删除/保留策略。
-2. 独立 Repository / Application Query；AI 只接收最近 3 天且经用户授权的最小摘要，不复用 Diary/Inbox 原文。
-3. schema 7→8 的事务、目标版本门禁、失败回滚、migration 前备份、完整性校验、schema 7 用户升级与 fresh DB 直建路径。
-4. Phase 3.9 已建立的保护备份与恢复流程兼容性，以及数据隐私、日志、导出/备份和删除语义。
-5. 迁移测试矩阵、旧数据保留、重复启动、future schema 拒绝与失败注入。
-
-上述仅为影响审查，不是 schema 8 提案或实施授权。须先取得 Ethan 明确批准。
+DailySummary 的独立迁移影响审查已记录在 [`v2-phase-4-8-daily-summary-verification.md`](v2-phase-4-8-daily-summary-verification.md)。结论是正式持久实体无法在 schema 7 中合法复用，必须新增 schema 8 / migration 7→8；尚未获批，不得编码或修改迁移。
 
 ## 自动验证结果
 
@@ -73,4 +68,4 @@
 
 ## 人工验收边界
 
-本轮不通过 GUI 自动化冒充人工体验，也不连接真实 DeepSeek。仍需 Ethan 在 Windows 开发态人工检查：默认关闭/开启每日简报、一天一次 gate、空白日提示、手动入口、AI 失败 fallback、结构化内容与授权说明；Recent Daily Summary 因缺少已批准的数据实体保持不可用。`npm run tauri build` 的本地构建产物未启动、未安装，不能作为 Windows 安装态验收。人工验收前不创建 Phase 4.9 工作，不推送、不打 tag、不发布。
+Ethan 已确认 Phase 4.8 Core 的 DeepSeek Live 与 Windows Manual 验收 PASS；本记录不把该确认扩写为未单独报告的子项结果。Recent Daily Summary 尚未实现，不属于 Phase 4.8 Core 的 PASS 范围。`npm run tauri build` 的本地构建产物未启动、未安装；这不影响用户已确认的 Core 验收结论。Phase 4.9 未开始，不推送、不打 tag、不发布。

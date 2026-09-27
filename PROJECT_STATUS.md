@@ -4,7 +4,7 @@
 
 ## Links Workplace v2.0
 
-- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4.0–4.7-P COMPLETE；Phase 4.8 Daily Brief Core COMPLETE，自动质量门 PASS，Rust 检查 PASS，本地 Tauri production build PASS；DeepSeek Live / Windows Manual PENDING；Recent Daily Summary BLOCKED（等待 migration approval）；Phase 4.8 Overall PENDING；Phase 4.9 NOT STARTED。** Phase 4.8 沿用 schema=7、migration=0；真实 DailySummary 不存在，不用 Diary、AI 历史或 Inbox 替代。当前构建包元数据版本仍为 1.3.1；未安装/运行构建产物。详见 `docs/v2-phase-4-8-verification.md`。
+- **当前状态：Phase 3 COMPLETE；Phase 3.9 Database Migration Recovery PASS；Phase 4.0–4.7-P COMPLETE；Phase 4.8 Core Implementation / Automated / DeepSeek Live / Windows Manual：COMPLETE / PASS（DeepSeek Live 与 Windows Manual 由 Ethan 确认）；Phase 4.8 Core：COMPLETE。Phase 4.8.1 Daily Summary：Migration Impact Review COMPLETE；Implementation BLOCKED — 等待 Ethan 明确批准 Schema 8；当前 schema=7、migration=0；Phase 4.9 NOT STARTED。** 当前无正式 DailySummary 实体；禁止使用 Diary、Inbox、AI 历史或 localStorage 代替。当前构建包元数据版本仍为 1.3.1；未安装/运行构建产物。详见 `docs/v2-phase-4-8-verification.md` 与 `docs/v2-phase-4-8-daily-summary-verification.md`。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 是唯一外网能力且默认关闭，手动搜索仅在提交后请求 Photon 并只保存最终选中地点，当前位置需明确同意、系统授权和坐标模糊化；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 
