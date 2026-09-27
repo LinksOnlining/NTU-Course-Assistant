@@ -9,9 +9,9 @@ SQLite：schema `7`，migration `0`
 
 - Phase 4.6 Implementation：**COMPLETE**
 - Phase 4.6 Automated：**PASS**
-- Phase 4.6 DeepSeek Live：**PENDING RETEST**（本次自动修复后未执行真实 DeepSeek Planner Tool Calling）
-- Phase 4.6 Overall：**PENDING** Ethan Windows 人工验收
-- Phase 5：**NOT STARTED**
+- Phase 4.6 DeepSeek Live：**PASS**（Ethan 确认 Windows / DeepSeek 人工验收通过）
+- Phase 4.6 Overall：**COMPLETE**
+- Phase 4.7：**NOT STARTED**；Phase 5：**NOT STARTED**
 
 ## 实现范围
 
@@ -68,22 +68,14 @@ UI tests 中 15 项为既有条件跳过；Playwright 可能记录 Tauri mock `c
 
 **没有运行 EXE、没有安装 installer、没有访问 Release 用户数据库、没有执行真实 DeepSeek 请求。** 本 build 仅证明当前工作树可完成 production packaging；不是新版本 Release。只读核验的数据库是独立 `dev-v2` 数据库，仅得到任务匹配计数 `0`。
 
-## Live 状态与限制
+## Ethan Windows / DeepSeek 人工验收结果
 
-- Phase 4.5 已完成的 DeepSeek `GET /models`、文本/结构化 `POST /responses`、真实 Workspace Context 与授权约束保持历史 PASS。
-- Phase 4.6 DeepSeek Tool Calling（Event、TimeBlock、Task 三种路由）、真实 Windows Proposal Preview/Review、真实确认写入：**PENDING RETEST / NOT EXECUTED AFTER FIX**。
-- 本次 Mock/自动化验证覆盖 candidate selection、完整 Event Proposal 预览、确认前零写入、确认后重校验及既有 Application 写入路径；不等同于真实 DeepSeek/Windows Live PASS。
-- schema 7、migration 0；没有新增 AI 持久化、聊天历史或 Proposal 数据表。
+Ethan 确认 Phase 4.6 Windows / DeepSeek 人工验收通过，以下结果记录为用户实测确认：
 
-## Ethan 人工验收清单
+- Future-date Planner 与 Planner AI future planning：**PASS**。
+- 已有 PersonalTask 识别：**PASS**。
+- TimeBlock Proposal、Proposal / Confirmation flow、TimeBlock 实际写入：**PASS**。
+- Task 与 TimeBlock 语义隔离：**PASS**。为“高数复习”安排明天下午 1 小时 TimeBlock 后，TimeBlock 新增成功；PersonalTask 原本无 Deadline，写入后仍无 Deadline。
+- Deadline 表示最晚完成时间；TimeBlock 表示计划执行时间。安排执行时间不得自动修改 Task Deadline。未来若用户明确要求修改 Deadline，必须通过独立的 Old Deadline → New Deadline Proposal、Preview、User Confirm、Revalidate 与 Application UseCase；不得与 TimeBlock Proposal 捆绑静默修改。
 
-请在 Windows 开发态先确认 AI 数据权限和 DeepSeek 已配置，再逐项检查：
-
-1. 工作台输入“明天晚上想跑30分钟，帮我安排一下”：本地识别 `tomorrow + evening (18:00–22:00) + 30 分钟`，Provider 只能提交 `candidateId`；预览应显示“建议创建活动 / 跑步 / 明天 / 18:00–18:30 / 30 分钟”。取消后确认数据未变化。
-2. 输入“明天晚上20:00跑30分钟”：只允许预览 20:00–20:30，不可由模型改时。
-3. 输入安排已有任务的请求：仅唯一未完成 exact match 才生成 TimeBlock；不存在或重名时澄清，不模糊绑定。
-4. 输入“帮我记一个周五前交实验报告的任务”：只生成 PersonalTask Proposal，不自动生成 TimeBlock。
-5. 分别确认、取消提案；确认后查看 Planner 结果，取消后验证未写入。若开始时间已过去或源日程变化，应要求重校验/再次确认。
-6. 检查天气仅在已授权且有缓存时出现；未授权时不得触发位置、天气或其他后台请求。
-
-人工 DeepSeek/Windows 验收重新通过前，Phase 4.6 DeepSeek Live 保持 PENDING RETEST，Overall 保持 PENDING；不进入 Phase 4.7 / Phase 5，不 push、不 tag、不发布 Release。
+本节为 Ethan 提供的真实人工验收结果；没有将本次自动测试或代码检查冒充为 Windows / DeepSeek 人工验收。Phase 4.6 Overall 已关闭；Phase 4.7 尚未开始。
