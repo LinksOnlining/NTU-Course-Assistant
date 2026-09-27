@@ -1,0 +1,106 @@
+.ai-sensitive-consent {
+  width: min(520px, calc(100vw - 32px));
+  max-width: 520px;
+  max-height: min(640px, calc(100dvh - 32px));
+  padding: 0;
+  overflow: auto;
+  color: var(--text-primary);
+  background: var(--surface-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-dialog);
+  box-shadow: var(--shadow-medium);
+}
+
+.ai-sensitive-consent::backdrop {
+  background: rgb(17 30 25 / 42%);
+  backdrop-filter: blur(3px);
+}
+
+.ai-sensitive-consent > header,
+.ai-sensitive-consent > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+}
+
+.ai-sensitive-consent > header {
+  display: block;
+  background: var(--surface-dialog-header);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ai-sensitive-consent h2 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: var(--font-size-module);
+}
+
+.ai-sensitive-consent-eyebrow {
+  margin: 0 0 var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+.ai-sensitive-consent-content {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  line-height: 1.6;
+}
+
+.ai-sensitive-consent-content > p {
+  margin: 0;
+}
+
+.ai-sensitive-consent-content dl {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.ai-sensitive-consent-content dl > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.55fr) minmax(0, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-secondary);
+  border-radius: var(--radius-control);
+}
+
+.ai-sensitive-consent-content dt {
+  color: var(--text-secondary);
+}
+
+.ai-sensitive-consent-content dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.ai-sensitive-consent-note {
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+.ai-sensitive-consent > footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ai-sensitive-consent > footer button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .ai-sensitive-consent > header,
+  .ai-sensitive-consent > footer,
+  .ai-sensitive-consent-content {
+    padding: var(--space-4);
+  }
+
+  .ai-sensitive-consent-content dl > div {
+    grid-template-columns: minmax(90px, 0.5fr) minmax(0, 1fr);
+  }
+}

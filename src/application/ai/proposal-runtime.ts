@@ -88,6 +88,8 @@ export interface AiPlannerProposalRuntime {
     readonly confirmed: boolean;
     readonly expectedPreviewRevision: number;
     readonly permissionIds: readonly string[];
+    /** Optional domain Application commit for proposals originating in an existing workflow. */
+    readonly applicationCommit?: (proposal: AiPlannerProposal) => Promise<string>;
   }): Promise<AiProposalApplyResult>;
 }
 
@@ -342,6 +344,7 @@ export function createAiPlannerProposalRuntime(
     readonly confirmed: boolean;
     readonly expectedPreviewRevision: number;
     readonly permissionIds: readonly string[];
+    readonly applicationCommit?: (proposal: AiPlannerProposal) => Promise<string>;
   }): Promise<AiProposalApplyResult> {
     const proposal = store.get(applyInput.id);
     if (!proposal) return { status: "notFound" };
@@ -379,7 +382,10 @@ export function createAiPlannerProposalRuntime(
       const approved = transitionAiProposal(proposal, "approved");
       store.set(approved);
       let entityId: string;
-      if (approved.type === "task") {
+      if (applyInput.applicationCommit) {
+        if (approved.type === "timeBlock") throw new Error("此来源不支持时间块写入。");
+        entityId = await applyInput.applicationCommit(approved);
+      } else if (approved.type === "task") {
         const payload = approved.payload as TaskProposalPayload;
         const created = await ports.createTask({
           title: payload.title,

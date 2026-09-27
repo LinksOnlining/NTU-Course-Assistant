@@ -402,11 +402,13 @@ export function AISettingsPanel() {
         <div className="ai-data-access-sensitive-list" aria-label="敏感数据权限说明">
           <aside className="ai-data-access-sensitive" aria-label="日记内容：仅单次授权">
             <strong>日记内容：仅在具体操作中单次授权</strong>
-            <p>不会长期授权。未来只有在你明确选择日记并同意后，才会加入单次 AI 请求。</p>
+            <p>不会长期授权。只有在你明确选择一篇日记并同意后，正文才会加入这一次 AI 请求。</p>
           </aside>
           <aside className="ai-data-access-sensitive" aria-label="Inbox 原文：仅单次授权">
             <strong>Inbox 原文：仅在具体操作中单次授权</strong>
-            <p>不会长期授权。未来只有在你明确选择内容并同意后，才会加入单次 AI 请求。</p>
+            <p>
+              不会长期授权。只有在你明确选择一条收件箱内容并同意后，原文才会加入这一次 AI 请求。
+            </p>
           </aside>
         </div>
         {dataAccessMessage && (

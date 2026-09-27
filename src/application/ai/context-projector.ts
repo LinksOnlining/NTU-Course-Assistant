@@ -377,11 +377,20 @@ function projectDiary(input: AiDiarySnapshot, request: AiContextSourceRequest): 
     entries: input.entries
       .filter((item) => selectedIds.includes(item.id))
       .sort((a, b) => compareText(a.date, b.date) || compareText(a.id, b.id))
-      .map((item) => ({
-        id: safeText(item.id),
-        date: safeText(item.date),
-        body: safeText(item.body),
-      })),
+      .map((item) =>
+        fitUntrustedEnvelope(
+          {
+            sourceType: "diary",
+            sourceId: safeText(item.id),
+            date: safeText(item.date),
+            content: safeText(item.body),
+            trust: "untrusted-user-content",
+            truncated: item.truncated === true,
+            omittedBytes: safeOptionalNumber(item.omittedBytes),
+          },
+          18 * 1024,
+        ),
+      ),
   };
 }
 
@@ -393,12 +402,59 @@ function projectInbox(input: AiInboxSnapshot, request: AiContextSourceRequest): 
     items: input.items
       .filter((item) => selectedIds.includes(item.id))
       .sort((a, b) => compareText(a.capturedAt, b.capturedAt) || compareText(a.id, b.id))
-      .map((item) => ({
-        id: safeText(item.id),
-        capturedAt: safeText(item.capturedAt),
-        rawText: safeText(item.rawText),
-      })),
+      .map((item) =>
+        fitUntrustedEnvelope(
+          {
+            sourceType: "inbox",
+            sourceId: safeText(item.id),
+            capturedAt: safeText(item.capturedAt),
+            content: safeText(item.rawText),
+            trust: "untrusted-user-content",
+            truncated: item.truncated === true,
+            omittedBytes: safeOptionalNumber(item.omittedBytes),
+          },
+          18 * 1024,
+        ),
+      ),
   };
+}
+
+function fitUntrustedEnvelope<
+  T extends {
+    readonly content: string | null;
+    readonly truncated: boolean;
+    readonly omittedBytes: number;
+  },
+>(envelope: T, maxBytes: number): T {
+  const content = envelope.content ?? "";
+  const characters = Array.from(content);
+  const serialize = (length: number) =>
+    JSON.stringify({
+      ...envelope,
+      content: characters.slice(0, length).join(""),
+      truncated: envelope.truncated || length < characters.length,
+      omittedBytes:
+        envelope.omittedBytes + new TextEncoder().encode(characters.slice(length).join("")).length,
+    });
+  let low = 0;
+  let high = characters.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (new TextEncoder().encode(serialize(middle)).length <= maxBytes) low = middle;
+    else high = middle - 1;
+  }
+  const finalContent = characters.slice(0, low).join("");
+  return Object.freeze({
+    ...envelope,
+    content: finalContent,
+    truncated: envelope.truncated || low < characters.length,
+    omittedBytes:
+      envelope.omittedBytes + new TextEncoder().encode(characters.slice(low).join("")).length,
+  });
+}
+
+function safeOptionalNumber(value: number | undefined): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }
 
 function inDateRange(date: string, request: AiContextSourceRequest): boolean {

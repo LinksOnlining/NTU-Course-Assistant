@@ -10,26 +10,18 @@ import {
 
 type BundleWithoutBudget = Omit<AiContextBundle, "budget">;
 
+const MAX_AI_CONTEXT_BYTES = 32 * 1024;
+const MAX_AI_CONTEXT_MODULE_BYTES = 18 * 1024;
+const MAX_AI_CONTEXT_STRING_LENGTH = 16 * 1024;
+
 export function normalizeAiContextBudget(
   value: Partial<AiContextBudget> | undefined,
 ): AiContextBudget {
   if (!value) return DEFAULT_AI_CONTEXT_BUDGET;
   return Object.freeze({
-    maxTotalBytes: boundedInteger(
-      value.maxTotalBytes,
-      1024,
-      DEFAULT_AI_CONTEXT_BUDGET.maxTotalBytes,
-    ),
-    maxModuleBytes: boundedInteger(
-      value.maxModuleBytes,
-      512,
-      DEFAULT_AI_CONTEXT_BUDGET.maxModuleBytes,
-    ),
-    maxStringLength: boundedInteger(
-      value.maxStringLength,
-      1,
-      DEFAULT_AI_CONTEXT_BUDGET.maxStringLength,
-    ),
+    maxTotalBytes: boundedInteger(value.maxTotalBytes, 1024, MAX_AI_CONTEXT_BYTES),
+    maxModuleBytes: boundedInteger(value.maxModuleBytes, 512, MAX_AI_CONTEXT_MODULE_BYTES),
+    maxStringLength: boundedInteger(value.maxStringLength, 1, MAX_AI_CONTEXT_STRING_LENGTH),
     maxItemsPerModule: boundedInteger(
       value.maxItemsPerModule,
       1,

@@ -13,6 +13,7 @@ import {
 } from "../../application/inbox/inbox.ts";
 import type { AppRoute } from "../../navigation/types.ts";
 import type { InboxItem, InboxProposal } from "../../types/inbox.ts";
+import { InboxSensitiveAiPanel } from "./InboxSensitiveAiPanel.tsx";
 import "./workspace-inbox.css";
 
 interface WorkspaceInboxPageProps {
@@ -279,6 +280,11 @@ export function WorkspaceInboxPage({ onNavigate, initialItemId }: WorkspaceInbox
                   <h3 className="workspace-inbox-raw-label">原始内容</h3>
                   <p className="workspace-inbox-raw">{item.rawText}</p>
                 </section>
+                <InboxSensitiveAiPanel
+                  item={item}
+                  onOpenSettings={() => onNavigate({ area: "settings", page: "main" })}
+                  onApplied={() => void reload()}
+                />
                 {editable ? (
                   <div className="workspace-inbox-preview">
                     <h3>整理预览</h3>

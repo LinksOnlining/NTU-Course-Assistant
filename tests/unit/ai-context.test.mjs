@@ -530,6 +530,122 @@ test("敏感日记/收件箱正文仅在匹配条目、匹配请求的一次同�
   assert.doesNotMatch(JSON.stringify(inbox.moduleContexts.inbox), /unselected-inbox-raw/u);
 });
 
+test("敏感 Grant 同时绑定权限、requestId 与唯一 objectId", async () => {
+  const diaryA = { type: "diaryEntry", id: "diary-A" };
+  const diaryB = { type: "diaryEntry", id: "diary-B" };
+  const inboxA = { type: "inboxItem", id: "inbox-A" };
+  const inboxB = { type: "inboxItem", id: "inbox-B" };
+  const cases = [
+    {
+      grant: grantSensitiveContextAfterUserConsent({
+        requestId: "grant-object",
+        permissionId: "diary.body.read",
+        selectedItem: diaryA,
+      }),
+      requestId: "grant-object",
+      selectedItems: [diaryB],
+      scope: "diary.body.read",
+    },
+    {
+      grant: grantSensitiveContextAfterUserConsent({
+        requestId: "grant-request",
+        permissionId: "diary.body.read",
+        selectedItem: diaryA,
+      }),
+      requestId: "different-request",
+      selectedItems: [diaryA],
+      scope: "diary.body.read",
+    },
+    {
+      grant: grantSensitiveContextAfterUserConsent({
+        requestId: "grant-permission",
+        permissionId: "diary.body.read",
+        selectedItem: diaryA,
+      }),
+      requestId: "grant-permission",
+      selectedItems: [inboxA],
+      scope: "inbox.raw.read",
+    },
+    {
+      grant: grantSensitiveContextAfterUserConsent({
+        requestId: "inbox-object",
+        permissionId: "inbox.raw.read",
+        selectedItem: inboxA,
+      }),
+      requestId: "inbox-object",
+      selectedItems: [inboxB],
+      scope: "inbox.raw.read",
+    },
+    {
+      grant: grantSensitiveContextAfterUserConsent({
+        requestId: "inbox-cross-type",
+        permissionId: "inbox.raw.read",
+        selectedItem: inboxA,
+      }),
+      requestId: "inbox-cross-type",
+      selectedItems: [diaryA],
+      scope: "diary.body.read",
+    },
+  ];
+  for (const [index, scenario] of cases.entries()) {
+    let sourceCalled = false;
+    const result = await buildAiContext(
+      request({
+        id: scenario.requestId,
+        requestedScopes: [scenario.scope],
+        selectedItems: scenario.selectedItems,
+        requestGrants: [scenario.grant],
+      }),
+      { persistentGrants: ["diary.body.read", "inbox.raw.read"] },
+      {
+        diary: async () => {
+          sourceCalled = true;
+          return { entries: [{ id: "diary-A", date: "2026-09-26", body: `object-${index}` }] };
+        },
+        inbox: async () => {
+          sourceCalled = true;
+          return {
+            items: [
+              { id: "inbox-A", capturedAt: "2026-09-26T02:30:00.000Z", rawText: `inbox-${index}` },
+            ],
+          };
+        },
+      },
+    );
+    assert.equal(sourceCalled, false);
+    assert.deepEqual(result.permissions.includedScopes, []);
+    assert.deepEqual(result.moduleContexts, {});
+  }
+});
+
+test("Sensitive request grant 只能消费一次，失败后的重试必须签发新 grant", async () => {
+  const selected = { type: "diaryEntry", id: "diary-one-shot" };
+  const grant = grantSensitiveContextAfterUserConsent({
+    requestId: "one-shot-request",
+    permissionId: "diary.body.read",
+    selectedItem: selected,
+  });
+  let sourceCalls = 0;
+  const input = request({
+    id: "one-shot-request",
+    requestedScopes: ["diary.body.read"],
+    selectedItems: [selected],
+    requestGrants: [grant],
+  });
+  const sources = {
+    diary: async () => {
+      sourceCalls += 1;
+      return { entries: [{ id: selected.id, date: "2026-09-26", body: "one request only" }] };
+    },
+  };
+  const first = await buildAiContext(input, {}, sources);
+  const replay = await buildAiContext(input, {}, sources);
+  assert.deepEqual(first.permissions.includedScopes, ["diary.body.read"]);
+  assert.deepEqual(replay.permissions.includedScopes, []);
+  assert.equal(replay.moduleContexts.diary, undefined);
+  assert.equal(sourceCalls, 1);
+});
+
 test("请求方不能借 workspace.read 提升为其他模块权限", async () => {
   const called = [];
   const result = await buildAiContext(

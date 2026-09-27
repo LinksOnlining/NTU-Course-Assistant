@@ -4,13 +4,18 @@ import { test } from "node:test";
 
 const source = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 
-test("Diary frontend stays local and never logs or sends the body to a network layer", () => {
+test("Diary storage stays local; sensitive AI requires the selected-entry consent path", () => {
   const service = source("src/services/diary-storage.ts");
   const page = source("src/workspace/diary/WorkspaceDiaryPage.tsx");
   const autosave = source("src/workspace/diary/diary-autosave.ts");
   for (const contents of [service, page, autosave]) {
-    assert.doesNotMatch(contents, /\bfetch\s*\(|console\.|analytics|weather|updater|AI/u);
+    assert.doesNotMatch(contents, /\bfetch\s*\(|console\.|analytics|weather|updater/u);
   }
+  assert.doesNotMatch(service, /\bAI\b/u);
+  assert.doesNotMatch(autosave, /\bAI\b/u);
+  assert.match(page, /onAllowOnce=\{\(\) => void allowDiaryAiOnce\(\)\}/u);
+  assert.match(page, /sensitiveAiService\.reflectSelectedDiary\(selectedEntry\)/u);
+  assert.match(page, /只有你明确同意 AI 整理时/u);
   assert.match(service, /invoke<DiaryEntry>\("save_diary_entry"/u);
   assert.doesNotMatch(service, /console\.(?:log|warn|error)/u);
   assert.doesNotMatch(page, /body\s*\)\s*=>\s*console|console\..*body/u);

@@ -310,8 +310,10 @@ test("数据访问默认关闭、敏感权限不提供长期开关且设置只�
   await expect(access.getByText(/配置 DeepSeek API Key 不会自动授予数据权限/u)).toBeVisible();
   await expect(access.getByText("日记内容：仅在具体操作中单次授权")).toBeVisible();
   await expect(access.getByText("Inbox 原文：仅在具体操作中单次授权")).toBeVisible();
-  await expect(access.getByText(/不会长期授权。未来只有在你明确选择日记并同意后/u)).toBeVisible();
-  await expect(access.getByText(/不会长期授权。未来只有在你明确选择内容并同意后/u)).toBeVisible();
+  await expect(access.getByText(/不会长期授权。只有在你明确选择一篇日记并同意后/u)).toBeVisible();
+  await expect(
+    access.getByText(/不会长期授权。只有在你明确选择一条收件箱内容并同意后/u),
+  ).toBeVisible();
   await expect(access.getByRole("checkbox", { name: /日记|收件箱/u })).toHaveCount(0);
 
   const commandCountBefore = await page.evaluate(

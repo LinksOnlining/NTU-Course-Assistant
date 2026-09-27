@@ -141,10 +141,21 @@ export async function confirmInboxTask(
   now = new Date(),
   id = crypto.randomUUID(),
 ): Promise<InboxConfirmation> {
+  return confirmInboxTaskById(item.id, proposal, repository, now, id);
+}
+
+/** AI-reviewed Inbox proposals reuse the same atomic, idempotent repository confirmation. */
+export async function confirmInboxTaskById(
+  inboxItemId: string,
+  proposal: InboxProposal,
+  repository: InboxRepository = defaultRepository,
+  now = new Date(),
+  id = crypto.randomUUID(),
+): Promise<InboxConfirmation> {
   const error = validateInboxTaskProposal(proposal);
   if (error) throw new Error(error);
   const timestamp = now.toISOString();
-  return repository.confirmInboxAsTask(item.id, {
+  return repository.confirmInboxAsTask(inboxItemId, {
     id,
     title: proposal.title.trim(),
     description: null,
@@ -165,10 +176,21 @@ export async function confirmInboxEvent(
   now = new Date(),
   id = crypto.randomUUID(),
 ): Promise<InboxConfirmation> {
+  return confirmInboxEventById(item.id, proposal, repository, now, id);
+}
+
+/** AI-reviewed Inbox proposals reuse the same atomic, idempotent repository confirmation. */
+export async function confirmInboxEventById(
+  inboxItemId: string,
+  proposal: InboxProposal,
+  repository: InboxRepository = defaultRepository,
+  now = new Date(),
+  id = crypto.randomUUID(),
+): Promise<InboxConfirmation> {
   const error = validateInboxEventProposal(proposal);
   if (error) throw new Error(error);
   const timestamp = now.toISOString();
-  return repository.confirmInboxAsEvent(item.id, {
+  return repository.confirmInboxAsEvent(inboxItemId, {
     id,
     title: proposal.title.trim(),
     description: null,

@@ -7,6 +7,9 @@ import {
 } from "../../application/diary/diary.ts";
 import type { AppRoute } from "../../navigation/types.ts";
 import type { DiaryEntry } from "../../types/diary.ts";
+import type { DiaryReflectionResult } from "../../application/ai/sensitive-workflows.ts";
+import { AiSensitiveConsent } from "../ai/AiSensitiveConsent.tsx";
+import { sensitiveAiService } from "../ai/sensitive-ai-service.ts";
 import { DiaryAutosave, type DiarySaveState } from "./diary-autosave.ts";
 import "./workspace-diary.css";
 
@@ -48,8 +51,14 @@ export function WorkspaceDiaryPage({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [switching, setSwitching] = useState(false);
+  const [aiConsentDate, setAiConsentDate] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [aiResult, setAiResult] = useState<DiaryReflectionResult | null>(null);
   const autosaveRef = useRef<DiaryAutosave | null>(null);
   const switchLock = useRef(false);
+  const aiLock = useRef(false);
+  const aiContentRevision = useRef(0);
 
   const updateSaveState = useCallback((state: DiarySaveState) => {
     setSaveState(state);
@@ -62,8 +71,12 @@ export function WorkspaceDiaryPage({
 
   const loadDate = useCallback(
     async (date: string) => {
+      aiContentRevision.current += 1;
       setLoading(true);
       setLoadError("");
+      setAiConsentDate(null);
+      setAiResult(null);
+      setAiError("");
       try {
         const [loaded, dates] = await Promise.all([loadDiaryEntry(date), loadDiaryContentDates()]);
         setSelectedDate(date);
@@ -115,6 +128,73 @@ export function WorkspaceDiaryPage({
     }
   }
 
+  async function requestDiaryAi() {
+    if (aiLock.current || aiBusy || !body.trim()) return;
+    aiLock.current = true;
+    const contentRevision = aiContentRevision.current;
+    setAiError("");
+    try {
+      if (!(await sensitiveAiService.isConfigured())) {
+        if (contentRevision === aiContentRevision.current) {
+          setAiError("请先在设置中配置 DeepSeek，之后再发起本次日记整理。");
+        }
+        return;
+      }
+      if (contentRevision === aiContentRevision.current) setAiConsentDate(selectedDate);
+    } finally {
+      aiLock.current = false;
+    }
+  }
+
+  async function allowDiaryAiOnce() {
+    const date = aiConsentDate;
+    if (!date || aiLock.current || aiBusy) return;
+    aiLock.current = true;
+    const contentRevision = aiContentRevision.current;
+    setAiConsentDate(null);
+    setAiBusy(true);
+    setAiResult(null);
+    setAiError("");
+    try {
+      if (!(await (autosaveRef.current?.flush() ?? Promise.resolve(true)))) {
+        setAiError("日记尚未保存成功，请先解决保存问题后重新发起并授权。");
+        return;
+      }
+      if (contentRevision !== aiContentRevision.current) return;
+      const selectedEntry = await loadDiaryEntry(date);
+      if (contentRevision !== aiContentRevision.current) return;
+      if (!selectedEntry?.body.trim()) {
+        setAiError("当前日记为空，暂时没有可整理的内容。");
+        return;
+      }
+      const outcome = await sensitiveAiService.reflectSelectedDiary(selectedEntry);
+      if (contentRevision !== aiContentRevision.current) return;
+      if (outcome.status === "ready") {
+        const truncationNote = `日记正文超出本次处理上限，仅处理前 16 KiB，另省略 ${outcome.omittedBytes} 字节。`;
+        const limitations = outcome.truncated
+          ? [
+              truncationNote,
+              ...outcome.result.limitations.filter((item) => item !== truncationNote),
+            ]
+          : [...outcome.result.limitations];
+        setAiResult({ ...outcome.result, limitations: [...new Set(limitations)].slice(0, 6) });
+      } else if (outcome.status === "notConfigured") {
+        setAiError("DeepSeek 当前未配置，请前往设置配置后重新发起；上一次授权不会保留。");
+      } else if (outcome.status === "busy") {
+        setAiError("该日记整理请求仍在处理中，请稍后再试。重新发起时会再次询问授权。");
+      } else {
+        setAiError(outcome.message);
+      }
+    } catch {
+      if (contentRevision === aiContentRevision.current) {
+        setAiError("本次日记整理失败；如需重试，请重新确认授权。");
+      }
+    } finally {
+      aiLock.current = false;
+      setAiBusy(false);
+    }
+  }
+
   function statusText(): string {
     switch (saveState) {
       case "pending":
@@ -142,7 +222,9 @@ export function WorkspaceDiaryPage({
             工作台 <span aria-hidden="true">›</span> 日记
           </button>
           <h2 id="workspace-diary-title">日记</h2>
-          <p>仅保存在本机，不会发送到网络或进入日志。</p>
+          <p>
+            默认仅保存在本机；只有你明确同意 AI 整理时，才会发送当前选中的这一篇日记至 DeepSeek。
+          </p>
         </div>
         <div
           className="workspace-diary-status"
@@ -211,6 +293,16 @@ export function WorkspaceDiaryPage({
           <div className="workspace-diary-editor-heading">
             <h3>{formatDate(selectedDate)}</h3>
             <span>{selectedDate}</span>
+            {body.trim() && (
+              <button
+                type="button"
+                className="workspace-diary-ai-button"
+                onClick={() => void requestDiaryAi()}
+                disabled={aiBusy || loading || switching}
+              >
+                {aiBusy ? "正在整理…" : "AI 帮我整理"}
+              </button>
+            )}
           </div>
           {loadError ? (
             <div className="workspace-diary-load-error" role="alert">
@@ -227,6 +319,9 @@ export function WorkspaceDiaryPage({
               disabled={loading || switching}
               onChange={(event) => {
                 const value = event.currentTarget.value;
+                aiContentRevision.current += 1;
+                setAiResult(null);
+                setAiError("");
                 setBody(value);
                 autosaveRef.current?.schedule(selectedDate, value);
               }}
@@ -239,8 +334,73 @@ export function WorkspaceDiaryPage({
               正在读取日记…
             </p>
           )}
+          {aiError && (
+            <div className="workspace-diary-ai-error" role="alert">
+              <span>{aiError}</span>
+              {aiError.includes("设置中配置 DeepSeek") && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate({ area: "settings", page: "main" })}
+                >
+                  打开设置
+                </button>
+              )}
+            </div>
+          )}
+          {aiResult && (
+            <section
+              className="workspace-diary-ai-result"
+              aria-label="日记整理结果"
+              data-testid="diary-ai-result"
+            >
+              <h4>基于这篇日记</h4>
+              <p>{aiResult.summary}</p>
+              {aiResult.themes.length > 0 && (
+                <ResultList title="主要主题" items={aiResult.themes} />
+              )}
+              {aiResult.observations.length > 0 && (
+                <ResultList title="观察" items={aiResult.observations} />
+              )}
+              {aiResult.suggestions.length > 0 && (
+                <ResultList title="温和建议" items={aiResult.suggestions} />
+              )}
+              {aiResult.limitations.length > 0 && (
+                <ResultList title="限制" items={aiResult.limitations} />
+              )}
+              <p className="workspace-diary-ai-privacy">
+                结果仅显示在当前页面，不会保存为 AI 历史或写回日记。
+              </p>
+            </section>
+          )}
         </section>
       </div>
+      <AiSensitiveConsent
+        open={aiConsentDate !== null}
+        title="允许 AI 整理本篇日记？"
+        selectedDate={aiConsentDate ?? selectedDate}
+        contentType="日记正文"
+        onDismiss={() => setAiConsentDate(null)}
+        onAllowOnce={() => void allowDiaryAiOnce()}
+      />
     </section>
+  );
+}
+
+function ResultList({
+  title,
+  items,
+}: {
+  readonly title: string;
+  readonly items: readonly string[];
+}) {
+  return (
+    <div className="workspace-diary-ai-list">
+      <h5>{title}</h5>
+      <ul>
+        {items.map((item, index) => (
+          <li key={`${title}-${index}`}>{item}</li>
+        ))}
+      </ul>
+    </div>
   );
 }

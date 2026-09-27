@@ -12,7 +12,11 @@ export type AiIntent =
   | "extract"
   | "reflect"
   | "todayAnalyze"
-  | "todayPlan";
+  | "todayPlan"
+  | "diaryReflectSelected"
+  | "inboxInterpretSelected"
+  | "inboxProposeTask"
+  | "inboxProposeEvent";
 
 export interface AiRequest {
   readonly id: string;

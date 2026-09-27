@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0–4.5 COMPLETE；Phase 4.6 Implementation COMPLETE、Automated PASS、DeepSeek Live PENDING、Overall PENDING（等待 Ethan 人工验收）。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 在工作台增加一次性 Today Assistant；Phase 4.6 扩展本地可信 Planner 路由与未来日期提案。无 AI Apply Tool、聊天历史或持久化 AI 状态。Phase 4.6 的真实 DeepSeek Planner Tool Calling / Windows Live 尚未执行。
+状态：**Phase 4.0–4.6 COMPLETE；Phase 4.7 Implementation COMPLETE、Automated PASS、DeepSeek Live PENDING、Overall PENDING；Phase 4.8 NOT STARTED。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 增加一次性 Today Assistant；Phase 4.6 扩展本地可信 Planner 路由与未来日期提案；Phase 4.7 增加单条 Diary / Inbox 的 Consent-gated 工作流。无 AI Apply Tool、聊天历史或持久化 AI 状态。Phase 4.7 DeepSeek Live 尚未执行。
 
 ## 1. 产品定位
 
@@ -51,7 +51,9 @@ Planner 增加 `planner.propose` 描述性权限。能力只声明所需权限�
 
 AI 权限使用来源模块的 `module.action` 稳定标识。运行时 `AiPermissionGate` 默认拒绝未知、未授予、空及不受支持的权限。长期读取白名单为 `workspace.read`、`academic.read`、`planner.read`、`routine.read`、`weather.read`，均在 Settings → AI → 数据访问中默认关闭；只保存稳定 ID，不保存显示文案。损坏或被篡改的设置会规范化为允许列表，敏感权限不能进入持久设置。
 
-Diary 正文 `diary.body.read` 与 Inbox 原文 `inbox.raw.read` 只能使用受信任 Application orchestration 在用户针对特定对象明确同意后签发的一次性 grant；grant 绑定单个 request ID 与对象、只在内存中消费一次，不存在“以后都允许”开关。当前没有对应 AI 工作流/同意弹窗，因此并未授权任何实际敏感数据请求。
+Diary 正文 `diary.body.read` 与 Inbox 原文 `inbox.raw.read` 只能在对应对象的本地同意弹窗中由用户选择“仅本次允许”后进入当前请求。一次性 grant 绑定单个 request ID、权限和所选对象，Gate 只在内存中消费一次；取消、Esc、背景关闭、失败或重试均不会复用授权，不存在“以后都允许”开关。当前工作流为 `diary.reflectSelected` 与 `inbox.interpretSelected`，均只处理一个显式选择的对象。
+
+敏感正文以带 `sourceType`、`sourceId` 和 `trust: untrusted-user-content` 的结构化 envelope 作为用户数据传入；外层 envelope 标记字符在序列化文本中转义，固定 system instructions 由 native intent 映射提供。解释工作流不开放 Proposal Tool；Inbox Proposal 只有在用户看到识别结果后再次主动选择“生成任务建议”或“生成活动建议”时才开始，并分别只开放一个本地 allowlist Tool。原文不进入 Proposal；确认仍走既有 Preview、Revalidate、用户确认和 Application UseCase。Diary 全只读；没有自动写入、全量读取、后台处理或持久化敏感结果。
 
 `planner.propose` 是 Planner 模块级 Proposal authorization，不等同于业务写入。Phase 4.2 初始 Runtime Gate 尚未开放 Proposal；Phase 4.4 在每次 orchestration 中另行接收本地 workflow grant 与 proposal-tool allowlist。旧的宽泛 `diary.read` / `inbox.read` 元数据不会授权 Diary body / Inbox raw。
 
@@ -144,4 +146,13 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 - `PlannerCandidateSlot` 携带由本地日期与起止钟点确定性生成的 `candidateId`、本地 `date/startTime/endTime`、同一注入时区派生的 ISO `start/end`、`durationMinutes`、warnings 和 source window。Event/TimeBlock Tool 只接收本请求的 `candidateId`；运行时对 ID 与单次 proposal constraint 做严格匹配，Adapter 只使用不发给 Provider 的可信本地 `canonicalPayload`。缺失/伪造 ID、额外 provider start/end 都拒绝；Provider 不生成时间事实。
 - 时间业务契约仍为 Planner 本地日期与钟点，不把 ISO UTC 文本与本地时间字符串直接比较。Event Preview 展示活动、日期、时间段和时长；确认前不写入，确认后继续走 Phase 4.4 的过期/冲突/关联对象重校验与现有 Application UseCase。TimeBlock 表示计划执行时间，PersonalTask deadline 表示最晚完成时间；安排 TimeBlock 不得修改 Deadline。未来若用户明确要求修改 Deadline，必须通过独立的 Old Deadline → New Deadline Proposal、Preview、User Confirm、Revalidate 与 Application UseCase；不得与 TimeBlock Proposal 捆绑静默修改。
 - Proposal gate 保持 `planner.propose`（Planner 模块级授权）加 workflow-specific 单一 Proposal Tool allowlist。每次最多一个 Proposal；禁止 AI Apply/Write。只有用户本地确认后，既有 Proposal Runtime 才重校验并调用现有 Application UseCase。
-- 自动化验证、Production Build、SQLite schema=7/migration=0 及 Ethan 确认的 Windows/DeepSeek Live 验收结果见 [`v2-phase-4-6-verification.md`](v2-phase-4-6-verification.md)。Phase 4.6 Overall：COMPLETE；Phase 4.7：NOT STARTED。
+- 自动化验证、Production Build、SQLite schema=7/migration=0 及 Ethan 确认的 Windows/DeepSeek Live 验收结果见 [`v2-phase-4-6-verification.md`](v2-phase-4-6-verification.md)。Phase 4.6 Overall：COMPLETE；Phase 4.7 状态见本契约第 15 节。
+
+## 15. Phase 4.7 Selected Sensitive Workflows
+
+- `diary.reflectSelected` 只读取当前选中的单篇 Diary Entry，返回受本地 schema 限制的摘要、主题、观察、建议与限制；只读、不创建 Proposal、不写回。`inbox.interpretSelected` 只读取当前选中的单条 Inbox raw text，生成有界结构化识别结果；模糊日期/时间由本地确定性解析约束，不猜测。
+- `diary.body.read` / `inbox.raw.read` 不是持久权限。用户每次需要在对象范围清晰的 Consent dialog 中作出“仅本次允许”；grant 绑定 permission、request ID、object type/ID，单次消费。Retry、切换对象、重新挂载、取消、Esc 或背景关闭不能保留 grant。Settings 不提供永久授权开关。
+- 敏感预算：Diary 正文最多 16 KiB UTF-8，Inbox 原文最多 8 KiB UTF-8，单个模块 envelope 最多 18 KiB，Context 最多 32 KiB；截断保留 `truncated` 与省略字节数，并在结果限制中展示。返回 schema 对未知字段、无效日期/时间及超长文本拒绝。
+- Diary / Inbox 正文、完整 prompt、模型输出、Proposal payload 和 API Key 不进入应用日志或持久存储。请求与结果只存在本次运行内存；无 history、memory、RAG、vector DB、后台扫描或自动请求。
+- Inbox 解释不会自动产生 Proposal。用户必须在识别结果后第二次点击任务/活动 CTA；task 与 event 分别只暴露自身 Proposal Tool，不开放 TimeBlock Tool，也不向 Proposal/Preview 传递完整 raw。Proposal 仍须本地预览、重校验、用户确认后调用 Inbox Application UseCase；重复确认服从既有 idempotency。
+- 本阶段实现与 automated gate 记录见 [`v2-phase-4-7-verification.md`](v2-phase-4-7-verification.md)。Phase 4.7 DeepSeek Live：PENDING；Phase 4.8：NOT STARTED。

@@ -173,6 +173,8 @@ export interface AiDiarySnapshot {
     readonly id: string;
     readonly date: string;
     readonly body: string;
+    readonly truncated?: boolean;
+    readonly omittedBytes?: number;
   }[];
 }
 
@@ -181,6 +183,8 @@ export interface AiInboxSnapshot {
     readonly id: string;
     readonly capturedAt: string;
     readonly rawText: string;
+    readonly truncated?: boolean;
+    readonly omittedBytes?: number;
   }[];
 }
 

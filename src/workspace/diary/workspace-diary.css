@@ -214,6 +214,47 @@
   opacity: 0.55;
 }
 
+.workspace-diary-ai-button {
+  margin-left: auto;
+}
+
+.workspace-diary-ai-error,
+.workspace-diary-ai-result {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+}
+
+.workspace-diary-ai-error {
+  color: var(--danger);
+}
+
+.workspace-diary-ai-result h4,
+.workspace-diary-ai-result h5,
+.workspace-diary-ai-result p,
+.workspace-diary-ai-result ul {
+  margin: 0;
+}
+
+.workspace-diary-ai-result h4,
+.workspace-diary-ai-result h5 {
+  color: var(--text-heading);
+}
+
+.workspace-diary-ai-list ul {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: 1.25rem;
+}
+
+.workspace-diary-ai-privacy {
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+}
+
 @media (max-width: 760px) {
   .workspace-diary-page {
     gap: var(--space-2);
