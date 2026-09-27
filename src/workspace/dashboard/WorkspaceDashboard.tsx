@@ -19,6 +19,7 @@ import { aiPlannerProposalRuntime } from "../../application/ai/proposal-runtime.
 import { todayAssistantService } from "../ai/today-assistant-service.ts";
 import { TodayAssistantPanel } from "../ai/TodayAssistantPanel.tsx";
 import { DailyBriefPanel } from "../ai/DailyBriefPanel.tsx";
+import { DailySummaryPanel } from "./DailySummaryPanel.tsx";
 import "./workspace-dashboard.css";
 
 interface WorkspaceDashboardProps {
@@ -563,6 +564,12 @@ export function WorkspaceDashboard({
               aiPlannerProposalRuntime.cancel(proposal.id);
             }}
             onApplied={() => setRetry((value) => value + 1)}
+          />
+          <DailySummaryPanel
+            model={model}
+            sources={sources!}
+            service={todayAssistantService}
+            onOpenSettings={() => onOpenAISettings?.()}
           />
         </aside>
       </div>

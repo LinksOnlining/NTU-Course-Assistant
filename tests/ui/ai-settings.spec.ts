@@ -127,10 +127,10 @@ test("每日简报默认关闭、最近总结偏好默认开启并保存在本�
   await expect(enabled).not.toBeChecked();
   await expect(summaries).toBeChecked();
   await expect(summaries).toBeDisabled();
-  await expect(panel.getByText(/尚无正式每日总结数据源/u)).toBeVisible();
+  await expect(panel.getByText(/仅在每日简报开启时读取此前 1–3 个自然日/u)).toBeVisible();
 
   await enabled.check();
-  await expect(summaries).toBeDisabled();
+  await expect(summaries).toBeEnabled();
   await expect(page.getByTestId("daily-brief-dialog")).toHaveCount(0);
   const stored = await page.evaluate(() =>
     JSON.parse(localStorage.getItem("links-workplace.ai.daily-brief") ?? "null"),

@@ -79,6 +79,7 @@ export interface AiAcademicDeadline {
   readonly dueAt: string;
   readonly priority: number;
   readonly status: string;
+  readonly completedAt?: string | null;
   readonly type: string;
 }
 
@@ -99,6 +100,7 @@ export interface AiPlannerTask {
   readonly priority: string;
   readonly deadlineDate: string | null;
   readonly deadlineTime: string | null;
+  readonly completedAt?: string | null;
 }
 
 export interface AiPlannerEvent {

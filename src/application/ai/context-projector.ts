@@ -168,10 +168,15 @@ function projectAcademic(input: AiAcademicSnapshot, request: AiContextSourceRequ
     .filter((item) =>
       hasSelectedAcademicRef
         ? hasTaskRef && selectedTaskIds.includes(item.id)
-        : inDateRange(datePart(item.dueAt), request) ||
-          (request.intent === "dailyBrief" &&
-            isDatePart(datePart(item.dueAt)) &&
-            datePart(item.dueAt) < request.timeRange.startDate),
+        : request.intent === "dailySummary"
+          ? item.status === "COMPLETED"
+            ? datePartInTimeZone(item.completedAt ?? "", request.timeContext.timeZone) ===
+              request.timeRange.startDate
+            : inDateRange(datePart(item.dueAt), request)
+          : inDateRange(datePart(item.dueAt), request) ||
+            (request.intent === "dailyBrief" &&
+              isDatePart(datePart(item.dueAt)) &&
+              datePart(item.dueAt) < request.timeRange.startDate),
     )
     .sort((a, b) => {
       if (request.intent === "dailyBrief") {
@@ -190,6 +195,7 @@ function projectAcademic(input: AiAcademicSnapshot, request: AiContextSourceRequ
       dueAt: safeText(item.dueAt),
       priority: safeNumber(item.priority),
       status: item.status,
+      completedAt: safeText(item.completedAt),
       type: item.type,
     }));
 
@@ -235,10 +241,14 @@ function projectPlanner(input: AiPlannerSnapshot, request: AiContextSourceReques
     .filter((item) =>
       hasSelected
         ? selectedTasks.includes(item.id) || scheduledTaskIds.has(item.id)
-        : item.status !== "completed" &&
-          (item.deadlineDate === null ||
-            inDateRange(item.deadlineDate, request) ||
-            item.status === "open"),
+        : request.intent === "dailySummary"
+          ? item.status !== "completed" ||
+            datePartInTimeZone(item.completedAt ?? "", request.timeContext.timeZone) ===
+              request.timeRange.startDate
+          : item.status !== "completed" &&
+            (item.deadlineDate === null ||
+              inDateRange(item.deadlineDate, request) ||
+              item.status === "open"),
     )
     .sort(
       (a, b) =>
@@ -252,6 +262,7 @@ function projectPlanner(input: AiPlannerSnapshot, request: AiContextSourceReques
       priority: item.priority,
       deadlineDate: safeText(item.deadlineDate),
       deadlineTime: safeText(item.deadlineTime),
+      completedAt: safeText(item.completedAt),
       hasTimeBlock: scheduledTaskIds.has(item.id),
     }));
 
@@ -477,6 +488,27 @@ function inDateRange(date: string, request: AiContextSourceRequest): boolean {
 
 function datePart(value: string): string {
   return value.slice(0, 10);
+}
+
+function datePartInTimeZone(value: string, timeZone: string): string | null {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((item) => item.type === type)?.value;
+    const year = part("year");
+    const month = part("month");
+    const day = part("day");
+    return year && month && day ? `${year}-${month}-${day}` : null;
+  } catch {
+    return null;
+  }
 }
 
 function isDatePart(value: string): boolean {

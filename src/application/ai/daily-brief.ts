@@ -199,7 +199,7 @@ export function createLocalDailyBrief(input: {
     ...(input.weatherNote ? { weatherNote: input.weatherNote } : {}),
     limitations: Object.freeze([
       "以上内容由本机已加载的课程、日程和待办整理；AI 分析尚未完成或当前不可用。",
-      "目前没有正式的每日总结数据源，因此不会推断连续未推进事项。",
+      "连续事项只依据相邻日每日总结与当前仍未完成事项的匹配结果；不会从日记、Inbox 或 AI 历史推断。",
     ]),
     sources: Object.freeze(
       [

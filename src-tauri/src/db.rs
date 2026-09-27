@@ -10,14 +10,16 @@ use crate::models::{
     default_widget_settings, merge_widget_settings, parse_date, parse_time, validate_period_times,
     validate_planner_date_range, validate_reminder_settings, validate_term_config,
     validate_widget_settings, AcademicTask, AcademicTaskStatus, Course, CourseOverride,
-    CourseOverrideKind, DiaryEntry, Exam, ExamStatus, InboxConfirmation, InboxItem, PeriodTime,
-    PersonalTask, PersonalTaskPriority, PersonalTaskStatus, PlannerEvent, ReminderSettings,
-    Routine, Semester, SemesterStatus, TermConfig, TimeBlock, WidgetSettings, WidgetSettingsPatch,
+    CourseOverrideKind, DailySummary, DiaryEntry, Exam, ExamStatus, InboxConfirmation, InboxItem,
+    PeriodTime, PersonalTask, PersonalTaskPriority, PersonalTaskStatus, PlannerEvent,
+    ReminderSettings, Routine, Semester, SemesterStatus, TermConfig, TimeBlock, WidgetSettings,
+    WidgetSettingsPatch,
 };
 
 const SCHEMA_SIX_VERSION: i64 = 6;
 const SCHEMA_SEVEN_VERSION: i64 = 7;
-const CURRENT_SCHEMA_VERSION: i64 = SCHEMA_SEVEN_VERSION;
+const SCHEMA_EIGHT_VERSION: i64 = 8;
+const CURRENT_SCHEMA_VERSION: i64 = SCHEMA_EIGHT_VERSION;
 const HANDLED_REMINDER_RETENTION_MILLISECONDS: i64 = 400 * 24 * 60 * 60 * 1_000;
 
 #[derive(Debug)]
@@ -373,6 +375,15 @@ fn reject_preexisting_schema_seven_objects(connection: &Connection) -> Result<()
 }
 
 fn validate_schema_seven(connection: &Connection) -> Result<(), StorageError> {
+    validate_schema_seven_structure(connection)?;
+    let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version != SCHEMA_SEVEN_VERSION {
+        return Err(StorageError::InvalidData("schema 7 版本校验失败。".into()));
+    }
+    validate_integrity(connection)
+}
+
+fn validate_schema_seven_structure(connection: &Connection) -> Result<(), StorageError> {
     const REQUIRED_TABLES: &[&str] = &["diary_entries", "inbox_items", "routines"];
     const REQUIRED_INDEXES: &[&str] = &["inbox_items_status_created_at", "routines_enabled"];
     for (kind, name) in REQUIRED_TABLES
@@ -418,9 +429,83 @@ fn validate_schema_seven(connection: &Connection) -> Result<(), StorageError> {
         ));
     }
 
+    Ok(())
+}
+
+fn reject_preexisting_schema_eight_objects(connection: &Connection) -> Result<(), StorageError> {
+    let existing: Option<(String, String)> = connection
+        .query_row(
+            "SELECT type, name FROM sqlite_master
+             WHERE (type = 'table' AND name = 'daily_summaries')
+                OR (type = 'index' AND name = 'daily_summaries_summary_date')
+             ORDER BY type, name LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    if let Some((kind, name)) = existing {
+        return Err(StorageError::InvalidData(format!(
+            "schema 7 与已存在的 DailySummary {kind} `{name}` 不一致；为避免覆盖或猜测，已拒绝自动恢复。"
+        )));
+    }
+    Ok(())
+}
+
+fn migrate_schema_seven_to_eight(connection: &mut Connection) -> Result<(), StorageError> {
+    migrate_schema_seven_to_eight_with_hook(connection, || Ok(()))
+}
+
+fn migrate_schema_seven_to_eight_with_hook(
+    connection: &mut Connection,
+    before_validation: impl FnOnce() -> Result<(), StorageError>,
+) -> Result<(), StorageError> {
+    let transaction = connection.transaction()?;
+    reject_preexisting_schema_eight_objects(&transaction)?;
+    transaction.execute_batch(
+        "CREATE TABLE daily_summaries (
+            id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(id)) BETWEEN 1 AND 128),
+            summary_date TEXT NOT NULL UNIQUE CHECK(length(summary_date) = 10),
+            overview TEXT NOT NULL CHECK(length(trim(overview)) BETWEEN 1 AND 2_000),
+            highlights_json TEXT NOT NULL CHECK(length(highlights_json) <= 8_192),
+            unfinished_json TEXT NOT NULL CHECK(length(unfinished_json) <= 8_192),
+            tomorrow_notes_json TEXT NOT NULL CHECK(length(tomorrow_notes_json) <= 8_192),
+            created_at TEXT NOT NULL CHECK(length(trim(created_at)) BETWEEN 1 AND 40),
+            updated_at TEXT NOT NULL CHECK(length(trim(updated_at)) BETWEEN 1 AND 40),
+            revision INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1)
+        );",
+    )?;
+    transaction.pragma_update(None, "user_version", SCHEMA_EIGHT_VERSION)?;
+    before_validation()?;
+    validate_schema_eight(&transaction)?;
+    transaction.commit()?;
+    Ok(())
+}
+
+fn validate_schema_eight(connection: &Connection) -> Result<(), StorageError> {
+    validate_schema_seven_structure(connection)?;
+    connection.prepare(
+        "SELECT id, summary_date, overview, highlights_json, unfinished_json,
+                tomorrow_notes_json, created_at, updated_at, revision
+         FROM daily_summaries LIMIT 0",
+    )?;
+    let unique_date_index: bool = connection.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM pragma_index_list('daily_summaries') AS indexes
+            WHERE indexes.\"unique\" = 1
+              AND (SELECT count(*) FROM pragma_index_info(indexes.name)) = 1
+              AND (SELECT name FROM pragma_index_info(indexes.name) WHERE seqno = 0) = 'summary_date'
+        )",
+        [],
+        |row| row.get(0),
+    )?;
+    if !unique_date_index {
+        return Err(StorageError::InvalidData(
+            "schema 8 DailySummary 日期唯一约束校验失败。".into(),
+        ));
+    }
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version != SCHEMA_SEVEN_VERSION {
-        return Err(StorageError::InvalidData("schema 7 版本校验失败。".into()));
+    if version != SCHEMA_EIGHT_VERSION {
+        return Err(StorageError::InvalidData("schema 8 版本校验失败。".into()));
     }
     validate_integrity(connection)
 }
@@ -445,6 +530,9 @@ impl CourseDatabase {
     ) -> Result<Self, StorageError> {
         connection.busy_timeout(Duration::from_secs(3))?;
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version < 0 {
+            return Err(StorageError::UnsupportedSchema(version));
+        }
         if version > CURRENT_SCHEMA_VERSION {
             return Err(StorageError::UnsupportedSchema(version));
         }
@@ -479,7 +567,13 @@ impl CourseDatabase {
         if version > CURRENT_SCHEMA_VERSION {
             return Err(StorageError::UnsupportedSchema(version));
         }
-        if version < 1 {
+        if version < 0 {
+            return Err(StorageError::UnsupportedSchema(version));
+        }
+        if version == CURRENT_SCHEMA_VERSION {
+            return validate_schema_eight(&self.connection);
+        }
+        if version == 0 {
             let transaction = self.connection.transaction()?;
             transaction.execute_batch(
                 "CREATE TABLE courses (
@@ -503,7 +597,7 @@ impl CourseDatabase {
         let version: i64 = self
             .connection
             .pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version < 2 {
+        if version == 1 {
             let transaction = self.connection.transaction()?;
             transaction.execute_batch(
                 "CREATE TABLE period_times (
@@ -518,7 +612,7 @@ impl CourseDatabase {
         let version: i64 = self
             .connection
             .pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version < 3 {
+        if version == 2 {
             let transaction = self.connection.transaction()?;
             transaction.execute_batch(
                 "CREATE TABLE app_settings (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);",
@@ -529,7 +623,7 @@ impl CourseDatabase {
         let version: i64 = self
             .connection
             .pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version < 4 {
+        if version == 3 {
             let transaction = self.connection.transaction()?;
             transaction.execute_batch(
                 "CREATE TABLE handled_reminders (
@@ -544,7 +638,7 @@ impl CourseDatabase {
         let version: i64 = self
             .connection
             .pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version < 5 {
+        if version == 4 {
             let transaction = self.connection.transaction()?;
             transaction.execute_batch(
                 "CREATE TABLE semesters (
@@ -645,18 +739,22 @@ impl CourseDatabase {
         let version: i64 = self
             .connection
             .pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if version < 6 {
+        if version == 5 {
             migrate_schema_five_to_six(&mut self.connection)?;
         }
         let version: i64 = self
             .connection
             .pragma_query_value(None, "user_version", |row| row.get(0))?;
-        // Gate this step on its target version, not CURRENT_SCHEMA_VERSION, so
-        // future migrations cannot cause the 6→7 DDL to run again.
-        if version < SCHEMA_SEVEN_VERSION {
+        if version == SCHEMA_SIX_VERSION {
             migrate_schema_six_to_seven(&mut self.connection)?;
         }
-        validate_schema_seven(&self.connection)
+        let version: i64 = self
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if version == SCHEMA_SEVEN_VERSION {
+            migrate_schema_seven_to_eight(&mut self.connection)?;
+        }
+        validate_schema_eight(&self.connection)
     }
 
     pub fn schema_version(&self) -> Result<i64, StorageError> {
@@ -1253,6 +1351,80 @@ impl CourseDatabase {
         )?;
         transaction.commit()?;
         self.load_diary_entry(&entry.entry_date)?
+            .ok_or(StorageError::NotFound)
+    }
+
+    pub fn load_daily_summary(&self, date: &str) -> Result<Option<DailySummary>, StorageError> {
+        parse_date(date).map_err(StorageError::InvalidData)?;
+        self.connection
+            .query_row(
+                "SELECT id, summary_date, overview, highlights_json, unfinished_json,
+                        tomorrow_notes_json, created_at, updated_at, revision
+                 FROM daily_summaries WHERE summary_date = ?1",
+                [date],
+                row_to_daily_summary,
+            )
+            .optional()
+            .map_err(StorageError::from)
+    }
+
+    pub fn load_daily_summaries_in_range(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<DailySummary>, StorageError> {
+        parse_date(start_date).map_err(StorageError::InvalidData)?;
+        parse_date(end_date).map_err(StorageError::InvalidData)?;
+        if start_date > end_date {
+            return Err(StorageError::InvalidData("每日总结日期范围无效".into()));
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT id, summary_date, overview, highlights_json, unfinished_json,
+                    tomorrow_notes_json, created_at, updated_at, revision
+             FROM daily_summaries
+             WHERE summary_date >= ?1 AND summary_date <= ?2
+             ORDER BY summary_date DESC LIMIT 3",
+        )?;
+        let mut rows = statement.query(params![start_date, end_date])?;
+        let mut summaries = Vec::new();
+        while let Some(row) = rows.next()? {
+            summaries.push(row_to_daily_summary(row)?);
+        }
+        Ok(summaries)
+    }
+
+    pub fn save_daily_summary(&self, summary: &DailySummary) -> Result<DailySummary, StorageError> {
+        validate_daily_summary(summary)?;
+        let highlights = serde_json::to_string(&summary.highlights)?;
+        let unfinished = serde_json::to_string(&summary.unfinished)?;
+        let tomorrow_notes = serde_json::to_string(&summary.tomorrow_notes)?;
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute(
+            "INSERT INTO daily_summaries
+               (id, summary_date, overview, highlights_json, unfinished_json,
+                tomorrow_notes_json, created_at, updated_at, revision)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(summary_date) DO UPDATE SET
+               overview = excluded.overview,
+               highlights_json = excluded.highlights_json,
+               unfinished_json = excluded.unfinished_json,
+               tomorrow_notes_json = excluded.tomorrow_notes_json,
+               updated_at = excluded.updated_at,
+               revision = daily_summaries.revision + 1",
+            params![
+                &summary.id,
+                &summary.summary_date,
+                &summary.overview,
+                highlights,
+                unfinished,
+                tomorrow_notes,
+                &summary.created_at,
+                &summary.updated_at,
+                summary.revision,
+            ],
+        )?;
+        transaction.commit()?;
+        self.load_daily_summary(&summary.summary_date)?
             .ok_or(StorageError::NotFound)
     }
 
@@ -2099,6 +2271,39 @@ fn validate_diary_entry(value: &DiaryEntry) -> Result<(), StorageError> {
     Ok(())
 }
 
+fn validate_daily_summary(value: &DailySummary) -> Result<(), StorageError> {
+    if value.id.trim().is_empty()
+        || value.id.trim() != value.id
+        || value.id.chars().count() > 128
+        || value.overview.trim().is_empty()
+        || value.overview.chars().count() > 2_000
+        || value.created_at.trim().is_empty()
+        || value.created_at.chars().count() > 40
+        || value.updated_at.trim().is_empty()
+        || value.updated_at.chars().count() > 40
+        || value.revision < 1
+    {
+        return Err(StorageError::InvalidData("每日总结信息无效".into()));
+    }
+    parse_date(&value.summary_date).map_err(StorageError::InvalidData)?;
+    for (field, items) in [
+        ("今日完成", &value.highlights),
+        ("未完成事项", &value.unfinished),
+        ("明日备注", &value.tomorrow_notes),
+    ] {
+        if items.len() > 8
+            || items
+                .iter()
+                .any(|item| item.trim().is_empty() || item.chars().count() > 180)
+        {
+            return Err(StorageError::InvalidData(format!(
+                "每日总结{field}内容无效"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn validate_inbox_raw(id: &str, raw_text: &str, created_at: &str) -> Result<(), StorageError> {
     if id.trim().is_empty()
         || id.trim() != id
@@ -2287,6 +2492,33 @@ fn row_to_diary_entry(row: &Row<'_>) -> rusqlite::Result<DiaryEntry> {
         body: row.get(2)?,
         created_at: row.get(3)?,
         updated_at: row.get(4)?,
+    })
+}
+
+fn row_to_daily_summary(row: &Row<'_>) -> rusqlite::Result<DailySummary> {
+    let highlights_json: String = row.get(3)?;
+    let unfinished_json: String = row.get(4)?;
+    let tomorrow_notes_json: String = row.get(5)?;
+    Ok(DailySummary {
+        id: row.get(0)?,
+        summary_date: row.get(1)?,
+        overview: row.get(2)?,
+        highlights: parse_daily_summary_items(highlights_json, 3)?,
+        unfinished: parse_daily_summary_items(unfinished_json, 4)?,
+        tomorrow_notes: parse_daily_summary_items(tomorrow_notes_json, 5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+        revision: row.get(8)?,
+    })
+}
+
+fn parse_daily_summary_items(value: String, column: usize) -> rusqlite::Result<Vec<String>> {
+    serde_json::from_str(&value).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            column,
+            rusqlite::types::Type::Text,
+            Box::new(error),
+        )
     })
 }
 
@@ -3032,6 +3264,7 @@ mod tests {
                  DROP TABLE routines;
                  DROP TABLE inbox_items;
                  DROP TABLE diary_entries;
+                 DROP TABLE daily_summaries;
                  PRAGMA user_version = 5;",
             )
             .expect("seed schema five data and downgrade synthetic database");
@@ -3064,6 +3297,7 @@ mod tests {
                 "DROP TABLE routines;
                  DROP TABLE inbox_items;
                  DROP TABLE diary_entries;
+                 DROP TABLE daily_summaries;
                  PRAGMA user_version = 6;",
             )
             .expect("mark fixture as schema six");
@@ -3188,7 +3422,7 @@ mod tests {
                 .expect("insert legacy course");
         }
         let migrated = CourseDatabase::open(&path).expect("migrate schema four database");
-        assert_eq!(migrated.schema_version().expect("schema version"), 7);
+        assert_eq!(migrated.schema_version().expect("schema version"), 8);
         assert_eq!(
             migrated.load_courses().expect("load legacy course").courses,
             vec![expected]
@@ -3210,7 +3444,7 @@ mod tests {
     #[test]
     fn empty_database_runs_versioned_migration() {
         let database = database();
-        assert_eq!(database.schema_version().expect("schema version"), 7);
+        assert_eq!(database.schema_version().expect("schema version"), 8);
         let table_count: i64 = database
             .connection
             .query_row(
@@ -3232,27 +3466,27 @@ mod tests {
     }
 
     #[test]
-    fn fresh_database_starts_at_schema_seven_without_a_migration_backup() {
+    fn fresh_database_starts_at_schema_eight_without_a_migration_backup() {
         let root = isolated_database_root();
         let path = root.join("courses.sqlite3");
         {
             let database = CourseDatabase::open(&path).expect("create fresh database");
-            assert_eq!(database.schema_version().expect("schema version"), 7);
+            assert_eq!(database.schema_version().expect("schema version"), 8);
         }
         {
-            let database = CourseDatabase::open(&path).expect("reopen schema seven database");
-            assert_eq!(database.schema_version().expect("schema version"), 7);
+            let database = CourseDatabase::open(&path).expect("reopen schema eight database");
+            assert_eq!(database.schema_version().expect("schema version"), 8);
         }
         assert!(migration_backups(&root).is_empty());
         fs::remove_dir_all(root).expect("remove fresh database fixture");
     }
 
     #[test]
-    fn valid_schema_seven_reopens_without_reapplying_phase_three_migration() {
+    fn valid_schema_eight_reopens_without_reapplying_phase_three_migration() {
         let root = isolated_database_root();
         let path = root.join("courses.sqlite3");
         {
-            let database = CourseDatabase::open(&path).expect("create schema seven database");
+            let database = CourseDatabase::open(&path).expect("create schema eight database");
             database
                 .save_diary_entry(&diary_entry("kept-diary", "2026-09-24", "kept", "now"))
                 .expect("seed schema seven diary");
@@ -3260,8 +3494,8 @@ mod tests {
                 .create_inbox_item("kept-inbox", "kept", "now")
                 .expect("seed schema seven inbox");
         }
-        let reopened = CourseDatabase::open(&path).expect("reopen schema seven database");
-        assert_eq!(reopened.schema_version().expect("schema version"), 7);
+        let reopened = CourseDatabase::open(&path).expect("reopen schema eight database");
+        assert_eq!(reopened.schema_version().expect("schema version"), 8);
         assert_eq!(
             reopened
                 .load_diary_entry("2026-09-24")
@@ -3411,8 +3645,8 @@ mod tests {
         create_populated_schema_six_database(&path);
 
         let migrated = CourseDatabase::open(&path).expect("migrate schema six database");
-        assert_eq!(migrated.schema_version().expect("schema version"), 7);
-        validate_schema_seven(&migrated.connection).expect("schema seven integrity");
+        assert_eq!(migrated.schema_version().expect("schema version"), 8);
+        validate_schema_eight(&migrated.connection).expect("schema eight integrity");
         assert_eq!(
             migrated.load_courses().expect("courses").courses,
             vec![course()]
@@ -3465,7 +3699,7 @@ mod tests {
             .file_name()
             .unwrap()
             .to_string_lossy()
-            .starts_with("courses-v6-to-v7-"));
+            .starts_with("courses-v6-to-v8-"));
         let backup = Connection::open(&backups[0]).expect("open schema six backup");
         assert_eq!(
             backup
@@ -3922,6 +4156,299 @@ mod tests {
         }
     }
 
+    fn daily_summary(id: &str, date: &str, overview: &str, timestamp: &str) -> DailySummary {
+        DailySummary {
+            id: id.into(),
+            summary_date: date.into(),
+            overview: overview.into(),
+            highlights: vec!["完成一项重要事项".into()],
+            unfinished: vec!["继续推进未完成事项".into()],
+            tomorrow_notes: vec!["准备明日材料".into()],
+            created_at: timestamp.into(),
+            updated_at: timestamp.into(),
+            revision: 1,
+        }
+    }
+
+    fn downgrade_empty_schema_eight_to_seven(path: &Path) {
+        let database = CourseDatabase::open(path).expect("create schema eight fixture");
+        drop(database);
+        let connection = Connection::open(path).expect("open schema eight fixture");
+        connection
+            .execute_batch("DROP TABLE daily_summaries; PRAGMA user_version = 7;")
+            .expect("prepare canonical schema seven fixture");
+    }
+
+    #[test]
+    fn schema_seven_migrates_to_eight_with_existing_data_and_verified_backup() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        {
+            let database = CourseDatabase::open(&path).expect("create source database");
+            database.insert_course(&course()).expect("seed course");
+            database
+                .save_diary_entry(&diary_entry("migration-diary", "2026-09-24", "keep", "now"))
+                .expect("seed diary entry");
+        }
+        downgrade_empty_schema_eight_to_seven(&path);
+        let source = Connection::open(&path).expect("open schema seven fixture for seeding");
+        source
+            .execute_batch(
+                "INSERT INTO personal_tasks
+                    (id, title, status, priority, created_at, updated_at)
+                 VALUES ('migration-task', '保留个人任务', 'OPEN', 'MEDIUM', 'created', 'updated');
+                 INSERT INTO planner_events
+                    (id, title, date, start_time, end_time, buffer_before_minutes,
+                     buffer_after_minutes, created_at, updated_at)
+                 VALUES ('migration-event', '保留日程', '2026-09-24', '10:00', '11:00', 0, 0, 'created', 'updated');
+                 INSERT INTO time_blocks
+                    (id, personal_task_id, date, start_time, end_time,
+                     buffer_before_minutes, buffer_after_minutes, created_at, updated_at)
+                 VALUES ('migration-block', 'migration-task', '2026-09-24', '13:00', '14:00', 0, 0, 'created', 'updated');
+                 INSERT INTO inbox_items (id, raw_text, status, created_at, updated_at)
+                 VALUES ('migration-inbox', '保留收件箱条目', 'pending', 'created', 'updated');
+                 INSERT INTO routines
+                    (id, title, target_duration_minutes, weekdays_mask, enabled, created_at, updated_at)
+                 VALUES ('migration-routine', '保留日常习惯', 30, 127, 1, 'created', 'updated');
+                 INSERT INTO semesters
+                    (id, name, first_week_monday, total_weeks, timezone, status, created_at, updated_at)
+                 VALUES ('migration-semester', '旧学期', '2026-09-21', 16, 'Asia/Shanghai', 'ARCHIVED', 'created', 'updated');
+                 INSERT INTO academic_tasks
+                    (id, semester_id, type, title, due_at, priority, status, created_at, updated_at)
+                 VALUES ('migration-academic-task', 'migration-semester', 'ASSIGNMENT', '保留学业任务',
+                         '2026-09-25T12:00:00+08:00', 1, 'TODO', 'created', 'updated');
+                 INSERT INTO app_settings (key, value) VALUES ('migration-context-fixture', 'keep');
+                 INSERT INTO handled_reminders (occurrence_key, handled_at_milliseconds)
+                 VALUES ('migration-reminder', 12345);",
+            )
+            .expect("seed schema seven records across existing data domains");
+        drop(source);
+
+        let migrated = CourseDatabase::open(&path).expect("migrate schema seven to eight");
+        assert_eq!(migrated.schema_version().expect("schema version"), 8);
+        assert_eq!(
+            migrated.load_courses().expect("courses").courses,
+            vec![course()]
+        );
+        assert_eq!(
+            migrated
+                .load_diary_entry("2026-09-24")
+                .expect("load preserved diary")
+                .expect("diary remains")
+                .body,
+            "keep"
+        );
+        assert!(migrated
+            .load_daily_summary("2026-09-24")
+            .expect("new summary table")
+            .is_none());
+        for table in [
+            "personal_tasks",
+            "planner_events",
+            "time_blocks",
+            "diary_entries",
+            "inbox_items",
+            "routines",
+            "academic_tasks",
+            "app_settings",
+            "handled_reminders",
+        ] {
+            let count: i64 = migrated
+                .connection
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .expect("count schema seven data after migration");
+            assert_eq!(count, 1, "schema seven {table} data must be preserved");
+        }
+        validate_schema_eight(&migrated.connection).expect("schema eight validates");
+
+        let backups = migration_backups(&root);
+        assert_eq!(backups.len(), 1);
+        assert!(backups[0]
+            .file_name()
+            .expect("backup filename")
+            .to_string_lossy()
+            .starts_with("courses-v7-to-v8-"));
+        let backup = Connection::open(&backups[0]).expect("open pre-migration backup");
+        validate_schema_seven(&backup).expect("backup remains valid schema seven");
+        assert_eq!(
+            backup
+                .query_row("SELECT name FROM courses WHERE id='course-id'", [], |row| {
+                    row.get::<_, String>(0)
+                })
+                .expect("backup course remains"),
+            "机械设计基础"
+        );
+        drop(backup);
+        drop(migrated);
+        fs::remove_dir_all(root).expect("remove schema seven migration fixture");
+    }
+
+    #[test]
+    fn schema_seven_to_eight_failure_rolls_back_table_and_version() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        downgrade_empty_schema_eight_to_seven(&path);
+        let mut connection = Connection::open(&path).expect("open schema seven rollback fixture");
+
+        let error = migrate_schema_seven_to_eight_with_hook(&mut connection, || {
+            Err(StorageError::InvalidData("注入迁移失败".into()))
+        })
+        .expect_err("injected failure aborts migration");
+        assert!(matches!(error, StorageError::InvalidData(_)));
+        assert_eq!(
+            connection
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                .expect("source version retained"),
+            7
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='daily_summaries'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("target table absent"),
+            0
+        );
+        validate_schema_seven(&connection).expect("schema seven remains valid");
+        drop(connection);
+        fs::remove_dir_all(root).expect("remove rollback fixture");
+    }
+
+    #[test]
+    fn schema_seven_with_unexpected_daily_summary_table_is_rejected_without_overwrite() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        downgrade_empty_schema_eight_to_seven(&path);
+        let mut connection = Connection::open(&path).expect("open partial migration fixture");
+        connection
+            .execute_batch("CREATE TABLE daily_summaries (unexpected TEXT NOT NULL);")
+            .expect("simulate partial schema eight table");
+
+        let error = migrate_schema_seven_to_eight(&mut connection)
+            .expect_err("partial migration must be rejected");
+        assert!(matches!(error, StorageError::InvalidData(_)));
+        assert_eq!(
+            connection
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                .expect("source version stays seven"),
+            7
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT count(*) FROM pragma_table_info('daily_summaries')",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("unexpected table remains untouched"),
+            1
+        );
+        drop(connection);
+        fs::remove_dir_all(root).expect("remove partial migration fixture");
+    }
+
+    #[test]
+    fn schema_eight_rejects_missing_or_weak_daily_summary_date_constraint() {
+        let missing = database();
+        missing
+            .connection
+            .execute_batch("DROP TABLE daily_summaries;")
+            .expect("remove required schema eight table");
+        assert!(validate_schema_eight(&missing.connection).is_err());
+
+        let composite = database();
+        composite
+            .connection
+            .execute_batch(
+                "DROP TABLE daily_summaries;
+                 CREATE TABLE daily_summaries (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    summary_date TEXT NOT NULL,
+                    overview TEXT NOT NULL,
+                    highlights_json TEXT NOT NULL,
+                    unfinished_json TEXT NOT NULL,
+                    tomorrow_notes_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    revision INTEGER NOT NULL,
+                    UNIQUE(summary_date, id)
+                 );",
+            )
+            .expect("create weak composite uniqueness fixture");
+        assert!(validate_schema_eight(&composite.connection).is_err());
+    }
+
+    #[test]
+    fn daily_summary_upserts_one_record_per_date_and_survives_reopen() {
+        let root = isolated_database_root();
+        let path = root.join("courses.sqlite3");
+        let original = daily_summary("summary-first", "2026-09-24", "今天完成了计划。", "t1");
+        {
+            let database = CourseDatabase::open(&path).expect("create summary database");
+            let saved = database
+                .save_daily_summary(&original)
+                .expect("save new summary");
+            assert!(saved == original);
+            let mut edited = daily_summary("ignored-new-id", "2026-09-24", "更新后的总结。", "t2");
+            edited.highlights = vec!["修订后的亮点".into()];
+            let saved = database
+                .save_daily_summary(&edited)
+                .expect("update same date");
+            assert_eq!(saved.id, original.id);
+            assert_eq!(saved.created_at, original.created_at);
+            assert_eq!(saved.updated_at, "t2");
+            assert_eq!(saved.revision, 2);
+            assert_eq!(saved.overview, edited.overview);
+            assert_eq!(saved.highlights, edited.highlights);
+        }
+        let reopened = CourseDatabase::open(&path).expect("reopen summary database");
+        assert_eq!(
+            reopened
+                .load_daily_summary("2026-09-24")
+                .expect("read summary")
+                .expect("saved summary exists")
+                .revision,
+            2
+        );
+        assert!(reopened.load_daily_summary("2026-02-30").is_err());
+        drop(reopened);
+        fs::remove_dir_all(root).expect("remove summary database fixture");
+    }
+
+    #[test]
+    fn daily_summary_validates_content_and_recent_range_is_bounded_to_three() {
+        let database = database();
+        for day in ["2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27"] {
+            let summary = daily_summary(&format!("summary-{day}"), day, "日总结", "now");
+            database
+                .save_daily_summary(&summary)
+                .expect("save daily summary");
+        }
+        let recent = database
+            .load_daily_summaries_in_range("2026-09-24", "2026-09-27")
+            .expect("load bounded range");
+        assert_eq!(recent.len(), 3);
+        assert_eq!(recent[0].summary_date, "2026-09-27");
+        assert_eq!(recent[2].summary_date, "2026-09-25");
+        assert!(database
+            .load_daily_summaries_in_range("2026-09-28", "2026-09-24")
+            .is_err());
+
+        let mut invalid = daily_summary("invalid-summary", "2026-09-28", " ", "now");
+        assert!(database.save_daily_summary(&invalid).is_err());
+        invalid.overview = "有效概览".into();
+        invalid.unfinished = vec![" ".into()];
+        assert!(database.save_daily_summary(&invalid).is_err());
+        assert!(database
+            .load_daily_summary("2026-09-28")
+            .expect("invalid summary not saved")
+            .is_none());
+    }
+
     #[test]
     fn populated_schema_five_gets_a_validated_backup_before_schema_six_migration() {
         let root = isolated_database_root();
@@ -3929,7 +4456,7 @@ mod tests {
         create_populated_schema_five_database(&path);
 
         let migrated = CourseDatabase::open(&path).expect("migrate populated schema five");
-        assert_eq!(migrated.schema_version().expect("schema version"), 7);
+        assert_eq!(migrated.schema_version().expect("schema version"), 8);
         assert_eq!(
             migrated.load_courses().expect("courses").courses,
             vec![course()]
@@ -3978,14 +4505,14 @@ mod tests {
                 .expect("read preserved record identity");
             assert_eq!(value, expected, "{table} record identity is preserved");
         }
-        validate_schema_seven(&migrated.connection).expect("schema seven integrity");
+        validate_schema_eight(&migrated.connection).expect("schema eight integrity");
         assert_eq!(migration_backups(&root).len(), 1);
         let backup_path = migration_backups(&root).remove(0);
         assert!(backup_path
             .file_name()
             .unwrap()
             .to_string_lossy()
-            .starts_with("courses-v5-to-v7-"));
+            .starts_with("courses-v5-to-v8-"));
         let backup = Connection::open(&backup_path).expect("open verified backup");
         assert_eq!(
             backup
@@ -4004,8 +4531,8 @@ mod tests {
         drop(backup);
         drop(migrated);
 
-        let reopened = CourseDatabase::open(&path).expect("reopen schema seven without migration");
-        assert_eq!(reopened.schema_version().expect("reopened schema"), 7);
+        let reopened = CourseDatabase::open(&path).expect("reopen schema eight without migration");
+        assert_eq!(reopened.schema_version().expect("reopened schema"), 8);
         assert_eq!(migration_backups(&root).len(), 1);
         drop(reopened);
         fs::remove_dir_all(root).expect("remove migration fixture");
@@ -4497,7 +5024,7 @@ mod tests {
         let mut expected = course();
         {
             let database = CourseDatabase::open(&path).expect("create database file");
-            assert_eq!(database.schema_version().expect("new schema version"), 7);
+            assert_eq!(database.schema_version().expect("new schema version"), 8);
             assert!(database
                 .load_courses()
                 .expect("new database is empty")
@@ -4548,13 +5075,13 @@ mod tests {
             .execute_batch(
                 "CREATE TABLE sentinel(value TEXT NOT NULL);
                  INSERT INTO sentinel VALUES ('keep-me');
-                 PRAGMA user_version = 8;",
+                 PRAGMA user_version = 9;",
             )
             .expect("create future database");
         drop(connection);
         assert!(matches!(
             CourseDatabase::open(&path),
-            Err(StorageError::UnsupportedSchema(8))
+            Err(StorageError::UnsupportedSchema(9))
         ));
         let unchanged = Connection::open(&path).expect("reopen future database");
         let version: i64 = unchanged
@@ -4566,7 +5093,7 @@ mod tests {
         let value: String = unchanged
             .query_row("SELECT value FROM sentinel", [], |row| row.get(0))
             .expect("future data remains");
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         assert_eq!(journal_mode, "delete");
         assert_eq!(value, "keep-me");
         drop(unchanged);
@@ -4684,7 +5211,7 @@ mod tests {
             .expect("create schema one database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema one");
-        assert_eq!(database.schema_version().expect("migrated version"), 7);
+        assert_eq!(database.schema_version().expect("migrated version"), 8);
         assert_eq!(
             database
                 .load_courses()
@@ -4726,7 +5253,7 @@ mod tests {
             .expect("create schema two database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema two");
-        assert_eq!(database.schema_version().expect("schema version"), 7);
+        assert_eq!(database.schema_version().expect("schema version"), 8);
         assert_eq!(database.load_courses().expect("courses").courses.len(), 1);
         assert_eq!(
             database
@@ -4771,7 +5298,7 @@ mod tests {
             .expect("create schema three database");
         drop(connection);
         let database = CourseDatabase::open(&path).expect("migrate schema three");
-        assert_eq!(database.schema_version().expect("schema version"), 7);
+        assert_eq!(database.schema_version().expect("schema version"), 8);
         assert_eq!(database.load_courses().expect("courses").courses.len(), 1);
         assert_eq!(
             database
@@ -4864,7 +5391,7 @@ mod tests {
                 .term_config,
             before.term_config
         );
-        assert_eq!(database.schema_version().expect("schema version"), 7);
+        assert_eq!(database.schema_version().expect("schema version"), 8);
     }
 
     #[test]

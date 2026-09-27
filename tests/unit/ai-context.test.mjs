@@ -416,6 +416,79 @@ test("Daily Brief 仅额外包含有界逾期学业事项，并将近期逾期�
   );
 });
 
+test("Daily Summary 完成事项按请求时区的本地日历日期筛选", async () => {
+  const completedAt = "2026-09-26T16:30:00.000Z"; // 9 月 27 日 Asia/Shanghai
+  const result = await buildAiContext(
+    request({
+      intent: "dailySummary",
+      requestedScopes: ["academic.read", "planner.read"],
+      timeContext: { ...timeContext, localDate: "2026-09-27" },
+      timeRange: { startDate: "2026-09-27", endDate: "2026-09-27" },
+    }),
+    { persistentGrants: ["academic.read", "planner.read"] },
+    {
+      academic: async () => ({
+        occurrences: [],
+        exams: [],
+        deadlines: [
+          {
+            id: "academic-completed-local-today",
+            title: "本地当天完成的学业事项",
+            dueAt: "2026-09-28T00:00:00.000Z",
+            priority: 1,
+            status: "COMPLETED",
+            completedAt,
+            type: "ASSIGNMENT",
+          },
+          {
+            id: "academic-completed-yesterday",
+            title: "本地前一天完成的学业事项",
+            dueAt: "2026-09-27T00:00:00.000Z",
+            priority: 1,
+            status: "COMPLETED",
+            completedAt: "2026-09-26T15:30:00.000Z",
+            type: "ASSIGNMENT",
+          },
+        ],
+        courseNames: {},
+      }),
+      planner: async () => ({
+        tasks: [
+          {
+            id: "completed-local-today",
+            title: "本地当天完成",
+            status: "completed",
+            priority: "normal",
+            deadlineDate: null,
+            deadlineTime: null,
+            completedAt,
+          },
+          {
+            id: "completed-yesterday",
+            title: "本地前一天完成",
+            status: "completed",
+            priority: "normal",
+            deadlineDate: null,
+            deadlineTime: null,
+            completedAt: "2026-09-26T15:30:00.000Z",
+          },
+        ],
+        events: [],
+        timeBlocks: [],
+      }),
+    },
+  );
+
+  assert.deepEqual(
+    result.moduleContexts.planner.tasks.map(({ id }) => id),
+    ["completed-local-today"],
+  );
+  assert.deepEqual(
+    result.moduleContexts.academic.deadlines.map(({ id }) => id),
+    ["academic-completed-local-today"],
+  );
+});
+
 test("各标准权限只调用自身模块的快照 source", async () => {
   const sources = {
     workspace: async () => workspaceSource(),

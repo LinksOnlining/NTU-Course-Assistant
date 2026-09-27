@@ -329,14 +329,17 @@ export function AISettingsPanel() {
             id="daily-brief-recent-summaries"
             type="checkbox"
             checked={dailyBriefPreferences.includeRecentSummaries}
-            disabled
+            disabled={!dailyBriefPreferences.enabled}
+            onChange={(event) =>
+              updateDailyBriefPreferences({ includeRecentSummaries: event.currentTarget.checked })
+            }
             data-testid="daily-brief-recent-summaries"
           />
           <span>
             <strong>参考最近每日总结（最近 3 天）</strong>
             <small>
-              当前版本尚无正式每日总结数据源；不会改读日记、AI 历史或 Inbox
-              来替代。此选项待迁移评审后启用。
+              仅在每日简报开启时读取此前 1–3
+              个自然日已保存的每日总结；关闭后不查询。不会读取日记、Inbox 原文或 AI 历史。
             </small>
           </span>
         </label>

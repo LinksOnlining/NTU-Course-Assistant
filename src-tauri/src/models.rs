@@ -29,6 +29,21 @@ pub struct DiaryEntry {
     pub updated_at: String,
 }
 
+/// Structured, user-authored daily state. Do not derive `Debug` to avoid accidental text logging.
+#[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailySummary {
+    pub id: String,
+    pub summary_date: String,
+    pub overview: String,
+    pub highlights: Vec<String>,
+    pub unfinished: Vec<String>,
+    pub tomorrow_notes: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub revision: i64,
+}
+
 /// Inbox raw text is intentionally not `Debug` so it cannot leak through diagnostics.
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

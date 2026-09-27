@@ -1,6 +1,8 @@
-# Phase 4.8.1 — Daily Summary Migration Impact Review
+# Phase 4.8.1 — Daily Summary Migration + Implementation Verification
 
-状态：**Migration Impact Review COMPLETE；Implementation BLOCKED — 等待 Ethan 明确批准 Schema 8。** 本文是设计与影响审查，不是实现授权。当前数据库 schema 为 7，migration 数为 0；未新增实体、表、Repository、UseCase、UI、migration 或测试实现。Phase 4.9 未开始。
+状态：**Migration Impact Review COMPLETE；Implementation COMPLETE；Automated PASS；Schema 7→8 Migration Automated PASS；DeepSeek Live PENDING；Windows Manual PENDING；Overall PENDING。** Ethan 已批准唯一的 schema 7→8 DailySummary migration。当前数据库 schema 为 8；Phase 4.9 未开始。本文前半保留原 Migration Impact Review，以下 implementation record 记录其已批准范围的实现与自动验证。
+
+说明：以下 Migration Impact Review 与其中的“尚不存在 / 未实施”描述是批准前的历史审查快照；当前事实以文末 `Implementation Verification` 和 `当前 gate` 为准。
 
 ## Phase 4.8 Core 收口
 
@@ -14,7 +16,7 @@
 
 ## 当前模型审计
 
-审计结论：当前代码中不存在正式的 `DailySummary`、`DailyReview`、`DaySummary`、`DailyReflection` 或语义等价的持久化业务实体。
+审计结论（审查时）：代码中不存在正式的 `DailySummary`、`DailyReview`、`DaySummary`、`DailyReflection` 或语义等价的持久化业务实体。
 
 - `diary_entries` 是用户日记正文，不是每日总结；不得复用。
 - AI 响应是临时生成结果，不是可持久化业务对象；不得复用。
@@ -23,7 +25,7 @@
 - localStorage、AI 历史、聊天记录均不得代替正式业务存储。
 - `DailyBriefSource` 中的 `dailySummary` 是来源类型标识，不构成实体、表、Repository 或查询实现。
 
-现有 schema 7 无合法、语义匹配的业务存储可复用。因此，满足“用户可编辑并持久保存每日总结”的目标需要 schema 8 与 migration 7→8。未经 Ethan 明确批准，不实施下述方案。
+审查当时 schema 7 无合法、语义匹配的业务存储可复用。因此，满足“用户可编辑并持久保存每日总结”的目标需要 schema 8 与 migration 7→8。该方案现已获 Ethan 明确批准，并按后文记录实现。
 
 ## Migration Impact Review
 
@@ -127,12 +129,47 @@ Phase 3.9 修复的 schema 6→7 恢复逻辑和验证必须原样保留。7→8
 
 - Phase 4.8 Core：**COMPLETE**。
 - Phase 4.8.1 Daily Summary Migration Impact Review：**COMPLETE**。
-- Phase 4.8.1 Implementation：**BLOCKED — SCHEMA 8 APPROVAL REQUIRED**。
-- Daily Summary UI：**NOT IMPLEMENTED**。
-- Local fallback draft：**NOT IMPLEMENTED**（仅审查设计，不是 PASS）。
-- Recent 3-day retrieval / Daily Brief integration：**NOT IMPLEMENTED**。
-- Prompt injection regression tests：**NOT IMPLEMENTED**。
-- Schema：**7**；本项 migration：**0**。
+- Phase 4.8.1 Implementation：**COMPLETE**。
+- Phase 4.8.1 Automated：**PASS**。
+- Schema migration 7→8 automated：**PASS**。
+- Daily Summary UI / local draft / recent-summary Daily Brief context：**IMPLEMENTED**。
+- Prompt injection / untrusted-summary boundaries：**AUTOMATED PASS**。
+- Schema：**8**；本项 migration：**7→8**。
+- DeepSeek Live：**PENDING**；Windows Manual：**PENDING**；Overall：**PENDING**。
 - Phase 4.9：**NOT STARTED**。
 
-下一门禁：Ethan 明确批准 schema 8 后，才可启动 schema 8 / migration 7→8 的实现与测试。批准前不修改业务代码、数据库 schema 或 migration，不创建 Daily Summary UI，也不进入 Phase 4.9。
+Phase 4.8.1 仍需 Ethan 完成 DeepSeek Live 与 Windows Manual 验收后才能关闭；不得将自动测试或本地构建表述为人工验收通过。
+
+## Implementation Verification（2026-09-27）
+
+### Schema / migration
+
+- `CURRENT_SCHEMA_VERSION = 8`；schema 7 的数据库只执行一次 7→8 migration，schema 8 reopen 只验证结构，不重跑 6→7。
+- migration 在现有启动备份验证之后以 SQLite transaction 新建唯一日期约束的 `daily_summaries` 表并最后更新 `user_version`；部分迁移、已有意外目标表、schema 8 缺失/弱化约束与未来 schema 均安全拒绝。
+- Rust regression 覆盖 fresh DB 到 8、6→7→8 链路、schema 7 既有数据与备份保留、成功 reopen / double startup、部分状态拒绝、故障注入回滚及旧 migration 不重复执行。
+- Repository 测试覆盖日期唯一、同日 upsert 保持 ID/createdAt 并递增 revision、updatedAt 更新、严格日期与字段校验、缺失日跳过及只查明确三日窗口。
+
+### Domain / Application / UI
+
+- DailySummary 是独立本地用户业务实体；Repository 位于 SQLite adapter，日期读取、日期窗口读取与 save 都经 Application facade / use case；React 不直接访问 SQL。
+- Workbench 提供当日总结入口；本地草稿按当日结构化 Academic / Planner / Routine 与允许的 Weather 状态生成，明确编辑后显式保存；保存后可重新加载。AI Draft 只生成经过 schema 与本地 parser 校验的 overview，不直接写库。
+- 近期总结默认偏好开启；Daily Brief 未启用或用户关闭近期总结时不查询历史。打开读取后仅精确查询昨天至前三个日历日，最多 3 个日期，缺失日期直接跳过且不会向第 4 日补齐。
+- 历史 Summary 作为有界不可信文本；Diary 正文、Inbox raw、AI 历史、工具/Proposal 能力不进入该工作流。当前任务/课程事实优先；carry-over 仅依据昨天的未完成文本与当前仍打开且完全匹配的任务，不能把历史文本变成当前事实。
+- UI 自动回归覆盖无/有已保存总结、本地草稿、显式保存与重开、近期偏好开关、错误/不可用降级、手动 Daily Brief 及目标窗口/主题。
+
+### Automated gates
+
+- `npm run verify`：**PASS**；typecheck、388 unit、137 architecture、Playwright UI 1137 PASS / 15 条件跳过、lint、Prettier、Vite build 均 PASS。
+- Rust：`cargo test --manifest-path src-tauri/Cargo.toml` **104 passed**；`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` **PASS**；`cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` **PASS**。
+- `npm run tauri build`：**PASS**。生成 NSIS、MSI 及其 updater `.sig`：`NTU Course Assistant_1.3.1_x64-setup.exe`、`NTU Course Assistant_1.3.1_x64-setup.exe.sig`、`NTU Course Assistant_1.3.1_x64_en-US.msi`、`NTU Course Assistant_1.3.1_x64_en-US.msi.sig`。
+- 仅完成本地 build；未运行 release EXE、未安装 installer、未访问用户/Release 数据库，未执行真实 DeepSeek Live 或 Windows GUI 人工验收。
+
+### 当前 gate
+
+- Phase 4.8.1 Implementation：**COMPLETE**。
+- Phase 4.8.1 Automated：**PASS**。
+- Schema Migration Automated：**PASS**。
+- DeepSeek Live：**PENDING**。
+- Windows Manual：**PENDING**。
+- Phase 4.8.1 Overall：**PENDING**。
+- Phase 4.9：**NOT STARTED**。

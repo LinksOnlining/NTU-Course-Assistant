@@ -66,6 +66,13 @@ async function seedDashboardRuntime(
       let personalTasks = [...(plannerFixture.personalTasks ?? [])];
       let dashboardEvents = [...(plannerFixture.events ?? [])] as Record<string, any>[];
       let routines = [...routineFixture] as Record<string, any>[];
+      const dailySummaries = new Map<string, Record<string, any>>(
+        JSON.parse(localStorage.getItem("daily-summary-ui-fixture") ?? "[]"),
+      );
+      let dailySummaryReadCount = 0;
+      let dailySummaryRangeReadCount = 0;
+      const persistDailySummaries = () =>
+        localStorage.setItem("daily-summary-ui-fixture", JSON.stringify([...dailySummaries]));
       const today = new Date().toISOString().slice(0, 10);
       const diaryEntries = new Map<string, Record<string, string>>();
       const inboxItems = [...(inboxFixture.items ?? [])] as Record<string, unknown>[];
@@ -207,6 +214,33 @@ async function seedDashboardRuntime(
             if (command === "load_semesters") return [activeSemester];
             if (command === "load_course_overrides" || command === "load_exams") return [];
             if (command === "load_academic_tasks") return tasks;
+            if (command === "load_daily_summary") {
+              dailySummaryReadCount += 1;
+              return dailySummaries.get(String(args?.date)) ?? null;
+            }
+            if (command === "load_daily_summaries_in_range") {
+              dailySummaryRangeReadCount += 1;
+              return [...dailySummaries.values()]
+                .filter(
+                  (item) =>
+                    item.summaryDate >= args?.startDate && item.summaryDate <= args?.endDate,
+                )
+                .sort((left, right) => right.summaryDate.localeCompare(left.summaryDate))
+                .slice(0, 3);
+            }
+            if (command === "save_daily_summary") {
+              const incoming = args?.summary as Record<string, any>;
+              const existing = dailySummaries.get(incoming.summaryDate);
+              const saved = {
+                ...incoming,
+                id: existing?.id ?? incoming.id,
+                createdAt: existing?.createdAt ?? incoming.createdAt,
+                revision: existing ? existing.revision + 1 : incoming.revision,
+              };
+              dailySummaries.set(saved.summaryDate, saved);
+              persistDailySummaries();
+              return saved;
+            }
             if (command === "load_personal_tasks") return [...personalTasks];
             if (command === "create_personal_task" && args?.task) {
               const task = args.task as Record<string, unknown>;
@@ -350,6 +384,9 @@ async function seedDashboardRuntime(
           getLoadCoursesCount: () => loadCoursesCount,
           getGeocodingCalls: () => geocodingCalls,
           getSearchDiaryReadCount: () => searchDiaryReadCount,
+          getDailySummaryReadCount: () => dailySummaryReadCount,
+          getDailySummaryRangeReadCount: () => dailySummaryRangeReadCount,
+          getDailySummary: (date: string) => dailySummaries.get(date) ?? null,
           getPersonalTaskCount: () => personalTasks.length,
           getDiaryBody: (date: string) => diaryEntries.get(date)?.body ?? null,
           getRoutineScheduledDate: (id: string) =>
@@ -482,7 +519,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
   await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
   await expect(page.getByRole("button", { name: /收件箱，暂无待整理/u })).toBeVisible();
   await expect(page.getByTestId("today-assistant-panel")).toBeVisible();
-  await expect(page.getByText("已完成事项", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("daily-summary-panel")).toBeVisible();
   await expect(page.getByTestId("workspace-today-overview")).toBeVisible();
   await expect(page.getByTestId("workspace-today-overview")).toContainText("正在上课");
   await expect(page.getByTestId("workspace-today-overview")).not.toContainText("今日概览");
@@ -869,6 +906,76 @@ test("empty Academic data still renders the complete axis and truthful empty/una
   await expect(details).toContainText("今天没有安排。");
   await expect(details).toContainText("今日待办（0 项）");
   await expect(details).toContainText("没有逾期或今天截止的未完成待办。");
+});
+
+test("每日总结可先编辑本地草稿、显式保存并重新加载已保存版本", async ({ page }) => {
+  await seedDashboardRuntime(page);
+  const panel = page.getByTestId("daily-summary-panel");
+  await expect(panel).toBeVisible();
+  await panel.locator("summary").click();
+  const overview = panel.getByTestId("daily-summary-overview");
+  await expect(overview).toBeVisible();
+  await expect(panel.getByTestId("daily-summary-save")).toBeEnabled();
+  await overview.fill("今天完成了复习，明天继续作业。");
+  await panel.getByRole("button", { name: "保存总结" }).click();
+  await expect(panel.getByRole("status")).toContainText("每日总结已保存到本机。");
+  await expect(panel.getByText(/已保存 · 第 1 版/u)).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => (window as any).__workspaceDashboardTest.getDailySummary("2026-09-23")?.overview,
+    ),
+  ).toBe("今天完成了复习，明天继续作业。");
+
+  await page.reload();
+  await page.getByTestId("daily-summary-panel").locator("summary").click();
+  await expect(page.getByTestId("daily-summary-overview")).toHaveValue(
+    "今天完成了复习，明天继续作业。",
+  );
+  await expect(page.getByTestId("daily-summary-save")).toBeDisabled();
+  expect(
+    await page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryReadCount()),
+  ).toBeGreaterThan(0);
+});
+
+test("Daily Brief 关闭近期总结时不读取历史；开启后才查询", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "links-workplace.ai.daily-brief",
+      JSON.stringify({
+        enabled: true,
+        includeRecentSummaries: false,
+        lastAutoShownDate: "2026-09-23",
+      }),
+    );
+  });
+  await seedDashboardRuntime(page);
+  await page.getByTestId("daily-brief-open").click();
+  await expect(page.getByTestId("daily-brief-dialog")).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      (window as any).__workspaceDashboardTest.getDailySummaryRangeReadCount(),
+    ),
+  ).toBe(0);
+
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "links-workplace.ai.daily-brief",
+      JSON.stringify({
+        enabled: true,
+        includeRecentSummaries: true,
+        lastAutoShownDate: "2026-09-23",
+      }),
+    );
+    window.dispatchEvent(new Event("links-workplace:daily-brief-preferences-changed"));
+  });
+  await page.getByRole("button", { name: "关闭今日简报" }).click();
+  await page.getByTestId("daily-brief-open").click();
+  await expect(page.getByTestId("daily-brief-dialog")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryRangeReadCount()),
+    )
+    .toBe(1);
 });
 
 test("每日简报默认不自动弹出，手动入口显示本地 fallback 且适配 720×520", async ({ page }) => {

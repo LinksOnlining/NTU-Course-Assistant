@@ -8,6 +8,7 @@ const source = (file) => readFileSync(new URL(`../../${file}`, import.meta.url),
 test("Daily Brief and Today Assistant workflows keep stable one-shot IDs and explicit capabilities", () => {
   assert.deepEqual(Object.keys(TODAY_AI_WORKFLOWS).sort(), [
     "dailyBrief.generate",
+    "dailySummary.generate",
     "today.analyze",
     "today.plan",
   ]);
@@ -18,6 +19,14 @@ test("Daily Brief and Today Assistant workflows keep stable one-shot IDs and exp
   assert.deepEqual(TODAY_AI_WORKFLOWS["dailyBrief.generate"].allowedProposalToolIds, []);
   assert.deepEqual(TODAY_AI_WORKFLOWS["dailyBrief.generate"].allowedReadToolIds, []);
   assert.equal(TODAY_AI_WORKFLOWS["dailyBrief.generate"].responseMode, "daily-brief");
+  assert.equal(TODAY_AI_WORKFLOWS["dailySummary.generate"].responseMode, "daily-summary");
+  assert.deepEqual(TODAY_AI_WORKFLOWS["dailySummary.generate"].allowedProposalToolIds, []);
+  assert.deepEqual(TODAY_AI_WORKFLOWS["dailySummary.generate"].allowedReadToolIds, []);
+  assert.deepEqual(TODAY_AI_WORKFLOWS["dailySummary.generate"].requestedScopes, [
+    "academic.read",
+    "planner.read",
+    "routine.read",
+  ]);
   assert.ok(TODAY_AI_WORKFLOWS["today.analyze"].allowedReadToolIds.includes("workspace.overview"));
 });
 
@@ -36,6 +45,16 @@ test("AI workflow orchestration uses Context Engine and AIToolRegistry without p
   assert.match(plannerAssistant, /computeFreeTimeIntervals/u);
   assert.doesNotMatch(plannerAssistant, /Repository|SQLite|database|fetch\s*\(/iu);
   assert.doesNotMatch(sources, /(?:diary\.body|inbox\.raw|loadDiary|loadInbox|rawText|\.body\b)/iu);
+});
+
+test("Daily Summary UI crosses the Application API and never imports persistence directly", () => {
+  const summaryPanel = source("src/workspace/dashboard/DailySummaryPanel.tsx");
+  const application = source("src/application/workspace/daily-summary.ts");
+  assert.match(summaryPanel, /getDailySummaryByDate/u);
+  assert.match(summaryPanel, /saveDailySummary/u);
+  assert.doesNotMatch(summaryPanel, /services\/daily-summary-storage/u);
+  assert.match(application, /interface DailySummaryRepository/u);
+  assert.match(application, /validateDailySummaryDraft/u);
 });
 
 test("AI only starts from explicit user action and Planner writes remain behind proposal review", () => {
