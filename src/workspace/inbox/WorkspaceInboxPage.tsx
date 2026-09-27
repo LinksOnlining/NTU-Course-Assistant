@@ -11,6 +11,7 @@ import {
   validateInboxEventProposal,
   validateInboxTaskProposal,
 } from "../../application/inbox/inbox.ts";
+import { ChineseDateInput } from "../../components/ChineseDateInput.tsx";
 import type { AppRoute } from "../../navigation/types.ts";
 import type { InboxItem, InboxProposal } from "../../types/inbox.ts";
 import { InboxSensitiveAiPanel } from "./InboxSensitiveAiPanel.tsx";
@@ -330,30 +331,29 @@ export function WorkspaceInboxPage({ onNavigate, initialItemId }: WorkspaceInbox
                     </label>
                     {kind === "event" ? (
                       <div className="workspace-inbox-fields">
-                        <label>
-                          日期
-                          <input
-                            aria-label={`${item.id}日期`}
-                            type="date"
+                        <div className="localized-date-field">
+                          <span>日期</span>
+                          <ChineseDateInput
+                            ariaLabel={`${item.id}日期`}
                             value={proposal.date ?? ""}
-                            onChange={(event) => {
-                              const value = event.currentTarget.value || null;
+                            onChange={(date) =>
                               setProposals((current) => ({
                                 ...current,
                                 [item.id]: updateProposalField(
                                   current[item.id] ?? proposal,
                                   "date",
-                                  value,
+                                  date || null,
                                 ),
-                              }));
-                            }}
+                              }))
+                            }
                           />
-                        </label>
+                        </div>
                         <label>
                           开始
                           <input
                             aria-label={`${item.id}开始时间`}
                             type="time"
+                            lang="zh-CN"
                             value={proposal.startTime ?? ""}
                             onChange={(event) => {
                               const value = event.currentTarget.value || null;
@@ -373,6 +373,7 @@ export function WorkspaceInboxPage({ onNavigate, initialItemId }: WorkspaceInbox
                           <input
                             aria-label={`${item.id}结束时间`}
                             type="time"
+                            lang="zh-CN"
                             value={proposal.endTime ?? ""}
                             onChange={(event) => {
                               const value = event.currentTarget.value || null;
@@ -390,30 +391,29 @@ export function WorkspaceInboxPage({ onNavigate, initialItemId }: WorkspaceInbox
                       </div>
                     ) : kind === "task" ? (
                       <div className="workspace-inbox-fields">
-                        <label>
-                          截止日期
-                          <input
-                            aria-label={`${item.id}截止日期`}
-                            type="date"
+                        <div className="localized-date-field">
+                          <span>截止日期</span>
+                          <ChineseDateInput
+                            ariaLabel={`${item.id}截止日期`}
                             value={proposal.deadlineDate ?? ""}
-                            onChange={(event) => {
-                              const value = event.currentTarget.value || null;
+                            onChange={(date) =>
                               setProposals((current) => ({
                                 ...current,
                                 [item.id]: updateProposalField(
                                   current[item.id] ?? proposal,
                                   "deadlineDate",
-                                  value,
+                                  date || null,
                                 ),
-                              }));
-                            }}
+                              }))
+                            }
                           />
-                        </label>
+                        </div>
                         <label>
                           截止时间
                           <input
                             aria-label={`${item.id}截止时间`}
                             type="time"
+                            lang="zh-CN"
                             value={proposal.deadlineTime ?? ""}
                             onChange={(event) => {
                               const value = event.currentTarget.value || null;

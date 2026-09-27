@@ -263,7 +263,9 @@ test("Academic subnavigation stays compact and course changes use a course-first
   await page.getByRole("button", { name: "设置" }).click();
   const settings = page.getByRole("dialog", { name: "设置" });
   await settingsPage(settings, "提醒");
-  await settings.getByLabel("第 1 教学周星期一").fill("2026-09-07");
+  await settings.getByRole("textbox", { name: "第 1 教学周星期一年" }).fill("2026");
+  await settings.getByRole("textbox", { name: "第 1 教学周星期一月" }).fill("09");
+  await settings.getByRole("textbox", { name: "第 1 教学周星期一日" }).fill("07");
   await settings.getByLabel("总教学周数").fill("16");
   await settings.getByRole("button", { name: "保存作息" }).click();
   await expect(settings).toHaveCount(0);
@@ -662,7 +664,9 @@ test("term and reminder settings validate and persist with the schedule", async 
   await dialog.getByLabel("启用课程提醒").check();
   await dialog.getByRole("button", { name: "保存作息" }).click();
   await expect(dialog.getByRole("alert")).toContainText("第 1 教学周");
-  await dialog.getByLabel("第 1 教学周星期一").fill("2026-09-07");
+  await dialog.getByRole("textbox", { name: "第 1 教学周星期一年" }).fill("2026");
+  await dialog.getByRole("textbox", { name: "第 1 教学周星期一月" }).fill("09");
+  await dialog.getByRole("textbox", { name: "第 1 教学周星期一日" }).fill("07");
   await dialog.getByLabel("总教学周数").fill("18");
   await dialog.getByLabel("提前提醒分钟").fill("60");
   await dialog.getByRole("button", { name: "保存作息" }).click();
@@ -670,7 +674,9 @@ test("term and reminder settings validate and persist with the schedule", async 
   await page.getByRole("button", { name: "设置" }).click();
   const reopened = page.getByRole("dialog", { name: "设置" });
   await settingsPage(reopened, "提醒");
-  await expect(reopened.getByLabel("第 1 教学周星期一")).toHaveValue("2026-09-07");
+  await expect(reopened.getByRole("textbox", { name: "第 1 教学周星期一年" })).toHaveValue("2026");
+  await expect(reopened.getByRole("textbox", { name: "第 1 教学周星期一月" })).toHaveValue("09");
+  await expect(reopened.getByRole("textbox", { name: "第 1 教学周星期一日" })).toHaveValue("07");
   await expect(reopened.getByLabel("启用课程提醒")).toBeChecked();
   await expect(reopened.getByLabel("提前提醒分钟")).toHaveValue("60");
 });

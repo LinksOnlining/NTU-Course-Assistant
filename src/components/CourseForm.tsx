@@ -178,6 +178,7 @@ export function CourseForm({ axis, periods, course, onSave, onDelete, onCancel }
               <input
                 id="course-start-time"
                 type="time"
+                lang="zh-CN"
                 value={input.startTime}
                 onChange={(event) => update("startTime", event.target.value)}
                 aria-describedby="course-start-time-message"
@@ -188,6 +189,7 @@ export function CourseForm({ axis, periods, course, onSave, onDelete, onCancel }
               <input
                 id="course-end-time"
                 type="time"
+                lang="zh-CN"
                 value={input.endTime}
                 onChange={(event) => update("endTime", event.target.value)}
                 aria-describedby="course-end-time-message"

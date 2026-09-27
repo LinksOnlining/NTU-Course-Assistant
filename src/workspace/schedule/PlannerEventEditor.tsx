@@ -3,6 +3,7 @@ import {
   validatePlannerEventDraft,
   type PlannerEventDraftErrors,
 } from "../../application/planner/planner-schedule.ts";
+import { ChineseDateInput } from "../../components/ChineseDateInput.tsx";
 import type { PlannerEvent, PlannerEventDraft } from "../../types/planner.ts";
 
 interface PlannerEventEditorProps {
@@ -104,15 +105,15 @@ export function PlannerEventEditor({
               aria-invalid={Boolean(errors.title)}
             />
           </label>
-          <label>
-            日期
-            <input
-              type="date"
+          <div className="workspace-planner-event-date-field">
+            <span>日期</span>
+            <ChineseDateInput
               value={draft.date}
-              onChange={(input) => update("date", input.currentTarget.value)}
-              aria-invalid={Boolean(errors.date)}
+              onChange={(value) => update("date", value)}
+              ariaLabel="日期"
+              ariaInvalid={Boolean(errors.date)}
             />
-          </label>
+          </div>
           {(errors.title || errors.date) && (
             <p className="workspace-task-error" role="alert">
               {errors.title ?? errors.date}
@@ -123,6 +124,7 @@ export function PlannerEventEditor({
               开始时间
               <input
                 type="time"
+                lang="zh-CN"
                 value={draft.startTime}
                 onChange={(input) => update("startTime", input.currentTarget.value)}
                 aria-invalid={Boolean(errors.startTime)}
@@ -135,7 +137,7 @@ export function PlannerEventEditor({
                 inputMode="numeric"
                 maxLength={5}
                 pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]|24:00"
-                placeholder="HH:MM（可填 24:00）"
+                placeholder="时:分（可填 24:00）"
                 value={draft.endTime}
                 onChange={(input) => update("endTime", input.currentTarget.value)}
                 aria-invalid={Boolean(errors.endTime)}

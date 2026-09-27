@@ -453,7 +453,9 @@ test("Dashboard Inbox count opens the local raw-first review and confirms user-e
   await eventItem.getByLabel("整理为").selectOption("event");
   const confirmEvent = eventItem.getByRole("button", { name: "确认创建日程" });
   await expect(confirmEvent).toBeDisabled();
-  await eventItem.getByLabel(/日期/u).fill("2026-09-24");
+  await eventItem.getByRole("textbox", { name: /日期年/u }).fill("2026");
+  await eventItem.getByRole("textbox", { name: /日期月/u }).fill("09");
+  await eventItem.getByRole("textbox", { name: /日期日/u }).fill("24");
   await eventItem.getByLabel(/开始时间/u).fill("14:00");
   await eventItem.getByLabel(/结束时间/u).fill("15:00");
   await expect(confirmEvent).toBeEnabled();
@@ -1052,7 +1054,9 @@ test("Dashboard combines course, planner event and task block while keeping pers
   await page.getByRole("button", { name: "新建任务" }).click();
   const editor = page.getByRole("dialog", { name: "新建个人任务" });
   await editor.getByLabel("标题").fill("整理项目资料");
-  await editor.getByLabel("截止日期").fill("2026-09-23");
+  await editor.getByRole("textbox", { name: "截止日期年" }).fill("2026");
+  await editor.getByRole("textbox", { name: "截止日期月" }).fill("09");
+  await editor.getByRole("textbox", { name: "截止日期日" }).fill("23");
   await editor.getByLabel("截止时间").fill("14:00");
   await editor.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByText("整理项目资料", { exact: true })).toBeVisible();
@@ -1448,7 +1452,9 @@ test("日常习惯建议取消不写入，确认后保存为日程", async ({ pa
 
   const editor = page.getByRole("dialog", { name: "添加日程" });
   await expect(editor.getByLabel("标题")).toHaveValue("跑步");
-  await expect(editor.getByLabel("日期")).toHaveValue("2026-09-23");
+  await expect(editor.getByRole("textbox", { name: "日期年" })).toHaveValue("2026");
+  await expect(editor.getByRole("textbox", { name: "日期月" })).toHaveValue("09");
+  await expect(editor.getByRole("textbox", { name: "日期日" })).toHaveValue("23");
   await expect(editor.getByLabel("开始时间")).toHaveValue("18:00");
   await expect(editor.getByLabel("结束时间")).toHaveValue("18:40");
   await editor.getByRole("button", { name: "取消" }).click();

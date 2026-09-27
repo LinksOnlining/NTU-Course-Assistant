@@ -5,6 +5,7 @@ interface ChineseDateInputProps {
   readonly onChange: (value: string) => void;
   readonly ariaLabel: string;
   readonly disabled?: boolean;
+  readonly ariaInvalid?: boolean;
 }
 
 interface ChineseDateTimeInputProps {
@@ -40,15 +41,16 @@ function normalizePart(value: string, maxLength: number): string {
 
 /**
  * A small, locale-independent date control. Native date inputs inherit the
- * Windows WebView locale and can expose an English yyyy/mm/dd placeholder;
- * these fields keep the visible language stable while the emitted value stays
- * ISO `YYYY-MM-DD` for storage.
+ * Windows WebView locale and can expose an English month/day order; these
+ * fields keep the visible language stable while the emitted value stays ISO
+ * `YYYY-MM-DD` for storage.
  */
 export function ChineseDateInput({
   value,
   onChange,
   ariaLabel,
   disabled = false,
+  ariaInvalid = false,
 }: ChineseDateInputProps) {
   const [parts, setParts] = useState<DateParts>(() => splitDate(value));
   const pickerRef = useRef<HTMLInputElement>(null);
@@ -81,7 +83,23 @@ export function ChineseDateInput({
   }
 
   return (
-    <div className="localized-date-input">
+    <div
+      className="localized-date-input"
+      role="group"
+      aria-label={ariaLabel}
+      onBlur={(event) => {
+        if (
+          event.relatedTarget instanceof Node &&
+          event.currentTarget.contains(event.relatedTarget)
+        ) {
+          return;
+        }
+        if (!isValidDate(parts.year, parts.month, parts.day)) {
+          setParts({ year: "", month: "", day: "" });
+          onChange("");
+        }
+      }}
+    >
       <input
         className="localized-date-part localized-date-year"
         value={parts.year}
@@ -90,6 +108,7 @@ export function ChineseDateInput({
         inputMode="numeric"
         maxLength={4}
         aria-label={`${ariaLabel}年`}
+        aria-invalid={ariaInvalid || undefined}
         disabled={disabled}
       />
       <span aria-hidden="true">年</span>
@@ -101,6 +120,7 @@ export function ChineseDateInput({
         inputMode="numeric"
         maxLength={2}
         aria-label={`${ariaLabel}月`}
+        aria-invalid={ariaInvalid || undefined}
         disabled={disabled}
       />
       <span aria-hidden="true">月</span>
@@ -112,6 +132,7 @@ export function ChineseDateInput({
         inputMode="numeric"
         maxLength={2}
         aria-label={`${ariaLabel}日`}
+        aria-invalid={ariaInvalid || undefined}
         disabled={disabled}
       />
       <span aria-hidden="true">日</span>
@@ -128,6 +149,7 @@ export function ChineseDateInput({
         ref={pickerRef}
         className="localized-date-picker"
         type="date"
+        lang="zh-CN"
         value={
           isValidDate(parts.year, parts.month, parts.day)
             ? `${parts.year}-${parts.month}-${parts.day}`
@@ -181,6 +203,7 @@ export function ChineseDateTimeInput({
       />
       <input
         type="time"
+        lang="zh-CN"
         value={time}
         onChange={(event) => commit(date, event.target.value)}
         aria-label={`${ariaLabel}时间`}

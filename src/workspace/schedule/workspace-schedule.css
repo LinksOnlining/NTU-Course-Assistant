@@ -155,7 +155,11 @@
   gap: var(--space-2);
 }
 
-.workspace-planner-event-dialog input,
+.workspace-planner-event-dialog .localized-date-field {
+  gap: var(--space-2);
+}
+
+.workspace-planner-event-dialog input:not(.localized-date-part):not(.localized-date-picker),
 .workspace-planner-event-dialog textarea {
   min-height: 44px;
   padding: 10px 14px;
@@ -284,7 +288,7 @@
     gap: 6px;
   }
 
-  .workspace-planner-event-dialog input,
+  .workspace-planner-event-dialog input:not(.localized-date-part):not(.localized-date-picker),
   .workspace-planner-event-dialog textarea {
     min-height: 40px;
     padding: 8px 12px;

@@ -261,6 +261,15 @@ test("Unified day timeline shows read-only Course and editable Event/TimeBlock w
   await page.getByRole("button", { name: /项目讨论/u }).click();
   const eventEditor = page.getByRole("dialog", { name: "编辑日程" });
   await expect(eventEditor).toBeVisible();
+  await expect(eventEditor.getByRole("textbox", { name: "日期年" })).toHaveAttribute(
+    "placeholder",
+    "年",
+  );
+  await expect(eventEditor.getByLabel("开始时间")).toHaveAttribute("lang", "zh-CN");
+  await expect(eventEditor.getByLabel("结束时间")).toHaveAttribute(
+    "placeholder",
+    "时:分（可填 24:00）",
+  );
   await eventEditor.getByLabel("标题").fill("修改后的项目讨论");
   await eventEditor.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("button", { name: /修改后的项目讨论/u })).toBeVisible();
@@ -268,6 +277,10 @@ test("Unified day timeline shows read-only Course and editable Event/TimeBlock w
   await page.getByRole("button", { name: /阅读论文/u }).click();
   const blockEditor = page.getByRole("dialog", { name: "编辑任务时间" });
   await expect(blockEditor.getByLabel("关联任务")).toHaveValue("personal-task-1");
+  await expect(blockEditor.getByRole("textbox", { name: "日期年" })).toHaveAttribute(
+    "placeholder",
+    "年",
+  );
   await expect(blockEditor.getByText("时间块没有独立标题，会使用所关联任务的名称。")).toBeVisible();
   await blockEditor.getByRole("button", { name: "取消" }).click();
 

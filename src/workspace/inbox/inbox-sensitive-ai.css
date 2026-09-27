@@ -90,7 +90,7 @@
   font-size: var(--font-size-secondary);
 }
 
-.inbox-sensitive-ai-editable input,
+.inbox-sensitive-ai-editable input:not(.localized-date-part):not(.localized-date-picker),
 .inbox-sensitive-ai-editable textarea,
 .inbox-sensitive-ai-editable select {
   width: 100%;

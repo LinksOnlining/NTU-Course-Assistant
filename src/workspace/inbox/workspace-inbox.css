@@ -90,7 +90,7 @@
 }
 
 .workspace-inbox-capture textarea,
-.workspace-inbox-preview input,
+.workspace-inbox-preview input:not(.localized-date-part):not(.localized-date-picker),
 .workspace-inbox-preview select {
   min-width: 0;
   padding: var(--space-2) var(--space-3);
@@ -188,6 +188,10 @@
 }
 
 .workspace-inbox-fields > label {
+  flex: 1 1 0;
+}
+
+.workspace-inbox-fields > .localized-date-field {
   flex: 1 1 0;
 }
 

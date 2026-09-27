@@ -3,6 +3,7 @@ import {
   validateTimeBlockDraft,
   type TimeBlockDraftErrors,
 } from "../../application/planner/planner-schedule.ts";
+import { ChineseDateInput } from "../../components/ChineseDateInput.tsx";
 import type { PersonalTask } from "../../types/personal-task.ts";
 import type { TimeBlock, TimeBlockDraft } from "../../types/planner.ts";
 
@@ -111,21 +112,22 @@ export function TimeBlockEditor({
               {errors.personalTaskId}
             </p>
           )}
-          <label>
-            日期
-            <input
-              type="date"
+          <div className="workspace-task-date-field">
+            <span>日期</span>
+            <ChineseDateInput
               value={draft.date}
-              onChange={(input) => update("date", input.currentTarget.value)}
-              aria-invalid={Boolean(errors.date)}
+              onChange={(value) => update("date", value)}
+              ariaLabel="日期"
+              ariaInvalid={Boolean(errors.date)}
             />
-          </label>
+          </div>
           {errors.date && <p className="workspace-task-error">{errors.date}</p>}
           <div className="workspace-task-deadline-fields">
             <label>
               开始时间
               <input
                 type="time"
+                lang="zh-CN"
                 value={draft.startTime}
                 onChange={(input) => update("startTime", input.currentTarget.value)}
                 aria-invalid={Boolean(errors.startTime)}
@@ -138,7 +140,7 @@ export function TimeBlockEditor({
                 inputMode="numeric"
                 maxLength={5}
                 pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]|24:00"
-                placeholder="HH:MM（可填 24:00）"
+                placeholder="时:分（可填 24:00）"
                 value={draft.endTime}
                 onChange={(input) => update("endTime", input.currentTarget.value)}
                 aria-invalid={Boolean(errors.endTime)}

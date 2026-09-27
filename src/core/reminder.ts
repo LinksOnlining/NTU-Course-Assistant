@@ -86,7 +86,7 @@ function civilFromDays(value: number): readonly [number, number, number] {
 }
 
 function dayNumber(date: string): number {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new RangeError("日期必须为 YYYY-MM-DD");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new RangeError("日期格式应为 年-月-日");
   const [year, month, day] = date.split("-").map(Number);
   if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month))
     throw new RangeError("日期不存在");

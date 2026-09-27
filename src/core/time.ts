@@ -3,7 +3,7 @@ import type { TimeRange } from "../types/time.ts";
 /** Strict 00:00–23:59; no trimming, normalization or rollover to another day. */
 export function timeToMinutes(time: string): number {
   if (typeof time !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
-    throw new RangeError("时间必须为 00:00–23:59 范围内的 HH:mm");
+    throw new RangeError("时间格式应为时:分，范围为 00:00–23:59");
   }
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 }

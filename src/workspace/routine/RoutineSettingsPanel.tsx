@@ -244,6 +244,7 @@ export function RoutineSettingsPanel() {
             开始
             <input
               type="time"
+              lang="zh-CN"
               value={draft.preferredStartTime ?? ""}
               onChange={(event) => setPreferredTime("start", event.currentTarget.value)}
             />
@@ -252,6 +253,7 @@ export function RoutineSettingsPanel() {
             结束
             <input
               type="time"
+              lang="zh-CN"
               value={draft.preferredEndTime ?? ""}
               onChange={(event) => setPreferredTime("end", event.currentTarget.value)}
             />

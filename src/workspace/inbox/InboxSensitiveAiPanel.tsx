@@ -8,6 +8,7 @@ import type {
 import type { AiProposalApplyResult } from "../../application/ai/proposal-runtime.ts";
 import type { InboxItem } from "../../types/inbox.ts";
 import type { PersonalTaskPriority } from "../../types/personal-task.ts";
+import { ChineseDateInput } from "../../components/ChineseDateInput.tsx";
 import { AiProposalReview } from "../ai/AiProposalReview.tsx";
 import { AiSensitiveConsent } from "../ai/AiSensitiveConsent.tsx";
 import { sensitiveAiService } from "../ai/sensitive-ai-service.ts";
@@ -331,24 +332,24 @@ export function InboxSensitiveAiPanel({
                     </select>
                   </label>
                   <div className="inbox-sensitive-ai-fields">
-                    <label>
-                      截止日期
-                      <input
-                        type="date"
+                    <div className="localized-date-field">
+                      <span>截止日期</span>
+                      <ChineseDateInput
+                        ariaLabel="截止日期"
                         value={recognitionDraft.deadlineDate}
                         disabled={busy !== null}
-                        onChange={(event) => {
-                          const deadlineDate = event.currentTarget.value;
+                        onChange={(deadlineDate) =>
                           setRecognitionDraft((current) =>
                             current ? { ...current, deadlineDate } : current,
-                          );
-                        }}
+                          )
+                        }
                       />
-                    </label>
+                    </div>
                     <label>
                       截止时间
                       <input
                         type="time"
+                        lang="zh-CN"
                         value={recognitionDraft.deadlineTime}
                         disabled={busy !== null}
                         onChange={(event) => {
@@ -363,25 +364,23 @@ export function InboxSensitiveAiPanel({
                 </>
               ) : (
                 <>
-                  <label>
-                    日期
-                    <input
-                      type="date"
+                  <div className="localized-date-field">
+                    <span>日期</span>
+                    <ChineseDateInput
+                      ariaLabel="日期"
                       value={recognitionDraft.date}
                       disabled={busy !== null}
-                      onChange={(event) => {
-                        const date = event.currentTarget.value;
-                        setRecognitionDraft((current) =>
-                          current ? { ...current, date } : current,
-                        );
-                      }}
+                      onChange={(date) =>
+                        setRecognitionDraft((current) => (current ? { ...current, date } : current))
+                      }
                     />
-                  </label>
+                  </div>
                   <div className="inbox-sensitive-ai-fields">
                     <label>
                       开始时间
                       <input
                         type="time"
+                        lang="zh-CN"
                         value={recognitionDraft.startTime}
                         disabled={busy !== null}
                         onChange={(event) => {
@@ -396,6 +395,7 @@ export function InboxSensitiveAiPanel({
                       结束时间
                       <input
                         type="time"
+                        lang="zh-CN"
                         value={recognitionDraft.endTime}
                         disabled={busy !== null}
                         onChange={(event) => {

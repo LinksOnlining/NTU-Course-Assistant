@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { loadAcademicHubData } from "../../application/academic/index.ts";
+import { ChineseDateInput } from "../../components/ChineseDateInput.tsx";
 import {
   createPersonalTask,
   deletePersonalTask,
@@ -148,19 +149,20 @@ function TaskEditor({
             </select>
           </label>
           <div className="workspace-task-deadline-fields">
-            <label>
-              截止日期
-              <input
-                type="date"
+            <div className="workspace-task-date-field">
+              <span>截止日期</span>
+              <ChineseDateInput
                 value={draft.deadlineDate}
-                onChange={(event) => update("deadlineDate", event.currentTarget.value)}
-                aria-invalid={Boolean(errors.deadlineDate)}
+                onChange={(value) => update("deadlineDate", value)}
+                ariaLabel="截止日期"
+                ariaInvalid={Boolean(errors.deadlineDate)}
               />
-            </label>
+            </div>
             <label>
               截止时间
               <input
                 type="time"
+                lang="zh-CN"
                 value={draft.deadlineTime}
                 onChange={(event) => update("deadlineTime", event.currentTarget.value)}
                 aria-invalid={Boolean(errors.deadlineTime)}
@@ -490,7 +492,7 @@ export function WorkspaceTasksPage({
       {deleteTarget && (
         <div className="workspace-task-backdrop">
           <section
-            className="workspace-task-dialog"
+            className="workspace-task-dialog workspace-task-dialog--delete"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="delete-personal-task-title"

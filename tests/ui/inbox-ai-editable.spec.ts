@@ -24,7 +24,9 @@ test("Inbox AI 识别草稿可本地编辑、切换为活动后生成建议且�
 
   await editor.getByLabel("标题").fill("晨间慢跑");
   await editor.getByLabel("描述").fill("沿河跑步，结束后拉伸。");
-  await editor.getByLabel("日期").fill("2026-09-25");
+  await editor.getByRole("textbox", { name: "日期年" }).fill("2026");
+  await editor.getByRole("textbox", { name: "日期月" }).fill("09");
+  await editor.getByRole("textbox", { name: "日期日" }).fill("25");
   await editor.getByLabel("开始时间").fill("07:00");
   await editor.getByLabel("结束时间").fill("07:45");
   await editor.getByLabel("地点").fill("滨河步道");

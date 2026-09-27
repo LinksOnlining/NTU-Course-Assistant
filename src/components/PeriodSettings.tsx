@@ -17,6 +17,7 @@ import type { SaveOperationState } from "../types/save-operation.ts";
 import type { PeriodTime } from "../types/time.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
 import type { ThemePreference } from "../theme/types.ts";
+import { ChineseDateInput } from "./ChineseDateInput.tsx";
 import { workplaceModuleRegistry } from "../modules/registry.ts";
 import type { WorkspaceWeatherController } from "../workspace/weather/use-workspace-weather.ts";
 import { WeatherSettingsPanel } from "../workspace/weather/WeatherSettingsPanel.tsx";
@@ -254,7 +255,7 @@ export function PeriodSettings({
             timeDrafts[`${period.period}:endTime`] !== period.endTime,
         )
       ) {
-        throw new RangeError("请先完成每个节次的 HH:mm 时间输入。");
+        throw new RangeError("请先按“时:分”填写每个节次的时间。");
       }
       validatePeriodTimes(draft);
       const reminderSettings = validateReminderSettings({
@@ -553,15 +554,14 @@ export function PeriodSettings({
                     </p>
                   </div>
                   <div className="settings-fields">
-                    <label>
+                    <div className="localized-date-field">
                       <span>第 1 教学周星期一</span>
-                      <input
-                        type="date"
+                      <ChineseDateInput
                         value={firstWeekMonday}
-                        onChange={(event) => setFirstWeekMonday(event.target.value)}
-                        aria-label="第 1 教学周星期一"
+                        onChange={setFirstWeekMonday}
+                        ariaLabel="第 1 教学周星期一"
                       />
-                    </label>
+                    </div>
                     <label>
                       <span>总教学周数</span>
                       <input

@@ -120,7 +120,21 @@ test("Workspace Tasks creates, edits, completes, reopens and confirms deletion o
   await page.getByLabel("标题").fill("整理资料");
   await page.getByLabel("描述").fill("准备提交附件");
   await page.getByLabel("优先级").selectOption("high");
-  await page.getByLabel("截止日期").fill("2026-09-25");
+  await expect(page.getByRole("textbox", { name: "截止日期年" })).toHaveAttribute(
+    "placeholder",
+    "年",
+  );
+  await expect(page.getByRole("textbox", { name: "截止日期月" })).toHaveAttribute(
+    "placeholder",
+    "月",
+  );
+  await expect(page.getByRole("textbox", { name: "截止日期日" })).toHaveAttribute(
+    "placeholder",
+    "日",
+  );
+  await page.getByRole("textbox", { name: "截止日期年" }).fill("2026");
+  await page.getByRole("textbox", { name: "截止日期月" }).fill("09");
+  await page.getByRole("textbox", { name: "截止日期日" }).fill("25");
   await page.getByLabel("截止时间").fill("17:00");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   const row = page.locator(".workspace-task-row").filter({ hasText: "整理资料" });
@@ -130,6 +144,9 @@ test("Workspace Tasks creates, edits, completes, reopens and confirms deletion o
 
   await row.getByRole("button", { name: "编辑" }).click();
   await page.getByLabel("标题").fill("整理最终资料");
+  await expect(page.getByRole("textbox", { name: "截止日期年" })).toHaveValue("2026");
+  await expect(page.getByRole("textbox", { name: "截止日期月" })).toHaveValue("09");
+  await expect(page.getByRole("textbox", { name: "截止日期日" })).toHaveValue("25");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   const editedRow = page.locator(".workspace-task-row").filter({ hasText: "整理最终资料" });
   await expect(editedRow).toBeVisible();
@@ -147,6 +164,21 @@ test("Workspace Tasks creates, edits, completes, reopens and confirms deletion o
   await reopenedRow.getByRole("button", { name: "删除" }).click();
   const confirmation = page.getByRole("alertdialog");
   await expect(confirmation).toContainText("关联的时间块也会同时删除");
+  await page.setViewportSize({ width: 720, height: 520 });
+  const dialogBounds = await confirmation.boundingBox();
+  const titleBounds = await confirmation.getByRole("heading").boundingBox();
+  const messageBounds = await confirmation.locator(":scope > p").boundingBox();
+  const footerBounds = await confirmation.locator("footer").boundingBox();
+  expect(dialogBounds).not.toBeNull();
+  expect(titleBounds).not.toBeNull();
+  expect(messageBounds).not.toBeNull();
+  expect(footerBounds).not.toBeNull();
+  expect(titleBounds!.y).toBeGreaterThan(dialogBounds!.y + 8);
+  expect(messageBounds!.y).toBeGreaterThan(titleBounds!.y + titleBounds!.height);
+  expect(footerBounds!.y).toBeGreaterThan(messageBounds!.y + messageBounds!.height);
+  expect(footerBounds!.y + footerBounds!.height).toBeLessThanOrEqual(
+    dialogBounds!.y + dialogBounds!.height - 8,
+  );
   await confirmation.getByRole("button", { name: "确认删除" }).click();
   await expect(reopenedRow).toHaveCount(0);
 });

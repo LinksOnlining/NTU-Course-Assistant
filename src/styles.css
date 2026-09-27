@@ -1167,14 +1167,16 @@ select:focus-visible {
   gap: 10px;
 }
 
-.settings-fields label {
+.settings-fields label,
+.settings-fields > .localized-date-field {
   display: grid;
   gap: 5px;
   color: var(--text-label);
   font-size: 12px;
 }
 
-.settings-fields input:not([type="checkbox"]) {
+.settings-fields
+  input:not([type="checkbox"]):not(.localized-date-part):not(.localized-date-picker) {
   min-height: 32px;
   padding: 4px 7px;
   border: 1px solid var(--border-default);
@@ -2441,6 +2443,14 @@ select:focus-visible {
   align-items: center;
   gap: 3px;
   min-width: 0;
+}
+
+.localized-date-field {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-secondary);
 }
 
 .localized-date-input {

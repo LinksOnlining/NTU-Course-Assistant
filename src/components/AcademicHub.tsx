@@ -1111,6 +1111,7 @@ export function AcademicHub({
                                     {changeEditor.kind !== "MODIFY" && (
                                       <input
                                         type="time"
+                                        lang="zh-CN"
                                         value={changeEditor.startTime}
                                         onChange={(event) =>
                                           updateChangeEditor({ startTime: event.target.value })
@@ -1126,6 +1127,7 @@ export function AcademicHub({
                                     {changeEditor.kind !== "MODIFY" && (
                                       <input
                                         type="time"
+                                        lang="zh-CN"
                                         value={changeEditor.endTime}
                                         onChange={(event) =>
                                           updateChangeEditor({ endTime: event.target.value })
