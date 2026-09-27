@@ -18,7 +18,7 @@
 - **REUSE**：既有 Weather 设置/缓存和天气预报路径、Tauri command 边界、Rust `reqwest` 与 `keyring` 依赖。
 - **ADAPT**：将既有 Windows Credential Manager 读写封装为 `secure_credentials`，供 AI 与 Weather 共用；Weather 不建立第二套凭据存储。
 - **REFERENCE**：只参考官方 API 文档，没有复制第三方 SDK 或非官方实现代码。
-- **REJECT**：未引入新的位置 SDK、运行时依赖、地图 WebView SDK 或新数据库表；没有更换现有 Open-Meteo 天气预报 provider。
+- **REJECT**：未引入新的位置 SDK、运行时依赖、地图 WebView SDK 或新数据库表；没有更换现有 Open-Meteo 天气预报 provider。保留理由：当前实现已按经纬度读取 current/hourly/daily、7 日预报和本机缓存；官方 Forecast API 以 WGS84 latitude/longitude 为输入，默认提供 7 日预报。地点解析已独立解决名称覆盖和返回坐标的问题，没有已证实的预报能力缺口需要迁移到 QWeather。农村地点的真实预报质量仍需 Live 验收，不在这里推断为 PASS。[Open-Meteo Forecast API](https://open-meteo.com/en/docs)
 
 ## Resolver 与坐标边界
 
@@ -29,6 +29,25 @@
 - 高德返回的地点坐标按 GCJ-02 处理；百度 BD-09 通过百度坐标转换接口 `model=5` 转到应用内部 GCJ-02。预报请求边界再将 GCJ-02 转为 WGS84。坐标系随 Location DTO 明确表达，不靠城市 ID 或 `locationId`。
 - 手动坐标支持坐标系选择并归一到 GCJ-02；无地图凭据时该路径仍可用。地图选择器以高德静态地图图像为底图，由 Rust 下载并校验 PNG/JPEG、大小与坐标；不把 Web 服务 Key 暴露给前端。
 - 当前位置仍需用户明确同意与系统定位授权；发给位置服务前会降低坐标精度。逆地理编码依次尝试高德、百度；失败时保留坐标型位置，不阻断天气功能。
+
+## 真实农村地点人工矩阵（尚未执行）
+
+不在代码中编造“真实”地名或伪造 live provider 响应。Rust/前端自动测试中的 JSON 是明确的协议 mock，仅验证字段映射、fallback、去重、排序和坐标转换，不作为地点存在性或覆盖率证据。Windows Live 验收使用当前 provider 实际返回的地点，并记录选中结果及坐标。
+
+| 区域 | 待实测覆盖 | 状态 |
+| --- | --- | --- |
+| 江苏 | 乡镇、行政村/自然村、农村 POI | PENDING |
+| 安徽 | 乡镇、行政村/自然村、农村 POI | PENDING |
+| 河南 | 乡镇、行政村/自然村、农村学校/村委会 | PENDING |
+| 山东 | 乡镇、行政村/自然村、农村学校/村委会 | PENDING |
+| 四川 | 乡镇、自然村、详细农村地址 | PENDING |
+| 广东 | 乡镇、行政村/自然村、详细农村地址 | PENDING |
+| 云南 | 乡镇、行政村/自然村、同名地点 | PENDING |
+| 东北（黑龙江/吉林/辽宁） | 乡镇、行政村/自然村、同名地点 | PENDING |
+| 内蒙古 | 乡/苏木、镇、村级 POI | PENDING |
+| 新疆 | 乡/镇、村级 POI、详细农村地址 | PENDING |
+
+Live 验收至少需要：3 个省份的乡镇、5 个农村地点、2 个农村学校/村委会、2 个完整农村地址、2 组重名地点；另挑 1 个文字索引找不到的真实小地点完成“地图选点→位置确认→按坐标查询天气”。以上全都未由自动化模拟代替。
 
 ## 凭据、隐私与降级
 
