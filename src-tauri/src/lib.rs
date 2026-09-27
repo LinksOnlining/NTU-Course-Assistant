@@ -1090,9 +1090,20 @@ fn hide_widget(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
-    let main = app
-        .get_webview_window("main")
-        .ok_or_else(|| "无法找到课程表窗口。".to_string())?;
+    let main = if let Some(main) = app.get_webview_window("main") {
+        main
+    } else {
+        let config = app
+            .config()
+            .app
+            .windows
+            .first()
+            .ok_or_else(|| "无法恢复课程表窗口。".to_string())?;
+        WebviewWindowBuilder::from_config(app, config)
+            .map_err(|_| "无法恢复课程表窗口。".to_string())?
+            .build()
+            .map_err(|_| "无法恢复课程表窗口。".to_string())?
+    };
     main.unminimize()
         .map_err(|_| "无法恢复课程表窗口。".to_string())?;
     main.show()
@@ -1328,7 +1339,7 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" || window.label() == "widget" {
+                if window.label() == "widget" {
                     api.prevent_close();
                     let _ = window.hide();
                 }

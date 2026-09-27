@@ -42,6 +42,32 @@ test("默认进入工作台并显示本地日期与已核验每日寄语", async
   await expect(page.getByRole("navigation", { name: "课表二级导航" })).toHaveCount(0);
 });
 
+test("Links 顶栏提供独立空白拖动区，交互控件不在拖动区内", async ({ page }) => {
+  await openApp(page);
+  const header = page.locator(".shell-header");
+  const dragRegion = header.locator(".shell-drag-region");
+  const actions = header.locator(".shell-header-actions");
+  await expect(dragRegion).toHaveAttribute("data-tauri-drag-region", "");
+  await expect(header.getByRole("button", { name: /最小化|最大化|关闭窗口/u })).toHaveCount(0);
+
+  const [dragBox, actionsBox] = await Promise.all([
+    dragRegion.boundingBox(),
+    actions.boundingBox(),
+  ]);
+  expect(dragBox).not.toBeNull();
+  expect(actionsBox).not.toBeNull();
+  expect(dragBox!.width).toBeGreaterThan(0);
+  expect(dragBox!.x + dragBox!.width).toBeLessThanOrEqual(actionsBox!.x);
+
+  await header
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "课表" })
+    .click();
+  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await header.getByRole("button", { name: "设置" }).click();
+  await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
+});
+
 test("课表模式显示 Academic 导航与控件，并记住离开前的 Academic 页面", async ({ page }) => {
   await openApp(page);
   const mode = page.getByRole("navigation", { name: "产品模式" });

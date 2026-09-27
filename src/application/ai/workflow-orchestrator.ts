@@ -15,7 +15,7 @@ import {
   type TodayAnalysisResult,
 } from "./today-workflows.ts";
 import { createDailyBriefSchema, type DailyBriefResult } from "./daily-brief.ts";
-import { dailySummarySchema } from "./daily-summary-ai.ts";
+import { dailySummarySchema, type DailySummaryAiDraft } from "./daily-summary-ai.ts";
 import {
   deriveDailySummaryCarryOvers,
   projectRecentDailySummaries,
@@ -80,6 +80,7 @@ export interface AiWorkflowResult {
   readonly analysisTitle?: string;
   readonly analysis?: TodayAnalysisResult;
   readonly dailyBrief?: DailyBriefResult;
+  readonly dailySummary?: DailySummaryAiDraft;
   readonly proposal?: AiPlannerProposal;
   readonly usedScopes: readonly string[];
   readonly usedModules: readonly string[];
@@ -331,6 +332,7 @@ export function createAiWorkflowOrchestrator(input: {
             return readyResult({
               workflowId: effectiveWorkflowId,
               answer: draft.overview,
+              dailySummary: draft,
               context,
               toolNames: [],
               limitations,
@@ -697,6 +699,7 @@ function readyResult(input: {
   readonly analysisTitle?: string;
   readonly analysis?: TodayAnalysisResult;
   readonly dailyBrief?: DailyBriefResult;
+  readonly dailySummary?: DailySummaryAiDraft;
   readonly proposal?: AiPlannerProposal;
   readonly context: Awaited<ReturnType<AiContextProvider["buildContext"]>>;
   readonly toolNames: readonly string[];
@@ -715,6 +718,7 @@ function readyResult(input: {
       ...(input.analysisTitle ? { analysisTitle: input.analysisTitle } : {}),
       ...(input.analysis ? { analysis: input.analysis } : {}),
       ...(input.dailyBrief ? { dailyBrief: input.dailyBrief } : {}),
+      ...(input.dailySummary ? { dailySummary: input.dailySummary } : {}),
       ...(input.proposal ? { proposal: input.proposal } : {}),
       usedScopes: input.context.permissions.includedScopes,
       usedModules: Object.freeze([...modules]),
@@ -744,7 +748,7 @@ function makeRequest(
       : workflowId === "dailyBrief.generate"
         ? "请根据今天已授权的结构化数据，生成简洁、可执行且说明原因的今日简报。"
         : workflowId === "dailySummary.generate"
-          ? "请根据今天已授权的结构化数据，为本地每日总结润色一段简洁概览。"
+          ? "请根据今天已授权的结构化数据，生成简洁自然的结构化每日总结。overview 用 1–2 句话概括重点；highlights 只写今天明确完成的事项；unfinished 只写当前仍未完成的任务；tomorrowNotes 只写明天明确安排或到期的事项。没有事实依据的字段返回空数组，不得编造、推断或改写事实。"
           : "请分析今天的安排、风险和可执行建议。";
   return Object.freeze({
     id,

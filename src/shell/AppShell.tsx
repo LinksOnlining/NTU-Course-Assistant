@@ -75,6 +75,7 @@ function ShellHeader({
           <span className="shell-quote-author">· {quote.author}</span>
         </p>
       </div>
+      <div className="shell-drag-region" data-tauri-drag-region="" aria-hidden="true" />
       <div className="shell-header-actions">
         <time className="shell-date" dateTime={localDateKey(today)}>
           {formatHeaderDate(today)}

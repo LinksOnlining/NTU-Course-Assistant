@@ -159,10 +159,35 @@ Phase 4.8.1 仍需 Ethan 完成 DeepSeek Live 与 Windows Manual 验收后才能
 
 ### Automated gates
 
-- `npm run verify`：**PASS**；typecheck、388 unit、137 architecture、Playwright UI 1137 PASS / 15 条件跳过、lint、Prettier、Vite build 均 PASS。
+- `npm run verify`：**PASS**；typecheck、388 unit、140 architecture、Playwright UI 1191 PASS / 15 条件跳过、lint、Prettier、Vite build 均 PASS。
 - Rust：`cargo test --manifest-path src-tauri/Cargo.toml` **104 passed**；`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` **PASS**；`cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` **PASS**。
-- `npm run tauri build`：**PASS**。生成 NSIS、MSI 及其 updater `.sig`：`NTU Course Assistant_1.3.1_x64-setup.exe`、`NTU Course Assistant_1.3.1_x64-setup.exe.sig`、`NTU Course Assistant_1.3.1_x64_en-US.msi`、`NTU Course Assistant_1.3.1_x64_en-US.msi.sig`。
+- `npm run tauri build`：**PASS**。生成 release EXE、NSIS、MSI 及其 updater `.sig`：`ntu-course-assistant.exe`、`NTU Course Assistant_1.3.1_x64-setup.exe`、`NTU Course Assistant_1.3.1_x64-setup.exe.sig`、`NTU Course Assistant_1.3.1_x64_en-US.msi`、`NTU Course Assistant_1.3.1_x64_en-US.msi.sig`。
 - 仅完成本地 build；未运行 release EXE、未安装 installer、未访问用户/Release 数据库，未执行真实 DeepSeek Live 或 Windows GUI 人工验收。
+
+## UX 与窗口外壳补充验证（2026-09-27）
+
+### Daily Summary 阻断修复
+
+- 根因一：旧展开式详情位于 `overflow:hidden` 的工作台侧栏中，没有独立受限高度的滚动区域，长内容会被裁切。
+- 根因二：可编辑列表 textarea 在受控状态更新时立即 `trim/filter(Boolean)` 清洗行，空行在输入过程中被删除，导致回车与多行编辑体验失效；检查未发现 `disabled`、`readOnly` 或遮挡层阻止输入。
+- 当前流程：点击“今日总结”先查询已保存内容；若无已保存内容则自动请求 `dailySummary.generate`。AI 失败/不可用时使用本地总结并给出中文降级说明。默认结构化 Preview；Edit 后字段可编辑，只有明确点击保存才写入；重新生成的 AI Draft 在保存前不会覆盖已保存数据。未编辑的 AI Draft 可以直接关闭，已有编辑的未保存内容会触发放弃确认。
+- 内容字段为 `overview`、`highlights`、`unfinished`、`tomorrowNotes`，界面标签为“今日概览 / 今日完成 / 待推进 / 明天提醒”。没有扩大权限、上下文或写入范围；AI 不读 Diary 正文/Inbox raw，不获得 Proposal 工具，也不直接写数据库。
+- 弹窗采用固定 Header/Footer 与受限滚动 Body。Playwright 回归覆盖 1920×1080、1600×900、1366×768、720×520；小窗口下正文可滚动、操作区保持可见，键盘换行、预览/编辑/保存和取消路径通过。
+
+### Windows 主窗口外壳
+
+- 主窗口配置为 `decorations=false`、`maximized=true`、`fullscreen` 未启用；没有在 Links 顶栏补造最小化/最大化/关闭按钮。
+- Links Header 的空白区域作为 Tauri `data-tauri-drag-region`，品牌与功能按钮区域仍为独立可点击控件。
+- Rust 生命周期不再拦截主窗口标准 CloseRequested；Widget 原有关闭即隐藏行为保持。`show_main_window` 在主窗口已关闭时从 Tauri 配置重新创建，然后恢复、显示并聚焦。
+- 新增窗口架构测试，验证 frameless/maximized/not-fullscreen、仅 Widget close 被拦截、主窗口恢复路径；Playwright 验证 Links Header 控件点击仍可用。此类浏览器/静态测试不等同真实 Windows GUI 验收。
+- Windows 实机尚待 Ethan 验收：无原生标题栏、启动默认最大化、拖动空白顶栏、Alt+F4/任务栏关闭、Win+Up/Down、恢复窗口布局、浅/深色主题。DeepSeek Live 亦仍未执行。
+
+### 最终自动门禁与构建
+
+- 最终 `npm run verify`：**PASS**；typecheck、388 unit、140 architecture、Playwright UI **1191 PASS / 15 skipped**、lint、Prettier、Vite build 均 PASS。此前一次完整运行有 1 个 Today Assistant UI 用例 30 秒定位超时；该用例单独重跑 PASS，随后完整验证重跑全部通过。
+- Rust：`cargo test --manifest-path src-tauri/Cargo.toml` **104 passed**；`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` **PASS**；`cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` **PASS**。
+- 本地 `npm run tauri build`：**PASS**。实际产物：release EXE 68,412,416 bytes；MSI 54,493,184 bytes；MSI `.sig` 436 bytes；NSIS 52,508,127 bytes；NSIS `.sig` 436 bytes。产物位于 `src-tauri/target/release/` 下，未运行或安装。
+- 本轮未修改 schema/migration、版本、identifier、productName 或依赖；当前 schema=8。未创建 tag、未发布、未 push。
 
 ### 当前 gate
 

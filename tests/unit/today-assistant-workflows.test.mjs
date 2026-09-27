@@ -395,12 +395,23 @@ test("Daily Brief 通过现有 Context Engine 与 Provider 结构化生成且完
 test("Daily Summary 只请求已授权的结构化范围且不暴露工具或写能力", async () => {
   const testFixture = fixture({
     grants: ["academic.read", "planner.read", "routine.read", "planner.propose"],
-    structuredResult: { overview: "今天完成了计划中的学习。" },
+    structuredResult: {
+      overview: "今天完成了计划中的学习。",
+      highlights: ["完成复习"],
+      unfinished: ["继续整理笔记"],
+      tomorrowNotes: [],
+    },
   });
   const result = await testFixture.orchestrator.run({ workflowId: "dailySummary.generate" });
   assert.equal(result.status, "ready", JSON.stringify(result));
   assert.equal(result.result.workflowId, "dailySummary.generate");
   assert.equal(result.result.answer, "今天完成了计划中的学习。");
+  assert.deepEqual(result.result.dailySummary, {
+    overview: "今天完成了计划中的学习。",
+    highlights: ["完成复习"],
+    unfinished: ["继续整理笔记"],
+    tomorrowNotes: [],
+  });
   assert.deepEqual(result.result.usedTools, []);
   assert.deepEqual(testFixture.providerCalls, []);
   assert.deepEqual(testFixture.executions, []);
@@ -415,7 +426,7 @@ test("Daily Summary 只请求已授权的结构化范围且不暴露工具或写
   assert.equal(testFixture.contextRequests[0].requestedScopes.includes("inbox.raw.read"), false);
   assert.equal(TODAY_AI_WORKFLOWS["dailySummary.generate"].allowedProposalToolIds.length, 0);
   assert.equal(TODAY_AI_WORKFLOWS["dailySummary.generate"].allowedReadToolIds.length, 0);
-  assert.match(testFixture.structuredCalls[0].prompt, /只读/u);
+  assert.match(testFixture.structuredCalls[0].prompt, /不得编造/u);
   assert.equal("tools" in testFixture.structuredCalls[0], false);
 });
 

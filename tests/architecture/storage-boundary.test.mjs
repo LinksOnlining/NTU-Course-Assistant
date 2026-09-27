@@ -86,7 +86,9 @@ test("tray lifecycle has one native boundary and reuses main and widget helpers"
   assert.match(rust, /show_main_window\(app\)/);
   assert.match(rust, /TRAY_TOGGLE_WIDGET/);
   assert.match(rust, /TRAY_QUIT => app\.exit\(0\)/);
-  assert.match(rust, /window\.label\(\) == "main" \|\| window\.label\(\) == "widget"/);
+  assert.match(rust, /WebviewWindowBuilder::from_config\(app, config\)/);
+  assert.match(rust, /if window\.label\(\) == "widget" \{[\s\S]{0,100}api\.prevent_close\(\)/);
+  assert.doesNotMatch(rust, /window\.label\(\) == "main"/);
   assert.doesNotMatch(rust, /always_on_top|SELECT\s+.*tray|INSERT\s+.*tray/i);
 });
 

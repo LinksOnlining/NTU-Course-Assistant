@@ -14,10 +14,17 @@ async function seedDashboardRuntime(
   diaryFixture: { readonly hasEntry?: boolean; readonly failSave?: boolean } = {},
   inboxFixture: { readonly pendingCount?: number; readonly items?: readonly unknown[] } = {},
   routineFixture: readonly Record<string, unknown>[] = [],
+  aiFixture: {
+    readonly configured?: boolean;
+    readonly delayMs?: number;
+    readonly hold?: boolean;
+    readonly fail?: boolean;
+    readonly structuredResult?: Record<string, unknown>;
+  } = {},
 ) {
   await page.clock.install({ time: currentTime });
   await page.addInitScript(
-    ({ name, plannerFixture, diaryFixture, inboxFixture, routineFixture }) => {
+    ({ name, plannerFixture, diaryFixture, inboxFixture, routineFixture, aiFixture }) => {
       const course = {
         id: "dashboard-course",
         name,
@@ -91,10 +98,56 @@ async function seedDashboardRuntime(
       let loadCoursesCount = 0;
       let searchDiaryReadCount = 0;
       const geocodingCalls: { command: string; args?: Record<string, unknown> }[] = [];
+      let dailySummaryAiCalls = 0;
+      let releaseDailySummaryAi: (() => void) | null = null;
+      if (aiFixture.configured) {
+        localStorage.setItem(
+          "links-workplace.ai.data-access",
+          JSON.stringify({ persistentGrants: ["academic.read", "planner.read", "routine.read"] }),
+        );
+        localStorage.setItem(
+          "links-workplace.ai.provider-settings",
+          JSON.stringify({
+            providerId: "deepseek",
+            selectedModel: "deepseek-chat",
+            reasoningEffort: "none",
+            requestTimeoutSeconds: 30,
+          }),
+        );
+      }
       Object.defineProperty(window, "__TAURI_INTERNALS__", {
         configurable: true,
         value: {
           invoke: async (command: string, args?: Record<string, unknown>) => {
+            if (command === "get_deepseek_api_key_status") {
+              return { status: "success", value: Boolean(aiFixture.configured) };
+            }
+            if (command === "generate_deepseek_structured") {
+              dailySummaryAiCalls += 1;
+              if (aiFixture.hold) {
+                await new Promise<void>((resolve) => {
+                  releaseDailySummaryAi = resolve;
+                });
+              }
+              if (aiFixture.delayMs) {
+                await new Promise((resolve) => window.setTimeout(resolve, aiFixture.delayMs));
+              }
+              if (aiFixture.fail) {
+                return {
+                  status: "failure",
+                  error: { code: "networkUnavailable", message: "测试网络不可用" },
+                };
+              }
+              return {
+                status: "success",
+                value: aiFixture.structuredResult ?? {
+                  overview: "今天安排清晰，完成事项后还可以继续推进一项任务。",
+                  highlights: ["完成课程复习"],
+                  unfinished: ["继续整理笔记"],
+                  tomorrowNotes: [],
+                },
+              };
+            }
             if (command === "load_courses") {
               loadCoursesCount += 1;
               return { courses: [course], warnings: [] };
@@ -386,7 +439,13 @@ async function seedDashboardRuntime(
           getSearchDiaryReadCount: () => searchDiaryReadCount,
           getDailySummaryReadCount: () => dailySummaryReadCount,
           getDailySummaryRangeReadCount: () => dailySummaryRangeReadCount,
+          getDailySummaryAiCalls: () => dailySummaryAiCalls,
+          releaseDailySummaryAi: () => releaseDailySummaryAi?.(),
           getDailySummary: (date: string) => dailySummaries.get(date) ?? null,
+          setDailySummary: (summary: Record<string, unknown>) => {
+            dailySummaries.set(String(summary.summaryDate), summary);
+            persistDailySummaries();
+          },
           getPersonalTaskCount: () => personalTasks.length,
           getDiaryBody: (date: string) => diaryEntries.get(date)?.body ?? null,
           getRoutineScheduledDate: (id: string) =>
@@ -404,7 +463,7 @@ async function seedDashboardRuntime(
         },
       });
     },
-    { name: courseName, plannerFixture, diaryFixture, inboxFixture, routineFixture },
+    { name: courseName, plannerFixture, diaryFixture, inboxFixture, routineFixture, aiFixture },
   );
   await page.goto("/");
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
@@ -908,33 +967,253 @@ test("empty Academic data still renders the complete axis and truthful empty/una
   await expect(details).toContainText("没有逾期或今天截止的未完成待办。");
 });
 
-test("每日总结可先编辑本地草稿、显式保存并重新加载已保存版本", async ({ page }) => {
-  await seedDashboardRuntime(page);
-  const panel = page.getByTestId("daily-summary-panel");
-  await expect(panel).toBeVisible();
-  await panel.locator("summary").click();
-  const overview = panel.getByTestId("daily-summary-overview");
-  await expect(overview).toBeVisible();
-  await expect(panel.getByTestId("daily-summary-save")).toBeEnabled();
+test("今日总结自动生成 AI 预览；编辑多行内容后只在明确保存时写入", async ({ page }) => {
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, {}, {}, [], {
+    configured: true,
+    hold: true,
+  });
+  const dialog = page.getByTestId("daily-summary-dialog");
+  await page.getByTestId("daily-summary-open").click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("status")).toContainText("正在整理今天");
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryAiCalls()),
+    )
+    .toBe(1);
+  expect(
+    await page.evaluate(() =>
+      (window as any).__workspaceDashboardTest.getDailySummary("2026-09-23"),
+    ),
+  ).toBeNull();
+
+  await page.evaluate(() => (window as any).__workspaceDashboardTest.releaseDailySummaryAi());
+  await expect(
+    dialog.getByText("AI 已根据今天的安排生成总结。尚未保存。", { exact: true }),
+  ).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "今日概览" })).toBeVisible();
+  await expect(dialog.getByText("今天安排清晰，完成事项后还可以继续推进一项任务。")).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "今日完成" })).toBeVisible();
+  await expect(dialog.getByText("完成课程复习")).toBeVisible();
+  await expect(dialog.locator("textarea")).toHaveCount(0);
+  expect(
+    await page.evaluate(() =>
+      (window as any).__workspaceDashboardTest.getDailySummary("2026-09-23"),
+    ),
+  ).toBeNull();
+
+  await dialog.getByRole("button", { name: "编辑" }).click();
+  const overview = dialog.getByTestId("daily-summary-overview");
+  const highlights = dialog.getByTestId("daily-summary-highlights");
+  await expect(overview).toBeEnabled();
+  await expect(overview).not.toHaveAttribute("readonly");
+  await overview.focus();
+  await overview.press("Tab");
+  await expect(highlights).toBeFocused();
   await overview.fill("今天完成了复习，明天继续作业。");
-  await panel.getByRole("button", { name: "保存总结" }).click();
-  await expect(panel.getByRole("status")).toContainText("每日总结已保存到本机。");
-  await expect(panel.getByText(/已保存 · 第 1 版/u)).toBeVisible();
+  await highlights.fill("完成课程复习\n整理实验笔记");
+  await expect(highlights).toHaveValue("完成课程复习\n整理实验笔记");
+  await dialog.getByTestId("daily-summary-unfinished").fill("复习尚未完成的章节");
+  await dialog.getByTestId("daily-summary-tomorrow-notes").fill("明天提交实验报告");
+  await dialog.getByRole("button", { name: "返回预览" }).click();
+  await expect(dialog.getByText("整理实验笔记")).toBeVisible();
+  await dialog.getByRole("button", { name: "保存总结" }).click();
+  await expect(dialog.getByText("今日总结已保存。", { exact: true })).toBeVisible();
+  await expect(dialog.locator("textarea")).toHaveCount(0);
+  expect(
+    await page.evaluate(() =>
+      (window as any).__workspaceDashboardTest.getDailySummary("2026-09-23"),
+    ),
+  ).toMatchObject({
+    overview: "今天完成了复习，明天继续作业。",
+    highlights: ["完成课程复习", "整理实验笔记"],
+    unfinished: ["复习尚未完成的章节"],
+    tomorrowNotes: ["明天提交实验报告"],
+    revision: 1,
+  });
+
+  await dialog.getByRole("button", { name: "关闭" }).click();
+  await page.getByTestId("daily-summary-open").click();
+  await expect(dialog.getByText("今天的总结已保存。", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("整理实验笔记")).toBeVisible();
+  await expect(dialog.getByTestId("daily-summary-save")).toBeDisabled();
+  expect(
+    await page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryAiCalls()),
+  ).toBe(1);
+});
+
+test("AI 不可用时自动显示本地总结并允许编辑、保存", async ({ page }) => {
+  await seedDashboardRuntime(page);
+  const dialog = page.getByTestId("daily-summary-dialog");
+  await page.getByTestId("daily-summary-open").click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(/AI 暂时不可用，已根据本地日程生成基础总结/u)).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "今日概览" })).toBeVisible();
+  await expect(dialog.locator("textarea")).toHaveCount(0);
+  expect(
+    await page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryAiCalls()),
+  ).toBe(0);
+  await dialog.getByRole("button", { name: "编辑" }).click();
+  await dialog.getByTestId("daily-summary-overview").fill("根据本地安排整理的总结。");
+  await dialog.getByRole("button", { name: "保存总结" }).click();
+  await expect(dialog.getByText("今日总结已保存。", { exact: true })).toBeVisible();
   expect(
     await page.evaluate(
       () => (window as any).__workspaceDashboardTest.getDailySummary("2026-09-23")?.overview,
     ),
-  ).toBe("今天完成了复习，明天继续作业。");
+  ).toBe("根据本地安排整理的总结。");
+});
 
-  await page.reload();
-  await page.getByTestId("daily-summary-panel").locator("summary").click();
-  await expect(page.getByTestId("daily-summary-overview")).toHaveValue(
-    "今天完成了复习，明天继续作业。",
-  );
-  await expect(page.getByTestId("daily-summary-save")).toBeDisabled();
+test("DeepSeek 请求失败后显示本地总结并允许重新尝试", async ({ page }) => {
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, {}, {}, [], {
+    configured: true,
+    fail: true,
+  });
+  const dialog = page.getByTestId("daily-summary-dialog");
+  await page.getByTestId("daily-summary-open").click();
+  await expect(dialog.getByText(/AI 暂时不可用，已根据本地日程生成基础总结/u)).toBeVisible();
   expect(
-    await page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryReadCount()),
-  ).toBeGreaterThan(0);
+    await page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryAiCalls()),
+  ).toBe(1);
+
+  await dialog.getByRole("button", { name: "重新生成" }).click();
+  await expect(dialog.getByText(/AI 暂时不可用，已根据本地日程生成基础总结/u)).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "重新生成" })).toBeEnabled();
+  expect(
+    await page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryAiCalls()),
+  ).toBe(2);
+});
+
+test("已保存总结优先显示；AI 重新整理只替换 Draft，保存后才覆盖", async ({ page }) => {
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, {}, {}, [], { configured: true });
+  const saved = {
+    id: "summary-existing",
+    summaryDate: "2026-09-23",
+    overview: "用户已保存的总结。",
+    highlights: ["用户记录的完成事项"],
+    unfinished: [],
+    tomorrowNotes: [],
+    createdAt: "2026-09-23T01:00:00.000Z",
+    updatedAt: "2026-09-23T01:00:00.000Z",
+    revision: 1,
+  };
+  await page.evaluate(
+    (value) => (window as any).__workspaceDashboardTest.setDailySummary(value),
+    saved,
+  );
+  const dialog = page.getByTestId("daily-summary-dialog");
+  await page.getByTestId("daily-summary-open").click();
+  await expect(dialog.getByText("用户已保存的总结。", { exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(() => (window as any).__workspaceDashboardTest.getDailySummaryAiCalls()),
+  ).toBe(0);
+
+  await dialog.getByRole("button", { name: "AI 重新整理" }).click();
+  await expect(
+    dialog.getByText("AI 已根据今天的安排生成总结。尚未保存。", { exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      (window as any).__workspaceDashboardTest.getDailySummary("2026-09-23"),
+    ),
+  ).toEqual(saved);
+  await expect(dialog.getByText("今天安排清晰，完成事项后还可以继续推进一项任务。")).toBeVisible();
+  await dialog.getByRole("button", { name: "保存总结" }).click();
+  expect(
+    await page.evaluate(() =>
+      (window as any).__workspaceDashboardTest.getDailySummary("2026-09-23"),
+    ),
+  ).toMatchObject({
+    id: saved.id,
+    revision: 2,
+    overview: "今天安排清晰，完成事项后还可以继续推进一项任务。",
+  });
+});
+
+test("每日总结对话框在桌面与 720×520 视口内保持 Footer 可见且正文可滚动", async ({ page }) => {
+  await seedDashboardRuntime(page);
+  const dialog = page.getByTestId("daily-summary-dialog");
+  for (const viewport of [
+    { width: 1920, height: 1080 },
+    { width: 1600, height: 900 },
+    { width: 1366, height: 768 },
+    { width: 720, height: 520 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.getByTestId("daily-summary-open").click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "编辑" }).click();
+    const geometry = await dialog.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const body = element.querySelector<HTMLElement>("[data-testid='daily-summary-body']")!;
+      const footer = element.querySelector<HTMLElement>(".daily-summary-dialog-footer")!;
+      const footerBox = footer.getBoundingClientRect();
+      return {
+        left: box.left,
+        top: box.top,
+        right: box.right,
+        bottom: box.bottom,
+        footerTop: footerBox.top,
+        footerBottom: footerBox.bottom,
+        bodyClientHeight: body.clientHeight,
+        bodyScrollHeight: body.scrollHeight,
+      };
+    });
+    expect(geometry.left).toBeGreaterThanOrEqual(0);
+    expect(geometry.top).toBeGreaterThanOrEqual(0);
+    expect(geometry.right).toBeLessThanOrEqual(viewport.width);
+    expect(geometry.bottom).toBeLessThanOrEqual(viewport.height);
+    expect(geometry.footerTop).toBeGreaterThanOrEqual(0);
+    expect(geometry.footerBottom).toBeLessThanOrEqual(viewport.height);
+    if (viewport.height <= 520) {
+      expect(geometry.bodyScrollHeight).toBeGreaterThan(geometry.bodyClientHeight);
+    }
+    const body = dialog.getByTestId("daily-summary-body");
+    await body.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    const lastField = dialog.getByTestId("daily-summary-tomorrow-notes");
+    await lastField.scrollIntoViewIfNeeded();
+    await expect(lastField).toBeVisible();
+    const footerBefore = await dialog.locator(".daily-summary-dialog-footer").boundingBox();
+    await body.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    const footerAfter = await dialog.locator(".daily-summary-dialog-footer").boundingBox();
+    expect(footerAfter?.y).toBe(footerBefore?.y);
+    await dialog.getByRole("button", { name: "关闭" }).click();
+    await expect(dialog).not.toBeVisible();
+  }
+});
+
+test("Esc 可关闭未编辑总结；放弃未保存编辑前会确认", async ({ page }) => {
+  await seedDashboardRuntime(page);
+  const dialog = page.getByTestId("daily-summary-dialog");
+  await page.getByTestId("daily-summary-open").click();
+  await expect(dialog).toBeVisible();
+  await dialog.press("Escape");
+  await expect(dialog).not.toBeVisible();
+
+  await page.getByTestId("daily-summary-open").click();
+  await dialog.getByRole("button", { name: "编辑" }).click();
+  await dialog.getByTestId("daily-summary-overview").fill("尚未保存的编辑。");
+  page.once("dialog", (confirm) => void confirm.dismiss());
+  await dialog.press("Escape");
+  await expect(dialog).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      (window as any).__workspaceDashboardTest.getDailySummary("2026-09-23"),
+    ),
+  ).toBeNull();
+
+  page.once("dialog", (confirm) => void confirm.accept());
+  await dialog.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      (window as any).__workspaceDashboardTest.getDailySummary("2026-09-23"),
+    ),
+  ).toBeNull();
 });
 
 test("Daily Brief 关闭近期总结时不读取历史；开启后才查询", async ({ page }) => {
