@@ -17,9 +17,9 @@ use std::{
 
 use db::CourseDatabase;
 use models::{
-    AcademicTask, Course, CourseOverride, DailySummary, DiaryEntry, Exam, InboxConfirmation,
-    InboxItem, PeriodTime, PersonalTask, PlannerEvent, ReminderSettings, Routine, Semester,
-    TermConfig, TimeBlock, WidgetSettings, WidgetSettingsPatch,
+    AcademicTask, Course, CourseOverride, DiaryEntry, Exam, InboxConfirmation, InboxItem,
+    PeriodTime, PersonalTask, PlannerEvent, ReminderSettings, Routine, Semester, TermConfig,
+    TimeBlock, WidgetSettings, WidgetSettingsPatch,
 };
 use serde::Serialize;
 use tauri::{
@@ -497,43 +497,6 @@ async fn save_diary_entry(
     state
         .run_in_background("保存日记", move |database| {
             database.save_diary_entry(&entry)
-        })
-        .await
-}
-
-#[tauri::command]
-async fn load_daily_summary(
-    state: State<'_, CourseState>,
-    date: String,
-) -> Result<Option<DailySummary>, String> {
-    state
-        .run_in_background("读取每日总结", move |database| {
-            database.load_daily_summary(&date)
-        })
-        .await
-}
-
-#[tauri::command]
-async fn load_daily_summaries_in_range(
-    state: State<'_, CourseState>,
-    start_date: String,
-    end_date: String,
-) -> Result<Vec<DailySummary>, String> {
-    state
-        .run_in_background("读取近期每日总结", move |database| {
-            database.load_daily_summaries_in_range(&start_date, &end_date)
-        })
-        .await
-}
-
-#[tauri::command]
-async fn save_daily_summary(
-    state: State<'_, CourseState>,
-    summary: DailySummary,
-) -> Result<DailySummary, String> {
-    state
-        .run_in_background("保存每日总结", move |database| {
-            database.save_daily_summary(&summary)
         })
         .await
 }
@@ -1287,9 +1250,6 @@ pub fn run() {
             load_diary_entry,
             load_diary_entries_for_search,
             save_diary_entry,
-            load_daily_summary,
-            load_daily_summaries_in_range,
-            save_daily_summary,
             load_diary_content_dates,
             has_diary_entry,
             create_inbox_item,

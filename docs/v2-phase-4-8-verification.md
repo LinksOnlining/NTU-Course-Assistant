@@ -1,5 +1,12 @@
 # Links Workplace v2.0 — Phase 4.8 验证记录
 
+## 最终阶段处置（2026-09-28）
+
+- Ethan 确认：除主动移除的 Daily Summary 外，Phase 4.8 其余人工验收均 PASS。
+- Phase 4.8 Core：**COMPLETE**；Phase 4.8.1 Daily Summary：**DE-SCOPED / REMOVED**；Phase 4.8.2 Weather：**Implementation COMPLETE、Automated PASS、AMap Live PASS、Map Picker Live PASS、Windows Manual PASS、Overall COMPLETE**；Phase 4.8 Overall：**COMPLETE**。
+- SQLite schema **8** 保留；本次 migration **0**。`daily_summaries` 是 dormant / unused legacy table；应用运行时不读写、不暴露 UI、workflow、设置或 AI context。不执行 downgrade、DROP 或数据清理。
+- Phase 4.9 AI Final Acceptance 已开始；本文件较早内容是当时的阶段记录，其中待验收状态不覆盖本节最终处置。Phase 5 仍 **NOT STARTED**。
+
 ## 阶段状态
 
 - 起始基线：`47bff6671c4fd97559657894af2aa2013ef89065`（`fix: refine inbox ai workflow and workspace ui`）
@@ -68,4 +75,4 @@ DailySummary 的独立迁移影响审查已记录在 [`v2-phase-4-8-daily-summar
 
 ## 人工验收边界
 
-Ethan 已确认 Phase 4.8 Core 的 DeepSeek Live 与 Windows Manual 验收 PASS；本记录不把该确认扩写为未单独报告的子项结果。Recent Daily Summary 尚未实现，不属于 Phase 4.8 Core 的 PASS 范围。`npm run tauri build` 的本地构建产物未启动、未安装；这不影响用户已确认的 Core 验收结论。Phase 4.9 未开始，不推送、不打 tag、不发布。
+当时 Ethan 已确认 Phase 4.8 Core 的 DeepSeek Live 与 Windows Manual 验收 PASS；本段为历史记录。最终 Phase 4.8 子阶段 disposition 以本文开头的最终处置为准。该历史 `npm run tauri build` 产物未启动、未安装；没有因此推断安装态验收。Phase 4.9 的当前状态见 [`v2-phase-4-9-final-ai-acceptance.md`](v2-phase-4-9-final-ai-acceptance.md)。

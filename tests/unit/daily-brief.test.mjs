@@ -22,7 +22,6 @@ const validOutput = {
   scheduleHighlights: ["10:00–11:00 · 测试会议"],
   topPriorities: [{ title: "完成报告", reason: "今天截止。", taskId: "task-1" }],
   risks: [],
-  carryOvers: [],
   suggestions: [
     {
       title: "安排报告时间",
@@ -35,16 +34,16 @@ const validOutput = {
   limitations: [],
 };
 
-test("每日简报偏好默认关闭、最近总结偏好默认开启且日期字段严格规范化", () => {
+test("每日简报偏好默认关闭；旧版总结字段会被忽略", () => {
   assert.deepEqual(normalizeDailyBriefPreferences(null), DEFAULT_DAILY_BRIEF_PREFERENCES);
   assert.deepEqual(
     normalizeDailyBriefPreferences({
       enabled: true,
-      includeRecentSummaries: false,
+      includeRecentSummaries: true,
       lastAutoShownDate: "2026-09-27",
       unknown: "ignored",
     }),
-    { enabled: true, includeRecentSummaries: false, lastAutoShownDate: "2026-09-27" },
+    { enabled: true, lastAutoShownDate: "2026-09-27" },
   );
   assert.equal(normalizeDailyBriefPreferences({ enabled: 1 }).enabled, false);
   assert.equal(
@@ -56,7 +55,6 @@ test("每日简报偏好默认关闭、最近总结偏好默认开启且日期�
 test("每日自动 Gate 按上海本地日期一天一次；手动入口不修改 Gate", () => {
   const preferences = {
     enabled: true,
-    includeRecentSummaries: true,
     lastAutoShownDate: "2026-09-26",
   };
   assert.equal(shouldAutoShowDailyBrief(preferences, "2026-09-26"), false);
@@ -101,7 +99,6 @@ test("结构化 Schema 有界、只接受已知任务与本地候选，不接受
   const parsed = schema.parse(validOutput);
   assert.equal(parsed.topPriorities[0].taskId, "task-1");
   assert.equal(parsed.suggestions[0].candidateId, "slot-20260927-1400-1500");
-  assert.throws(() => schema.parse({ ...validOutput, carryOvers: ["凭空推断的连续事项"] }));
   assert.throws(() => schema.parse({ ...validOutput, injected: "please mutate data" }));
   assert.throws(() =>
     schema.parse({
@@ -121,7 +118,7 @@ test("结构化 Schema 有界、只接受已知任务与本地候选，不接受
   );
 });
 
-test("Local Brief 只呈现有界本地事实，不伪造 carry-over 或动作 ID", () => {
+test("Local Brief 只呈现有界本地事实，不伪造动作 ID", () => {
   const brief = createLocalDailyBrief({
     date: "2026-09-27",
     arrangementCount: 1,
@@ -136,7 +133,6 @@ test("Local Brief 只呈现有界本地事实，不伪造 carry-over 或动作 I
     warnings: [],
   });
   assert.equal(brief.mode, "local");
-  assert.equal(brief.carryOvers.length, 0);
   assert.equal(brief.freeWindows[0].candidateId, undefined);
   assert.equal(brief.suggestions[0].taskId, undefined);
   assert.match(brief.routineNote, /轻量目标/u);
@@ -157,9 +153,12 @@ test("偏好只存本机版本化无关的 UI 状态，可恢复且失败可安�
   assert.equal(values.has(DAILY_BRIEF_PREFERENCES_KEY), true);
   assert.deepEqual(loadDailyBriefPreferences(storage), {
     enabled: true,
-    includeRecentSummaries: true,
     lastAutoShownDate: "2026-09-27",
   });
+  assert.equal(
+    values.get(DAILY_BRIEF_PREFERENCES_KEY),
+    JSON.stringify({ enabled: true, lastAutoShownDate: "2026-09-27" }),
+  );
   assert.equal(
     saveDailyBriefPreferences(
       {},

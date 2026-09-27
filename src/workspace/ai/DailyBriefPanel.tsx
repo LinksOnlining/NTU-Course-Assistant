@@ -11,10 +11,6 @@ import {
 import type { AiPlannerProposal } from "../../application/ai/proposal.ts";
 import type { AiProposalApplyResult } from "../../application/ai/proposal-runtime.ts";
 import type { AiWorkflowOrchestrator } from "../../application/ai/workflow-orchestrator.ts";
-import {
-  deriveDailySummaryCarryOvers,
-  getRecentDailySummaries,
-} from "../../application/workspace/daily-summary.ts";
 import type {
   WorkspaceDashboardSources,
   WorkspaceDashboardViewModel,
@@ -171,7 +167,6 @@ function sourceLabels(sources: DailyBriefResult["sources"]): string {
     planner: "任务与日程",
     routine: "日常目标",
     weather: "天气",
-    dailySummary: "每日总结",
   };
   return sources.map((source) => labels[source]).join("、");
 }
@@ -215,45 +210,14 @@ export function DailyBriefPanel({
     setEnrichment("loading");
     setEnrichmentMessage("");
     try {
-      let recentDailySummaries = [] as Awaited<ReturnType<typeof getRecentDailySummaries>>;
-      let historyUnavailable = false;
-      if (preferences.enabled && preferences.includeRecentSummaries) {
-        try {
-          recentDailySummaries = await getRecentDailySummaries(dailyDate);
-        } catch {
-          historyUnavailable = true;
-        }
-      }
-      const openTaskTitles = [
-        ...(sources.personalTasks ?? [])
-          .filter((task) => task.status === "open")
-          .map((task) => task.title),
-        ...sources.tasks.filter((task) => task.status === "TODO").map((task) => task.title),
-      ];
       const local = buildLocalBrief(model, sources);
-      const carryOvers = deriveDailySummaryCarryOvers(
-        dailyDate,
-        recentDailySummaries,
-        openTaskTitles,
-      );
-      setBrief({ ...local, carryOvers });
-      const result = await service.run({
-        workflowId: "dailyBrief.generate",
-        recentDailySummaries,
-      });
+      setBrief(local);
+      const result = await service.run({ workflowId: "dailyBrief.generate" });
       if (requestGeneration.current !== generation) return;
       if (result.status === "ready" && result.result.dailyBrief) {
         const dailyBrief = result.result.dailyBrief;
         setBrief({
           ...dailyBrief,
-          ...(historyUnavailable
-            ? {
-                limitations: [
-                  ...dailyBrief.limitations,
-                  "近期每日总结暂不可用，本次未纳入历史总结。",
-                ],
-              }
-            : {}),
           ...(dailyBrief.sources.includes("routine") && local.routineNote
             ? { routineNote: local.routineNote }
             : {}),
@@ -265,15 +229,13 @@ export function DailyBriefPanel({
         return;
       }
       setEnrichment("unavailable");
-      setEnrichmentMessage(
-        `${fallbackMessage(result)}${historyUnavailable ? "近期每日总结暂不可用。" : ""}`,
-      );
+      setEnrichmentMessage(fallbackMessage(result));
     } catch {
       if (requestGeneration.current !== generation) return;
       setEnrichment("unavailable");
       setEnrichmentMessage("AI 分析暂不可用，以下是根据本机数据整理的今日简报。");
     }
-  }, [dailyDate, model, preferences.enabled, preferences.includeRecentSummaries, service, sources]);
+  }, [model, service, sources]);
 
   useEffect(() => {
     if (
@@ -469,9 +431,6 @@ export function DailyBriefPanel({
                 <TextSection title="今天的日程" items={brief.scheduleHighlights} />
               )}
               {brief.risks.length > 0 && <TextSection title="需要留意" items={brief.risks} />}
-              {brief.carryOvers.length > 0 && (
-                <TextSection title="连续事项" items={brief.carryOvers} />
-              )}
               {brief.freeWindows.length > 0 && (
                 <TextSection
                   title="本地核验的空闲时段"

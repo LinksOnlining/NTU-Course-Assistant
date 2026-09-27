@@ -1,7 +1,7 @@
 import type { AiJsonObject } from "./tool.ts";
 import { sanitizeAiText } from "./context-projector.ts";
 
-export type DailyBriefSource = "academic" | "planner" | "routine" | "weather" | "dailySummary";
+export type DailyBriefSource = "academic" | "planner" | "routine" | "weather";
 
 export interface DailyBriefSuggestion {
   readonly title: string;
@@ -24,7 +24,6 @@ export interface DailyBriefResult {
   readonly scheduleHighlights: readonly string[];
   readonly topPriorities: readonly DailyBriefSuggestion[];
   readonly risks: readonly string[];
-  readonly carryOvers: readonly string[];
   readonly freeWindows: readonly DailyBriefCandidate[];
   readonly suggestions: readonly DailyBriefSuggestion[];
   readonly canWait: readonly string[];
@@ -99,7 +98,6 @@ export function createDailyBriefSchema(input: {
         "scheduleHighlights",
         "topPriorities",
         "risks",
-        "carryOvers",
         "suggestions",
         "canWait",
         "limitations",
@@ -109,7 +107,6 @@ export function createDailyBriefSchema(input: {
         scheduleHighlights: stringListSchema(6, 180),
         topPriorities: suggestionListSchema(4, taskIds, candidateIds),
         risks: stringListSchema(4, 180),
-        carryOvers: { type: "array", maxItems: 0, items: { type: "string" } },
         suggestions: suggestionListSchema(4, taskIds, candidateIds),
         canWait: stringListSchema(4, 180),
         weatherNote: { type: "string", maxLength: 160 },
@@ -126,7 +123,6 @@ export function createDailyBriefSchema(input: {
         "scheduleHighlights",
         "topPriorities",
         "risks",
-        "carryOvers",
         "suggestions",
         "canWait",
         "weatherNote",
@@ -135,13 +131,11 @@ export function createDailyBriefSchema(input: {
       if (Object.keys(candidate).some((key) => !keys.includes(key))) {
         throw new Error("Daily Brief result has unexpected fields");
       }
-      const carryOvers = parseTextList(candidate.carryOvers, 0);
       return Object.freeze({
         overview: parseText(candidate.overview, 320),
         scheduleHighlights: parseTextList(candidate.scheduleHighlights, 6),
         topPriorities: parseSuggestions(candidate.topPriorities, 4, taskIds, candidateIds),
         risks: parseTextList(candidate.risks, 4),
-        carryOvers,
         suggestions: parseSuggestions(candidate.suggestions, 4, taskIds, candidateIds),
         canWait: parseTextList(candidate.canWait, 4),
         ...(candidate.weatherNote === undefined
@@ -192,14 +186,12 @@ export function createLocalDailyBrief(input: {
         .map((title) => Object.freeze({ title, reason: "来自当前未完成的今天或近期截止事项。" })),
     ),
     risks: Object.freeze(input.warnings.slice(0, 4)),
-    carryOvers: Object.freeze([]),
     freeWindows: Object.freeze(freeWindows),
     suggestions: Object.freeze(suggestions),
     canWait: Object.freeze([]),
     ...(input.weatherNote ? { weatherNote: input.weatherNote } : {}),
     limitations: Object.freeze([
       "以上内容由本机已加载的课程、日程和待办整理；AI 分析尚未完成或当前不可用。",
-      "连续事项只依据相邻日每日总结与当前仍未完成事项的匹配结果；不会从日记、Inbox 或 AI 历史推断。",
     ]),
     sources: Object.freeze(
       [

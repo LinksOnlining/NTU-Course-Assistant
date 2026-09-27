@@ -1,6 +1,8 @@
-# Phase 4.8.1 — Daily Summary Migration + Implementation Verification
+# Phase 4.8.1 — Daily Summary Historical Implementation Record
 
-状态：**Migration Impact Review COMPLETE；Implementation COMPLETE；Automated PASS；Schema 7→8 Migration Automated PASS；DeepSeek Live PENDING；Windows Manual PENDING；Overall PENDING。** Ethan 已批准唯一的 schema 7→8 DailySummary migration。当前数据库 schema 为 8；Phase 4.9 未开始。本文前半保留原 Migration Impact Review，以下 implementation record 记录其已批准范围的实现与自动验证。
+> **当前最终处置（2026-09-28）：DE-SCOPED / REMOVED FROM v2 PRODUCT SCOPE。** 本文件下方保存的是曾获批准并实现的历史记录，不代表功能仍存在于当前产品。Schema 8 保留，`daily_summaries` 表为 dormant / unused legacy schema；当前运行时没有 Daily Summary 读写、UI、workflow、设置或 AI context。本次未删除表、未降级 schema、未新增 migration。当前 Phase 4.9 验收状态见 [`v2-phase-4-9-final-ai-acceptance.md`](v2-phase-4-9-final-ai-acceptance.md)。
+
+历史实现状态（2026-09-27）：Migration Impact Review / Implementation / Automated / Schema 7→8 migration 曾记录为 PASS；该产品能力后由 Ethan 决策移除，现不得标记为当前 COMPLETE。当前阶段状态见本文开头。
 
 说明：以下 Migration Impact Review 与其中的“尚不存在 / 未实施”描述是批准前的历史审查快照；当前事实以文末 `Implementation Verification` 和 `当前 gate` 为准。
 

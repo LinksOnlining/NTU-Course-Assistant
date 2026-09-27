@@ -10,10 +10,9 @@ use crate::models::{
     default_widget_settings, merge_widget_settings, parse_date, parse_time, validate_period_times,
     validate_planner_date_range, validate_reminder_settings, validate_term_config,
     validate_widget_settings, AcademicTask, AcademicTaskStatus, Course, CourseOverride,
-    CourseOverrideKind, DailySummary, DiaryEntry, Exam, ExamStatus, InboxConfirmation, InboxItem,
-    PeriodTime, PersonalTask, PersonalTaskPriority, PersonalTaskStatus, PlannerEvent,
-    ReminderSettings, Routine, Semester, SemesterStatus, TermConfig, TimeBlock, WidgetSettings,
-    WidgetSettingsPatch,
+    CourseOverrideKind, DiaryEntry, Exam, ExamStatus, InboxConfirmation, InboxItem, PeriodTime,
+    PersonalTask, PersonalTaskPriority, PersonalTaskStatus, PlannerEvent, ReminderSettings,
+    Routine, Semester, SemesterStatus, TermConfig, TimeBlock, WidgetSettings, WidgetSettingsPatch,
 };
 
 const SCHEMA_SIX_VERSION: i64 = 6;
@@ -1354,80 +1353,6 @@ impl CourseDatabase {
             .ok_or(StorageError::NotFound)
     }
 
-    pub fn load_daily_summary(&self, date: &str) -> Result<Option<DailySummary>, StorageError> {
-        parse_date(date).map_err(StorageError::InvalidData)?;
-        self.connection
-            .query_row(
-                "SELECT id, summary_date, overview, highlights_json, unfinished_json,
-                        tomorrow_notes_json, created_at, updated_at, revision
-                 FROM daily_summaries WHERE summary_date = ?1",
-                [date],
-                row_to_daily_summary,
-            )
-            .optional()
-            .map_err(StorageError::from)
-    }
-
-    pub fn load_daily_summaries_in_range(
-        &self,
-        start_date: &str,
-        end_date: &str,
-    ) -> Result<Vec<DailySummary>, StorageError> {
-        parse_date(start_date).map_err(StorageError::InvalidData)?;
-        parse_date(end_date).map_err(StorageError::InvalidData)?;
-        if start_date > end_date {
-            return Err(StorageError::InvalidData("每日总结日期范围无效".into()));
-        }
-        let mut statement = self.connection.prepare(
-            "SELECT id, summary_date, overview, highlights_json, unfinished_json,
-                    tomorrow_notes_json, created_at, updated_at, revision
-             FROM daily_summaries
-             WHERE summary_date >= ?1 AND summary_date <= ?2
-             ORDER BY summary_date DESC LIMIT 3",
-        )?;
-        let mut rows = statement.query(params![start_date, end_date])?;
-        let mut summaries = Vec::new();
-        while let Some(row) = rows.next()? {
-            summaries.push(row_to_daily_summary(row)?);
-        }
-        Ok(summaries)
-    }
-
-    pub fn save_daily_summary(&self, summary: &DailySummary) -> Result<DailySummary, StorageError> {
-        validate_daily_summary(summary)?;
-        let highlights = serde_json::to_string(&summary.highlights)?;
-        let unfinished = serde_json::to_string(&summary.unfinished)?;
-        let tomorrow_notes = serde_json::to_string(&summary.tomorrow_notes)?;
-        let transaction = self.connection.unchecked_transaction()?;
-        transaction.execute(
-            "INSERT INTO daily_summaries
-               (id, summary_date, overview, highlights_json, unfinished_json,
-                tomorrow_notes_json, created_at, updated_at, revision)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-             ON CONFLICT(summary_date) DO UPDATE SET
-               overview = excluded.overview,
-               highlights_json = excluded.highlights_json,
-               unfinished_json = excluded.unfinished_json,
-               tomorrow_notes_json = excluded.tomorrow_notes_json,
-               updated_at = excluded.updated_at,
-               revision = daily_summaries.revision + 1",
-            params![
-                &summary.id,
-                &summary.summary_date,
-                &summary.overview,
-                highlights,
-                unfinished,
-                tomorrow_notes,
-                &summary.created_at,
-                &summary.updated_at,
-                summary.revision,
-            ],
-        )?;
-        transaction.commit()?;
-        self.load_daily_summary(&summary.summary_date)?
-            .ok_or(StorageError::NotFound)
-    }
-
     pub fn load_diary_content_dates(&self) -> Result<Vec<String>, StorageError> {
         let mut statement = self.connection.prepare(
             "SELECT entry_date FROM diary_entries
@@ -2271,39 +2196,6 @@ fn validate_diary_entry(value: &DiaryEntry) -> Result<(), StorageError> {
     Ok(())
 }
 
-fn validate_daily_summary(value: &DailySummary) -> Result<(), StorageError> {
-    if value.id.trim().is_empty()
-        || value.id.trim() != value.id
-        || value.id.chars().count() > 128
-        || value.overview.trim().is_empty()
-        || value.overview.chars().count() > 2_000
-        || value.created_at.trim().is_empty()
-        || value.created_at.chars().count() > 40
-        || value.updated_at.trim().is_empty()
-        || value.updated_at.chars().count() > 40
-        || value.revision < 1
-    {
-        return Err(StorageError::InvalidData("每日总结信息无效".into()));
-    }
-    parse_date(&value.summary_date).map_err(StorageError::InvalidData)?;
-    for (field, items) in [
-        ("今日完成", &value.highlights),
-        ("未完成事项", &value.unfinished),
-        ("明日备注", &value.tomorrow_notes),
-    ] {
-        if items.len() > 8
-            || items
-                .iter()
-                .any(|item| item.trim().is_empty() || item.chars().count() > 180)
-        {
-            return Err(StorageError::InvalidData(format!(
-                "每日总结{field}内容无效"
-            )));
-        }
-    }
-    Ok(())
-}
-
 fn validate_inbox_raw(id: &str, raw_text: &str, created_at: &str) -> Result<(), StorageError> {
     if id.trim().is_empty()
         || id.trim() != id
@@ -2492,33 +2384,6 @@ fn row_to_diary_entry(row: &Row<'_>) -> rusqlite::Result<DiaryEntry> {
         body: row.get(2)?,
         created_at: row.get(3)?,
         updated_at: row.get(4)?,
-    })
-}
-
-fn row_to_daily_summary(row: &Row<'_>) -> rusqlite::Result<DailySummary> {
-    let highlights_json: String = row.get(3)?;
-    let unfinished_json: String = row.get(4)?;
-    let tomorrow_notes_json: String = row.get(5)?;
-    Ok(DailySummary {
-        id: row.get(0)?,
-        summary_date: row.get(1)?,
-        overview: row.get(2)?,
-        highlights: parse_daily_summary_items(highlights_json, 3)?,
-        unfinished: parse_daily_summary_items(unfinished_json, 4)?,
-        tomorrow_notes: parse_daily_summary_items(tomorrow_notes_json, 5)?,
-        created_at: row.get(6)?,
-        updated_at: row.get(7)?,
-        revision: row.get(8)?,
-    })
-}
-
-fn parse_daily_summary_items(value: String, column: usize) -> rusqlite::Result<Vec<String>> {
-    serde_json::from_str(&value).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(
-            column,
-            rusqlite::types::Type::Text,
-            Box::new(error),
-        )
     })
 }
 
@@ -4156,20 +4021,6 @@ mod tests {
         }
     }
 
-    fn daily_summary(id: &str, date: &str, overview: &str, timestamp: &str) -> DailySummary {
-        DailySummary {
-            id: id.into(),
-            summary_date: date.into(),
-            overview: overview.into(),
-            highlights: vec!["完成一项重要事项".into()],
-            unfinished: vec!["继续推进未完成事项".into()],
-            tomorrow_notes: vec!["准备明日材料".into()],
-            created_at: timestamp.into(),
-            updated_at: timestamp.into(),
-            revision: 1,
-        }
-    }
-
     fn downgrade_empty_schema_eight_to_seven(path: &Path) {
         let database = CourseDatabase::open(path).expect("create schema eight fixture");
         drop(database);
@@ -4238,10 +4089,14 @@ mod tests {
                 .body,
             "keep"
         );
-        assert!(migrated
-            .load_daily_summary("2026-09-24")
-            .expect("new summary table")
-            .is_none());
+        assert_eq!(
+            migrated
+                .connection
+                .query_row("SELECT count(*) FROM daily_summaries", [], |row| row
+                    .get::<_, i64>(0))
+                .expect("new legacy table is empty"),
+            0
+        );
         for table in [
             "personal_tasks",
             "planner_events",
@@ -4383,70 +4238,38 @@ mod tests {
     }
 
     #[test]
-    fn daily_summary_upserts_one_record_per_date_and_survives_reopen() {
+    fn schema_eight_reopen_preserves_dormant_daily_summary_rows() {
         let root = isolated_database_root();
         let path = root.join("courses.sqlite3");
-        let original = daily_summary("summary-first", "2026-09-24", "今天完成了计划。", "t1");
         {
-            let database = CourseDatabase::open(&path).expect("create summary database");
-            let saved = database
-                .save_daily_summary(&original)
-                .expect("save new summary");
-            assert!(saved == original);
-            let mut edited = daily_summary("ignored-new-id", "2026-09-24", "更新后的总结。", "t2");
-            edited.highlights = vec!["修订后的亮点".into()];
-            let saved = database
-                .save_daily_summary(&edited)
-                .expect("update same date");
-            assert_eq!(saved.id, original.id);
-            assert_eq!(saved.created_at, original.created_at);
-            assert_eq!(saved.updated_at, "t2");
-            assert_eq!(saved.revision, 2);
-            assert_eq!(saved.overview, edited.overview);
-            assert_eq!(saved.highlights, edited.highlights);
+            let database = CourseDatabase::open(&path).expect("create schema eight database");
+            database
+                .connection
+                .execute(
+                    "INSERT INTO daily_summaries
+                        (id, summary_date, overview, highlights_json, unfinished_json,
+                         tomorrow_notes_json, created_at, updated_at, revision)
+                     VALUES ('legacy-summary', '2026-09-27', '保留的旧记录', '[]', '[]', '[]', 't1', 't1', 1)",
+                    [],
+                )
+                .expect("seed dormant legacy row");
         }
-        let reopened = CourseDatabase::open(&path).expect("reopen summary database");
+
+        let reopened = CourseDatabase::open(&path).expect("reopen schema eight database");
+        assert_eq!(reopened.schema_version().expect("schema version"), 8);
         assert_eq!(
             reopened
-                .load_daily_summary("2026-09-24")
-                .expect("read summary")
-                .expect("saved summary exists")
-                .revision,
-            2
+                .connection
+                .query_row(
+                    "SELECT overview FROM daily_summaries WHERE id = 'legacy-summary'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .expect("legacy row remains untouched"),
+            "保留的旧记录"
         );
-        assert!(reopened.load_daily_summary("2026-02-30").is_err());
         drop(reopened);
-        fs::remove_dir_all(root).expect("remove summary database fixture");
-    }
-
-    #[test]
-    fn daily_summary_validates_content_and_recent_range_is_bounded_to_three() {
-        let database = database();
-        for day in ["2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27"] {
-            let summary = daily_summary(&format!("summary-{day}"), day, "日总结", "now");
-            database
-                .save_daily_summary(&summary)
-                .expect("save daily summary");
-        }
-        let recent = database
-            .load_daily_summaries_in_range("2026-09-24", "2026-09-27")
-            .expect("load bounded range");
-        assert_eq!(recent.len(), 3);
-        assert_eq!(recent[0].summary_date, "2026-09-27");
-        assert_eq!(recent[2].summary_date, "2026-09-25");
-        assert!(database
-            .load_daily_summaries_in_range("2026-09-28", "2026-09-24")
-            .is_err());
-
-        let mut invalid = daily_summary("invalid-summary", "2026-09-28", " ", "now");
-        assert!(database.save_daily_summary(&invalid).is_err());
-        invalid.overview = "有效概览".into();
-        invalid.unfinished = vec![" ".into()];
-        assert!(database.save_daily_summary(&invalid).is_err());
-        assert!(database
-            .load_daily_summary("2026-09-28")
-            .expect("invalid summary not saved")
-            .is_none());
+        fs::remove_dir_all(root).expect("remove dormant summary fixture");
     }
 
     #[test]

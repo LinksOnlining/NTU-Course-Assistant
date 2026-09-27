@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0–4.7-P COMPLETE；Phase 4.8 Core COMPLETE。Phase 4.8.1 Daily Summary：Migration Impact Review COMPLETE；Implementation COMPLETE；Automated PASS；Schema 7→8 Migration Automated PASS；DeepSeek Live PENDING；Windows Manual PENDING；Overall PENDING；当前 schema=8。Phase 4.9 NOT STARTED。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 增加一次性 Today Assistant；Phase 4.6 扩展本地可信 Planner 路由与未来日期提案；Phase 4.7 增加单条 Diary / Inbox 的 Consent-gated 工作流；Phase 4.8 增加有界、只读的每日简报核心；Phase 4.8.1 增加正式本地 Daily Summary 与严格迁移，并扩展只读 Daily Brief 连续性。无 AI Apply Tool、聊天历史或持久化 AI 状态。
+状态：**Phase 4.0–4.7-P COMPLETE；Phase 4.8 Core COMPLETE；Phase 4.8.1 Daily Summary DE-SCOPED / REMOVED；Phase 4.8.2 Weather COMPLETE（用户确认 Live 与 Windows Manual PASS）；Phase 4.8 Overall COMPLETE；schema=8，当前 migration=0。Phase 4.9 AI Final Acceptance：Implementation / Hardening COMPLETE、Automated PASS；DeepSeek Live 与 Windows Manual PENDING，Overall PENDING；Phase 5 NOT STARTED。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 增加一次性 Today Assistant；Phase 4.6 扩展本地可信 Planner 路由与未来日期提案；Phase 4.7 增加单条 Diary / Inbox 的 Consent-gated 工作流；Phase 4.8 保留有界、只读的 Daily Brief 核心。Daily Summary 不再属于产品运行时；schema 8 的 legacy table 为 dormant / unused，仅保留迁移兼容性。无 AI Apply Tool、聊天历史或持久化 AI 状态。
 
 ## 1. 产品定位
 
@@ -160,12 +160,12 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 - Inbox AI 确认可原子转换 `pending` 且无 parse kind 的原始捕获，或 `needs_review/unknown` 项目；此路径只在本地 AI Proposal 确认后调用，不修改原始文本或解析结果。现有 `ready` 项仍必须与目标类型匹配，忽略项仍拒绝转换；SQLite schema/migration 不变。已知后端状态错误只映射为白名单用户提示，未知存储异常不回显数据库路径或内部细节。
 - Phase 4.7 与 4.7-P 的实现、自动门禁和 Ethan 确认的 Windows / DeepSeek 人工验收见 [`v2-phase-4-7-verification.md`](v2-phase-4-7-verification.md)。Phase 4.7 Overall：COMPLETE；Phase 4.7-P Overall：COMPLETE；Phase 4.8 当前状态见第 16 节。
 
-## 16. Phase 4.8 Daily Brief
+## 16. Phase 4.8 Daily Brief（当前运行时）
 
 - `dailyBrief.generate` 是单独的只读结构化工作流；只请求已授权的 `academic.read`、`planner.read`、`routine.read`、`weather.read`，不包含 read/proposal tools，不提供写入或 Apply 能力。Context 经既有 Context Engine 固定投影与预算约束；不读取 Diary 正文、Inbox raw、AI 历史或未授权模块。
 - Academic 与 Planner 快照仅投影今日安排及有限近期截止事项；逾期事项按最近逾期优先并有界截断，无有效截止日期的事项不当作近期任务。Weather 仅使用位置匹配的本地缓存；Routine 仅使用当天启用项。无授权数据时不查询凭据、不调用 Provider；Provider 故障保留本机 fallback。
 - AI 结果使用结构化 JSON Schema 与本地 parser 双重校验；任务 ID / 空闲候选 ID 必须来自当前有限本地上下文。Daily Brief 工作流本身只生成建议。用户主动点击安排建议后才进入现有 `planner.route`，重新计算本地候选并经过既有 Proposal Review、重校验与用户确认。
 - 自动简报默认关闭，按 Asia/Shanghai 日期最多自动展示一次；只在重要日展示完整弹窗，空白日显示紧凑本地提示且不自动请求 AI。设置打开时不在后方弹出简报。手动入口可随时重试，不改变自动展示 gate。偏好只包含非敏感 UI 状态。
-- `DailySummary` 是独立的用户可编辑业务实体，存于 schema 8 的 `daily_summaries`；每个 ISO 本地 calendar date 唯一，稳定 ID、创建/更新时间与 revision 在日期 upsert 中保留/递增。草稿由 Application 汇总本地可信事实，可选择经 `dailySummary.generate` 只读结构化生成概览；AI 不写库，保存需用户显式确认，且不开放 tool/proposal/apply。
-- Daily Brief 只有在显式用户偏好允许近期总结时，才查询昨天至前三个日历日的精确窗口；缺失日期跳过，不向更早日期补足。历史总结作为不可信历史上下文、受 UTF-8 预算约束；不读取 Diary 正文或 Inbox raw，不覆盖当前任务/课程事实，也不提供写入能力。近期总结偏好默认开启，但关闭 Daily Brief 的最近总结读取时不查询总结。
-- Phase 4.8 Core 的自动验证、Production Build 与用户确认的 DeepSeek Live / Windows Manual 记录见 [`v2-phase-4-8-verification.md`](v2-phase-4-8-verification.md)。Phase 4.8.1 的 Migration Review、实现/自动验证及待办人工门禁见 [`v2-phase-4-8-daily-summary-verification.md`](v2-phase-4-8-daily-summary-verification.md)。Phase 4.8 Core COMPLETE；Phase 4.8.1 Overall PENDING DeepSeek Live / Windows Manual；Phase 4.9 NOT STARTED。
+- Daily Brief 只读取本次运行所需、已授权且有界的当前业务事实；不读取 DailySummary / 近期总结、Diary 正文、Inbox raw 或 AI 历史。Daily Brief 不包含历史 Carry-over、AI Memory 或持久化对话能力。
+- Daily Summary 已由产品决策从 v2 移除。`daily_summaries` 表随 schema 8 保留为 dormant / unused legacy schema；应用运行时不查询、不写入该表，不暴露 UI、workflow、设置或 context。既有 schema 迁移完整性校验继续保留；本轮不删表、不降级、不新增 migration。
+- Phase 4.8 与 Phase 4.8.2 用户验收状态见 [`v2-phase-4-8-verification.md`](v2-phase-4-8-verification.md) 和 [`v2-phase-4-8-2-weather-location-verification.md`](v2-phase-4-8-2-weather-location-verification.md)。Daily Summary 移除的历史实现记录见 [`v2-phase-4-8-daily-summary-verification.md`](v2-phase-4-8-daily-summary-verification.md)。Phase 4.9 自动、Live 与 Windows Manual 状态见 [`v2-phase-4-9-final-ai-acceptance.md`](v2-phase-4-9-final-ai-acceptance.md)。

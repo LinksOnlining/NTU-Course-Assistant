@@ -8,7 +8,6 @@ const source = (file) => readFileSync(new URL(`../../${file}`, import.meta.url),
 test("Daily Brief and Today Assistant workflows keep stable one-shot IDs and explicit capabilities", () => {
   assert.deepEqual(Object.keys(TODAY_AI_WORKFLOWS).sort(), [
     "dailyBrief.generate",
-    "dailySummary.generate",
     "today.analyze",
     "today.plan",
   ]);
@@ -19,14 +18,6 @@ test("Daily Brief and Today Assistant workflows keep stable one-shot IDs and exp
   assert.deepEqual(TODAY_AI_WORKFLOWS["dailyBrief.generate"].allowedProposalToolIds, []);
   assert.deepEqual(TODAY_AI_WORKFLOWS["dailyBrief.generate"].allowedReadToolIds, []);
   assert.equal(TODAY_AI_WORKFLOWS["dailyBrief.generate"].responseMode, "daily-brief");
-  assert.equal(TODAY_AI_WORKFLOWS["dailySummary.generate"].responseMode, "daily-summary");
-  assert.deepEqual(TODAY_AI_WORKFLOWS["dailySummary.generate"].allowedProposalToolIds, []);
-  assert.deepEqual(TODAY_AI_WORKFLOWS["dailySummary.generate"].allowedReadToolIds, []);
-  assert.deepEqual(TODAY_AI_WORKFLOWS["dailySummary.generate"].requestedScopes, [
-    "academic.read",
-    "planner.read",
-    "routine.read",
-  ]);
   assert.ok(TODAY_AI_WORKFLOWS["today.analyze"].allowedReadToolIds.includes("workspace.overview"));
 });
 
@@ -47,14 +38,30 @@ test("AI workflow orchestration uses Context Engine and AIToolRegistry without p
   assert.doesNotMatch(sources, /(?:diary\.body|inbox\.raw|loadDiary|loadInbox|rawText|\.body\b)/iu);
 });
 
-test("Daily Summary UI crosses the Application API and never imports persistence directly", () => {
-  const summaryPanel = source("src/workspace/dashboard/DailySummaryPanel.tsx");
-  const application = source("src/application/workspace/daily-summary.ts");
-  assert.match(summaryPanel, /getDailySummaryByDate/u);
-  assert.match(summaryPanel, /saveDailySummary/u);
-  assert.doesNotMatch(summaryPanel, /services\/daily-summary-storage/u);
-  assert.match(application, /interface DailySummaryRepository/u);
-  assert.match(application, /validateDailySummaryDraft/u);
+test("Daily Summary runtime is removed while schema 8 remains migration-compatible", () => {
+  const runtimeFiles = [
+    "src/workspace/dashboard/WorkspaceDashboard.tsx",
+    "src/workspace/ai/DailyBriefPanel.tsx",
+    "src/workspace/ai/AISettingsPanel.tsx",
+    "src/application/ai/today-workflows.ts",
+    "src/application/ai/workflow-orchestrator.ts",
+    "src/application/ai/context-projector.ts",
+    "src/workspace/ai/today-context-sources.ts",
+    "src-tauri/src/lib.rs",
+  ];
+  for (const file of runtimeFiles) {
+    assert.doesNotMatch(
+      source(file),
+      /dailySummary|DailySummary|daily_summaries|今日总结|每日总结/u,
+      file,
+    );
+  }
+  const database = source("src-tauri/src/db.rs");
+  assert.match(database, /CREATE TABLE daily_summaries/u);
+  assert.doesNotMatch(
+    database,
+    /pub fn (?:load|save)_daily_summary|load_daily_summaries_in_range/u,
+  );
 });
 
 test("AI only starts from explicit user action and Planner writes remain behind proposal review", () => {

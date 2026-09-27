@@ -21,7 +21,6 @@ const result: AiWorkflowResult = {
     scheduleHighlights: ["10:00–11:00 · 数学基础"],
     topPriorities: [{ title: "完成实验报告", reason: "明天截止，今天还有完整空档。", taskId: "task-1" }],
     risks: ["近期截止事项较集中。"],
-    carryOvers: [],
     freeWindows: [],
     suggestions: [{ title: "先写实验报告提纲", reason: "该事项明天截止。" }],
     canWait: ["额外刷题今天可以先不安排。"],
@@ -101,7 +100,7 @@ const seedKey = `daily-brief-enabled-seeded:${parameters.get("empty") === "1" ? 
 if (parameters.get("enabled") === "1" && !sessionStorage.getItem(seedKey)) {
   localStorage.setItem(
     "links-workplace.ai.daily-brief",
-    JSON.stringify({ enabled: true, includeRecentSummaries: true, lastAutoShownDate: null }),
+    JSON.stringify({ enabled: true, lastAutoShownDate: null }),
   );
   sessionStorage.setItem(seedKey, "1");
 }

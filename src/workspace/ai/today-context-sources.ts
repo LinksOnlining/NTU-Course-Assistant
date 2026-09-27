@@ -33,7 +33,7 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
     ).context;
     return { context };
   },
-  async academic({ timeRange, intent, timeContext }) {
+  async academic({ timeRange, intent }) {
     const termConfig = await loadAcademicTermConfig();
     const [schedule, hub] = await Promise.all([
       loadAcademicScheduleData(),
@@ -63,7 +63,7 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
         )
       : [];
     const occurrences =
-      intent === "dailyBrief" || intent === "dailySummary"
+      intent === "dailyBrief"
         ? rangeOccurrences.filter((item) => item.date === timeRange.startDate)
         : rangeOccurrences;
     const scheduledExams = hub.exams
@@ -73,21 +73,9 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
         return date >= timeRange.startDate && date <= timeRange.endDate;
       });
     const openDeadlines = hub.tasks
-      .filter(
-        (item) =>
-          item.status !== "COMPLETED" ||
-          (intent === "dailySummary" &&
-            localTimestampDate(item.completedAt, timeContext.timeZone) === timeRange.startDate),
-      )
+      .filter((item) => item.status !== "COMPLETED")
       .filter((item) => {
         const date = item.dueAt.slice(0, 10);
-        if (
-          intent === "dailySummary" &&
-          item.status === "COMPLETED" &&
-          localTimestampDate(item.completedAt, timeContext.timeZone) === timeRange.startDate
-        ) {
-          return true;
-        }
         return (
           /^\d{4}-\d{2}-\d{2}$/u.test(date) &&
           (intent === "dailyBrief"
@@ -155,24 +143,19 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
       ),
     };
   },
-  async planner({ timeRange, intent, timeContext }) {
+  async planner({ timeRange, intent }) {
     const [tasks, events, timeBlocks] = await Promise.all([
       loadPersonalTasks(),
       loadPlannerEvents(timeRange.startDate, timeRange.endDate),
       loadTimeBlocks(timeRange.startDate, timeRange.endDate),
     ]);
     const dailyTimeBlocks =
-      intent === "dailyBrief" || intent === "dailySummary"
+      intent === "dailyBrief"
         ? timeBlocks.filter((item) => item.date === timeRange.startDate)
         : timeBlocks;
     const scheduledTaskIds = new Set(dailyTimeBlocks.map((item) => item.personalTaskId));
     const openTasks = tasks
-      .filter(
-        (item) =>
-          item.status !== "completed" ||
-          (intent === "dailySummary" &&
-            localTimestampDate(item.completedAt, timeContext.timeZone) === timeRange.startDate),
-      )
+      .filter((item) => item.status !== "completed")
       .filter(
         (item) =>
           intent !== "dailyBrief" ||
@@ -197,10 +180,8 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
         );
       });
     const dailyEvents =
-      intent === "dailyBrief" || intent === "dailySummary"
-        ? events.filter((item) => item.date === timeRange.startDate)
-        : events;
-    const itemLimit = intent === "dailyBrief" || intent === "dailySummary" ? 12 : MAX_CONTEXT_ITEMS;
+      intent === "dailyBrief" ? events.filter((item) => item.date === timeRange.startDate) : events;
+    const itemLimit = intent === "dailyBrief" ? 12 : MAX_CONTEXT_ITEMS;
     return {
       truncated:
         openTasks.length > itemLimit ||
@@ -292,25 +273,3 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
     };
   },
 });
-
-function localTimestampDate(value: string | null | undefined, timeZone: string): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return null;
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
-    const part = (type: Intl.DateTimeFormatPartTypes) =>
-      parts.find((item) => item.type === type)?.value;
-    const year = part("year");
-    const month = part("month");
-    const day = part("day");
-    return year && month && day ? `${year}-${month}-${day}` : null;
-  } catch {
-    return null;
-  }
-}

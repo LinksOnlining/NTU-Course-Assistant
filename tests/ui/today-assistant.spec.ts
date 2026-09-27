@@ -15,7 +15,7 @@ test("工作台直接显示一次性 AI Composer；不点击第二层也能输�
   await page.goto(harnessPath);
   const panel = page.getByTestId("today-assistant-panel");
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole("heading", { name: "AI 助手 ✨" })).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "AI 助手" })).toBeVisible();
   await expect(panel.getByLabel("想让我帮你看看什么？")).toBeVisible();
   await expect(page.getByTestId("today-assistant-send")).toBeDisabled();
   expect(await requestCount(page)).toBe(0);

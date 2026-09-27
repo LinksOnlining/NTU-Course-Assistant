@@ -3,13 +3,11 @@ export const DAILY_BRIEF_PREFERENCES_EVENT = "links-workplace:daily-brief-prefer
 
 export interface DailyBriefPreferences {
   readonly enabled: boolean;
-  readonly includeRecentSummaries: boolean;
   readonly lastAutoShownDate: string | null;
 }
 
 export const DEFAULT_DAILY_BRIEF_PREFERENCES: DailyBriefPreferences = Object.freeze({
   enabled: false,
-  includeRecentSummaries: true,
   lastAutoShownDate: null,
 });
 
@@ -21,7 +19,6 @@ export function normalizeDailyBriefPreferences(value: unknown): DailyBriefPrefer
   const date = candidate.lastAutoShownDate;
   return Object.freeze({
     enabled: candidate.enabled === true,
-    includeRecentSummaries: candidate.includeRecentSummaries !== false,
     lastAutoShownDate: typeof date === "string" && isDate(date) ? date : null,
   });
 }

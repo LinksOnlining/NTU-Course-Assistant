@@ -324,25 +324,6 @@ export function AISettingsPanel() {
             <small>本地日期按 Asia/Shanghai 计算；简报显示后才记录当天已展示。</small>
           </span>
         </label>
-        <label className="ai-data-access-option" htmlFor="daily-brief-recent-summaries">
-          <input
-            id="daily-brief-recent-summaries"
-            type="checkbox"
-            checked={dailyBriefPreferences.includeRecentSummaries}
-            disabled={!dailyBriefPreferences.enabled}
-            onChange={(event) =>
-              updateDailyBriefPreferences({ includeRecentSummaries: event.currentTarget.checked })
-            }
-            data-testid="daily-brief-recent-summaries"
-          />
-          <span>
-            <strong>参考最近每日总结（最近 3 天）</strong>
-            <small>
-              仅在每日简报开启时读取此前 1–3
-              个自然日已保存的每日总结；关闭后不查询。不会读取日记、Inbox 原文或 AI 历史。
-            </small>
-          </span>
-        </label>
         {dailyBriefMessage && (
           <p className="settings-domain-note" role="status" aria-live="polite">
             {dailyBriefMessage}

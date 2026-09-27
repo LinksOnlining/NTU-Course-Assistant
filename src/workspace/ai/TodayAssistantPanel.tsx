@@ -129,7 +129,7 @@ export function TodayAssistantPanel({
       data-testid="today-assistant-panel"
     >
       <header className="today-assistant-header">
-        <h2 id="today-assistant-title">AI 助手 ✨</h2>
+        <h2 id="today-assistant-title">AI 助手</h2>
         <button
           type="button"
           className="today-assistant-settings"

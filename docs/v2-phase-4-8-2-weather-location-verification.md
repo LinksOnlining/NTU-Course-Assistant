@@ -1,16 +1,20 @@
 # Phase 4.8.2 — Weather Location Resolver 2.0 验证记录
 
+## 最终人工验收状态（2026-09-28）
+
+Ethan 确认 Phase 4.8 其余人工验收全部 PASS。Phase 4.8.2 当前最终状态：**Implementation COMPLETE；Automated PASS；AMap Live PASS；Map Picker Live PASS；Windows Manual PASS；Overall COMPLETE。** 早期章节中“人工复验 PENDING”描述的是 2026-09-28 用户确认前的状态；本确认来自用户，不代表本轮重新执行了 GUI 验收。Baidu fallback 为可选 provider，不是核心验收阻断项。Phase 4.8 总状态见 [`v2-phase-4-8-verification.md`](v2-phase-4-8-verification.md)。
+
 ## 状态
 
 - 基线：`v2/workspace-rebase`，起始 HEAD `5e4d7955b45b99a5d0cd1ef0ae09c2e52f240489`
 - 实现：COMPLETE
 - 自动验证：PASS
-- AMap live 回归 smoke：PASS（城市/区县/乡镇 + 静态地图接口）；Baidu live：PENDING
-- Windows 人工验收：PENDING
-- Phase 4.8.2 Overall：PENDING（等待更完整 provider 覆盖与 Windows 人工复验）
+- AMap live 回归 smoke：PASS（城市/区县/乡镇 + 静态地图接口）；Baidu live：PENDING（可选 provider，不阻塞已确认范围）
+- Windows 人工验收：PASS（Ethan 于 2026-09-28 确认；本轮未重复 GUI 验收）
+- Phase 4.8.2 Overall：COMPLETE（更广泛省份/农村地址覆盖仍是已知扩展范围，不改变用户确认的阶段结论）
 - SQLite schema：8；Migration：0
 - 应用元数据版本保持 `1.3.1`
-- Phase 4.9：NOT STARTED
+- Phase 4.9：已进入 AI Final Acceptance；状态见 [`v2-phase-4-9-final-ai-acceptance.md`](v2-phase-4-9-final-ai-acceptance.md)
 
 ## 变更范围与复用审计
 
@@ -79,7 +83,7 @@ Live 验收至少需要：3 个省份的乡镇、5 个农村地点、2 个农村
 - 尚未完成完整 provider live 覆盖（多省乡镇、农村地点、重名地点、真实地址及地图选点天气查询）；最新 AMap 回归 smoke 范围见本文后附记录。Baidu fallback 也尚未进行真实凭据验收。
 - 未进行 Windows 安装态或真实窗口 GUI 验收；未运行 build 出来的 EXE / installer。需 Ethan 在 Windows 开发/安装态验收搜索、地图渲染/缩放/选点、当前位置、离线降级与天气预报。
 - 无 AMap Key 时地图底图不可用，但手动坐标路径仍保留；当前不提供地图瓦片离线包。
-- QWeather 未采用；应用天气预报继续使用 Open-Meteo。Phase 4.8.1 Daily Summary 的 DeepSeek Live / Windows Manual 仍为 PENDING，本阶段没有改变其状态。
+- QWeather 未采用；应用天气预报继续使用 Open-Meteo。Daily Summary 已从产品范围移除；Phase 4.9 的 DeepSeek Live / Windows Manual 状态见独立最终验收记录。
 - 未创建 tag、未 push、未发布 Release；没有新增 schema 或 migration。
 
 ## 2026-09-28 回归修复复验（等待 Ethan Windows 人工复验）
@@ -100,5 +104,5 @@ Live 验收至少需要：3 个省份的乡镇、5 个农村地点、2 个农村
 ### 当前 gate
 
 - Implementation：回归修复 COMPLETE；Automated：PASS；AMap provider live smoke：PASS（限城市/区县/乡镇 + 静态图接口范围）。
-- Windows WebView 地图渲染、真实点击缩放选点、fallback 用户流程：Ethan 人工复验 PENDING；完整 provider 覆盖仍未验收。
-- Phase 4.8.2 Overall：**PENDING**；Phase 4.8.1 Daily Summary Overall：**PENDING**；schema=8，migration 无变化；Phase 4.9：**NOT STARTED**。
+- Windows WebView 地图渲染、真实点击缩放选点、fallback 用户流程：Ethan 已于 2026-09-28 确认人工验收 PASS；该状态来自用户确认，本轮未重复 GUI 验收。更广泛 provider 覆盖仍未验收。
+- Phase 4.8.2 Overall：**COMPLETE**；Phase 4.8.1 Daily Summary：**DE-SCOPED / REMOVED**；schema=8，migration 无变化；Phase 4.9：已开始，状态见最终验收记录。

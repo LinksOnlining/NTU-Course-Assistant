@@ -14,7 +14,6 @@ export type AiIntent =
   | "todayAnalyze"
   | "todayPlan"
   | "dailyBrief"
-  | "dailySummary"
   | "diaryReflectSelected"
   | "inboxInterpretSelected"
   | "inboxProposeTask"
