@@ -13,6 +13,7 @@ export type AiIntent =
   | "reflect"
   | "todayAnalyze"
   | "todayPlan"
+  | "dailyBrief"
   | "diaryReflectSelected"
   | "inboxInterpretSelected"
   | "inboxProposeTask"

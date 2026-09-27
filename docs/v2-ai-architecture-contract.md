@@ -1,6 +1,6 @@
 # Links Workplace v2.0 — Phase 4.0 AI Operation Layer Architecture Foundation
 
-状态：**Phase 4.0–4.7-P COMPLETE；Phase 4.7 / 4.7-P 自动门禁 PASS，Ethan 确认 DeepSeek / Windows 人工验收 PASS；Phase 4.8 在阶段关闭时 NOT STARTED。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 增加一次性 Today Assistant；Phase 4.6 扩展本地可信 Planner 路由与未来日期提案；Phase 4.7 增加单条 Diary / Inbox 的 Consent-gated 工作流。无 AI Apply Tool、聊天历史或持久化 AI 状态。
+状态：**Phase 4.0–4.7-P COMPLETE；Phase 4.8 Daily Brief Core 实现、自动质量门、Rust 检查及本地 Tauri production build PASS；DeepSeek Live / Windows Manual PENDING；Recent Daily Summary BLOCKED（待 migration approval）；Phase 4.8 Overall PENDING；Phase 4.9 NOT STARTED。** Phase 4.2 建立默认拒绝的读取权限、请求级敏感授权与最小化 Context Builder；Phase 4.3 建立有限轮次 Tool Runtime；Phase 4.4 建立 Planner Proposal Review；Phase 4.5 增加一次性 Today Assistant；Phase 4.6 扩展本地可信 Planner 路由与未来日期提案；Phase 4.7 增加单条 Diary / Inbox 的 Consent-gated 工作流；Phase 4.8 增加有界、只读的每日简报核心。无 AI Apply Tool、聊天历史或持久化 AI 状态。
 
 ## 1. 产品定位
 
@@ -158,4 +158,13 @@ Ethan 已在 Windows 11 完成真实 `GET /models`、Credential Manager 持久�
 - Phase 4.7-P 的 Inbox 识别草稿只存在当前 UI 会话内，用户可本地编辑标题、描述及对应 Task/Event 字段；原始 Inbox 内容保持只读，不把编辑结果写回 raw 或 parse payload。生成 Proposal 时仅传当前选择的类型级 Tool，Proposal payload 采用经过本地校验的编辑草稿；确认仍要求既有 Review、Revalidate 与用户明确确认。
 - Inbox 语义归一化把模型返回视作不可信候选：本地校验标题、提取可确定的日期/时间/地点/时长并拆出补充说明；原文 passthrough 会回退为本地拆分并提示人工检查，模糊时间不猜测。Proposal 仍只使用当前可编辑 Draft，不从 rawText 重建。
 - Inbox AI 确认可原子转换 `pending` 且无 parse kind 的原始捕获，或 `needs_review/unknown` 项目；此路径只在本地 AI Proposal 确认后调用，不修改原始文本或解析结果。现有 `ready` 项仍必须与目标类型匹配，忽略项仍拒绝转换；SQLite schema/migration 不变。已知后端状态错误只映射为白名单用户提示，未知存储异常不回显数据库路径或内部细节。
-- Phase 4.7 与 4.7-P 的实现、自动门禁和 Ethan 确认的 Windows / DeepSeek 人工验收见 [`v2-phase-4-7-verification.md`](v2-phase-4-7-verification.md)。Phase 4.7 Overall：COMPLETE；Phase 4.7-P Overall：COMPLETE；Phase 4.8：NOT STARTED（本契约更新时）。
+- Phase 4.7 与 4.7-P 的实现、自动门禁和 Ethan 确认的 Windows / DeepSeek 人工验收见 [`v2-phase-4-7-verification.md`](v2-phase-4-7-verification.md)。Phase 4.7 Overall：COMPLETE；Phase 4.7-P Overall：COMPLETE；Phase 4.8 当前状态见第 16 节。
+
+## 16. Phase 4.8 Daily Brief
+
+- `dailyBrief.generate` 是单独的只读结构化工作流；只请求已授权的 `academic.read`、`planner.read`、`routine.read`、`weather.read`，不包含 read/proposal tools，不提供写入或 Apply 能力。Context 经既有 Context Engine 固定投影与预算约束；不读取 Diary 正文、Inbox raw、AI 历史或未授权模块。
+- Academic 与 Planner 快照仅投影今日安排及有限近期截止事项；逾期事项按最近逾期优先并有界截断，无有效截止日期的事项不当作近期任务。Weather 仅使用位置匹配的本地缓存；Routine 仅使用当天启用项。无授权数据时不查询凭据、不调用 Provider；Provider 故障保留本机 fallback。
+- AI 结果使用结构化 JSON Schema 与本地 parser 双重校验；任务 ID / 空闲候选 ID 必须来自当前有限本地上下文。Daily Brief 工作流本身只生成建议。用户主动点击安排建议后才进入现有 `planner.route`，重新计算本地候选并经过既有 Proposal Review、重校验与用户确认。
+- 自动简报默认关闭，按 Asia/Shanghai 日期最多自动展示一次；只在重要日展示完整弹窗，空白日显示紧凑本地提示且不自动请求 AI。设置打开时不在后方弹出简报。手动入口可随时重试，不改变自动展示 gate。偏好只包含非敏感 UI 状态。
+- `DailySummary` / 等价正式实体、表、查询边界均不存在。Recent Daily Summary 不读取 Diary、AI 历史、Inbox 或 localStorage 大文本来冒充；该选项保持不可用。若未来确认需要 durable DailySummary，须先单独审查 schema 7→8 的 domain/repository/query、数据保留与隐私、迁移事务/备份/恢复/回滚及 fresh DB 路径，等待 Ethan 明确批准后才能实施。本阶段 schema 仍为 7，migration 为 0。
+- 自动验证、Production Build 与阶段状态见 [`v2-phase-4-8-verification.md`](v2-phase-4-8-verification.md)。当前 DeepSeek Live / Windows Manual 尚未执行，Phase 4.8 Overall 仍 PENDING；Phase 4.9 NOT STARTED。

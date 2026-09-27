@@ -5,12 +5,19 @@ import { TODAY_AI_WORKFLOWS } from "../../src/application/ai/today-workflows.ts"
 
 const source = (file) => readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
 
-test("Today Assistant workflows keep stable one-shot IDs and explicit capabilities", () => {
-  assert.deepEqual(Object.keys(TODAY_AI_WORKFLOWS).sort(), ["today.analyze", "today.plan"]);
+test("Daily Brief and Today Assistant workflows keep stable one-shot IDs and explicit capabilities", () => {
+  assert.deepEqual(Object.keys(TODAY_AI_WORKFLOWS).sort(), [
+    "dailyBrief.generate",
+    "today.analyze",
+    "today.plan",
+  ]);
   assert.deepEqual(TODAY_AI_WORKFLOWS["today.analyze"].allowedProposalToolIds, []);
   assert.deepEqual(TODAY_AI_WORKFLOWS["today.plan"].allowedProposalToolIds, [
     "planner.propose-time-block",
   ]);
+  assert.deepEqual(TODAY_AI_WORKFLOWS["dailyBrief.generate"].allowedProposalToolIds, []);
+  assert.deepEqual(TODAY_AI_WORKFLOWS["dailyBrief.generate"].allowedReadToolIds, []);
+  assert.equal(TODAY_AI_WORKFLOWS["dailyBrief.generate"].responseMode, "daily-brief");
   assert.ok(TODAY_AI_WORKFLOWS["today.analyze"].allowedReadToolIds.includes("workspace.overview"));
 });
 

@@ -119,6 +119,26 @@ test("AI 设置打开不联网，密钥保存后输入清空且只以 configured
   expect(saveCall?.args?.secret).toBe(sentinel);
 });
 
+test("每日简报默认关闭、最近总结偏好默认开启并保存在本机", async ({ page }) => {
+  const settings = await openAISettings(page);
+  const panel = settings.getByTestId("ai-settings");
+  const enabled = panel.getByTestId("daily-brief-enabled");
+  const summaries = panel.getByTestId("daily-brief-recent-summaries");
+  await expect(enabled).not.toBeChecked();
+  await expect(summaries).toBeChecked();
+  await expect(summaries).toBeDisabled();
+  await expect(panel.getByText(/尚无正式每日总结数据源/u)).toBeVisible();
+
+  await enabled.check();
+  await expect(summaries).toBeDisabled();
+  await expect(page.getByTestId("daily-brief-dialog")).toHaveCount(0);
+  const stored = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("links-workplace.ai.daily-brief") ?? "null"),
+  );
+  expect(stored).toMatchObject({ enabled: true, includeRecentSummaries: true });
+  expect(stored.lastAutoShownDate).toBeNull();
+});
+
 test("连接失败可重试，刷新模型只执行显式 /models 并保留已选模型", async ({ page }) => {
   const settings = await openAISettings(page, { failFirstDiscovery: true });
   const panel = settings.getByTestId("ai-settings");

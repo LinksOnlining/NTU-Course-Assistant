@@ -4,9 +4,9 @@ import type { AiPersistentReadPermissionId } from "./permission.ts";
 import type { AiIntent } from "./types.ts";
 import { sanitizeAiText } from "./context-projector.ts";
 
-export type AiWorkflowId = "today.analyze" | "today.plan";
+export type AiWorkflowId = "today.analyze" | "today.plan" | "dailyBrief.generate";
 export type AiWorkflowRequestId = AiWorkflowId | "planner.route";
-export type AiWorkflowResponseMode = "structured-analysis" | "proposal-plan";
+export type AiWorkflowResponseMode = "structured-analysis" | "proposal-plan" | "daily-brief";
 
 export interface AiWorkflowDefinition {
   readonly id: AiWorkflowId;
@@ -51,6 +51,19 @@ export const TODAY_AI_WORKFLOWS: Readonly<Record<AiWorkflowId, AiWorkflowDefinit
       allowedReadToolIds: READ_TOOLS,
       allowedProposalToolIds: Object.freeze(["planner.propose-time-block"] as const),
       responseMode: "proposal-plan",
+    }),
+    "dailyBrief.generate": Object.freeze({
+      id: "dailyBrief.generate",
+      intent: "dailyBrief",
+      requestedScopes: Object.freeze([
+        "academic.read",
+        "planner.read",
+        "routine.read",
+        "weather.read",
+      ] as const),
+      allowedReadToolIds: Object.freeze([]),
+      allowedProposalToolIds: Object.freeze([]) as readonly AiPlannerProposalToolId[],
+      responseMode: "daily-brief",
     }),
   });
 

@@ -27,7 +27,7 @@ test("工作台直接显示一次性 AI Composer；不点击第二层也能输�
   await expect(page.getByRole("heading", { name: "✨ 建议安排" })).toBeVisible();
   await expect(page.getByText("参考：工作台、任务与日程")).toBeVisible();
   await expect(
-    page.getByText("仅在你主动使用 AI 时，将本次请求所需且已授权的数据发送至 DeepSeek 处理。"),
+    page.getByText(/其他 AI 请求由你主动发起；每日 AI 简报仅在设置开启后/u),
   ).toBeVisible();
 });
 

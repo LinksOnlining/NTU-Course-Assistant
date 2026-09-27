@@ -869,6 +869,66 @@ test("empty Academic data still renders the complete axis and truthful empty/una
   await expect(details).toContainText("没有逾期或今天截止的未完成待办。");
 });
 
+test("每日简报默认不自动弹出，手动入口显示本地 fallback 且适配 720×520", async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 520 });
+  await seedDashboardRuntime(page);
+  await expect(page.getByTestId("daily-brief-open")).toBeVisible();
+  await expect(page.getByTestId("daily-brief-dialog")).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("links-workplace.ai.daily-brief")))
+    .toBeNull();
+
+  await page.getByTestId("daily-brief-open").click();
+  const dialog = page.getByTestId("daily-brief-dialog");
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("heading", { name: /今日晨报|今天还有这些事|今晚值得注意/u }),
+  ).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "今日概览" })).toBeVisible();
+  await expect(dialog.getByText(/本机.*整理/u)).toBeVisible();
+  const bounds = await dialog.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(720);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(520);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId("daily-brief-open")).toBeFocused();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("links-workplace.ai.daily-brief")))
+    .toBeNull();
+});
+
+test("每日显著简报只自动展示一次；手动再次打开不改变展示日期", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem("links-workplace.ai.daily-brief")) {
+      localStorage.setItem(
+        "links-workplace.ai.daily-brief",
+        JSON.stringify({ enabled: true, includeRecentSummaries: true, lastAutoShownDate: null }),
+      );
+    }
+  });
+  await seedDashboardRuntime(page);
+  const dialog = page.getByTestId("daily-brief-dialog");
+  await expect(dialog).toBeVisible();
+  const initial = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("links-workplace.ai.daily-brief") ?? "{}"),
+  );
+  expect(initial.lastAutoShownDate).toBe("2026-09-23");
+  await dialog.getByRole("button", { name: "关闭今日简报" }).click();
+
+  await page.reload();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
+  await expect(dialog).toHaveCount(0);
+  await page.getByTestId("daily-brief-open").click();
+  await expect(dialog).toBeVisible();
+  const afterManualOpen = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("links-workplace.ai.daily-brief") ?? "{}"),
+  );
+  expect(afterManualOpen.lastAutoShownDate).toBe("2026-09-23");
+});
+
 test("Dashboard combines course, planner event and task block while keeping personal deadlines off the timeline", async ({
   page,
 }) => {
@@ -956,7 +1016,7 @@ test("Dashboard combines course, planner event and task block while keeping pers
   await expect(timeline.getByTestId("timeline-item").nth(2)).toContainText("15:00–16:00");
 
   const overview = page.getByTestId("workspace-today-overview");
-  const summaryTrigger = overview.getByRole("button");
+  const summaryTrigger = overview.locator(".workspace-today-overview-trigger");
   const overviewBoundsBefore = await summaryTrigger.boundingBox();
   await summaryTrigger.focus();
   await summaryTrigger.press("Enter");

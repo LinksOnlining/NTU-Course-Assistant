@@ -6,8 +6,8 @@
 
 - 当前 v2 产品需求单一事实来源：[`PROJECT_BRIEF.md`](PROJECT_BRIEF.md)。
 - 当前 v2 架构及依赖方向契约：[`docs/v2-architecture-contract.md`](docs/v2-architecture-contract.md)。
-- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0–4.6 COMPLETE；Phase 4.7 Implementation COMPLETE、Automated PASS、DeepSeek Live PENDING、Overall PENDING。Phase 4.7 增加 Diary 单篇整理及 Inbox 单条识别，只有当前用户对象的本次明确同意才能发送敏感正文；Inbox 任务/活动 Proposal 需要第二次独立用户操作，并沿用既有预览、重校验和 Application UseCase。敏感正文、AI 结果与授权不持久化；无全量扫描、后台请求、Apply Tool、RAG 或 AI Memory。SQLite schema=7、migration=0。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md) 与 [`docs/v2-phase-4-7-verification.md`](docs/v2-phase-4-7-verification.md)。
-- 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。Phase 4.8 NOT STARTED。
+- Phase 3.8.2 于 2026-09-25 经 Ethan 确认 Windows 11 人工验收 PASS；Phase 3.9 数据库迁移恢复修复 PASS。Phase 4.0–4.7-P COMPLETE；Phase 4.8 Daily Brief Core 实现、自动门禁、Rust 检查与本地 Tauri build PASS；DeepSeek Live / Windows Manual PENDING，Overall PENDING。DailySummary 不存在；Recent Daily Summary BLOCKED，未增加 schema/migration，禁止用 Diary、AI 历史或 Inbox 替代。Daily Brief 使用已授权的结构化 Academic、Planner、Routine 与缓存 Weather；自身无 Proposal / Apply Tool。当前构建包元数据版本仍为 1.3.1，构建产物未运行或安装。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md)、[`docs/v2-phase-4-7-verification.md`](docs/v2-phase-4-7-verification.md) 与 [`docs/v2-phase-4-8-verification.md`](docs/v2-phase-4-8-verification.md)。
+- 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。Phase 4.9 NOT STARTED。
 
 ## 技术方案
 

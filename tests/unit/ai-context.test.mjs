@@ -331,6 +331,91 @@ test("仅查询持久授权的模块，默认时间范围受限且输出是固�
   assert.equal(serialized.includes("[本地路径已省略]"), true);
 });
 
+test("Daily Brief 仅额外包含有界逾期学业事项，并将近期逾期排在更早事项之前", async () => {
+  const academic = async () => ({
+    occurrences: [],
+    exams: [],
+    deadlines: [
+      {
+        id: "old",
+        title: "旧逾期",
+        dueAt: "2026-08-01T12:00:00+08:00",
+        priority: 1,
+        status: "TODO",
+        type: "ASSIGNMENT",
+      },
+      {
+        id: "recent",
+        title: "近期逾期",
+        dueAt: "2026-09-25T12:00:00+08:00",
+        priority: 1,
+        status: "TODO",
+        type: "ASSIGNMENT",
+      },
+      {
+        id: "today",
+        title: "今日截止",
+        dueAt: "2026-09-26T18:00:00+08:00",
+        priority: 1,
+        status: "TODO",
+        type: "ASSIGNMENT",
+      },
+      {
+        id: "later",
+        title: "近期截止",
+        dueAt: "2026-09-28T18:00:00+08:00",
+        priority: 1,
+        status: "TODO",
+        type: "ASSIGNMENT",
+      },
+      {
+        id: "outside",
+        title: "范围外",
+        dueAt: "2026-10-01T18:00:00+08:00",
+        priority: 1,
+        status: "TODO",
+        type: "ASSIGNMENT",
+      },
+      {
+        id: "no-deadline",
+        title: "无截止事项",
+        dueAt: "",
+        priority: 1,
+        status: "TODO",
+        type: "ASSIGNMENT",
+      },
+    ],
+    courseNames: {},
+  });
+  const daily = await buildAiContext(
+    request({
+      intent: "dailyBrief",
+      requestedScopes: ["academic.read"],
+      timeRange: { startDate: "2026-09-26", endDate: "2026-09-29" },
+    }),
+    { persistentGrants: ["academic.read"] },
+    { academic },
+  );
+  assert.deepEqual(
+    daily.moduleContexts.academic.deadlines.map(({ id }) => id),
+    ["recent", "old", "today", "later"],
+  );
+
+  const analysis = await buildAiContext(
+    request({
+      intent: "todayAnalyze",
+      requestedScopes: ["academic.read"],
+      timeRange: { startDate: "2026-09-26", endDate: "2026-09-29" },
+    }),
+    { persistentGrants: ["academic.read"] },
+    { academic },
+  );
+  assert.deepEqual(
+    analysis.moduleContexts.academic.deadlines.map(({ id }) => id),
+    ["today", "later"],
+  );
+});
+
 test("各标准权限只调用自身模块的快照 source", async () => {
   const sources = {
     workspace: async () => workspaceSource(),

@@ -17,6 +17,11 @@ import {
 } from "../../application/ai/permission.ts";
 import { workplaceModuleRegistry } from "../../modules/registry.ts";
 import { aiSettingsService } from "./ai-settings-service.ts";
+import {
+  loadDailyBriefPreferences,
+  saveDailyBriefPreferences,
+  type DailyBriefPreferences,
+} from "../../services/daily-brief-storage.ts";
 
 const MODEL_LABELS: Record<(typeof AI_MODEL_IDS)[number], string> = {
   "deepseek-flash": "DeepSeek Flash",
@@ -70,6 +75,10 @@ export function AISettingsPanel() {
     aiSettingsService.loadDataAccessSettings(),
   );
   const [dataAccessMessage, setDataAccessMessage] = useState("");
+  const [dailyBriefPreferences, setDailyBriefPreferences] = useState<DailyBriefPreferences>(() =>
+    loadDailyBriefPreferences(),
+  );
+  const [dailyBriefMessage, setDailyBriefMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -115,6 +124,16 @@ export function AISettingsPanel() {
     }
     setDataAccessSettings(next);
     setDataAccessMessage("数据访问权限已保存在此设备；关闭后不会发送未授权数据。");
+  }
+
+  function updateDailyBriefPreferences(patch: Partial<DailyBriefPreferences>) {
+    const next = { ...dailyBriefPreferences, ...patch };
+    if (!saveDailyBriefPreferences(next)) {
+      setDailyBriefMessage("此设备的本地存储不可用，每日简报设置未保存。");
+      return;
+    }
+    setDailyBriefPreferences(next);
+    setDailyBriefMessage("每日简报偏好已保存在此设备。");
   }
 
   async function saveKey() {
@@ -192,7 +211,10 @@ export function AISettingsPanel() {
       <section className="settings-section ai-settings-section" aria-labelledby="ai-provider-title">
         <div>
           <h3 id="ai-provider-title">AI 服务</h3>
-          <p>当前使用 DeepSeek。只有你主动发起 AI 请求时，相关请求文本才会发送给 DeepSeek API。</p>
+          <p>
+            当前使用 DeepSeek。除你主动发起的请求外，若开启每日 AI 简报，Links
+            会在每天首次启动、工作台就绪后异步请求简报；只发送本次生成所需且已授权的数据。
+          </p>
         </div>
         <dl className="ai-settings-summary">
           <div>
@@ -282,6 +304,49 @@ export function AISettingsPanel() {
         )}
       </section>
 
+      <section className="settings-section ai-settings-section" aria-labelledby="daily-brief-title">
+        <div>
+          <h3 id="daily-brief-title">每日 AI 简报</h3>
+          <p>默认关闭。开启后，每天首次进入工作台时先显示本地简报，再异步补充 AI 分析。</p>
+        </div>
+        <label className="ai-data-access-option" htmlFor="daily-brief-enabled">
+          <input
+            id="daily-brief-enabled"
+            type="checkbox"
+            checked={dailyBriefPreferences.enabled}
+            onChange={(event) =>
+              updateDailyBriefPreferences({ enabled: event.currentTarget.checked })
+            }
+            data-testid="daily-brief-enabled"
+          />
+          <span>
+            <strong>每天首次启动时显示简报</strong>
+            <small>本地日期按 Asia/Shanghai 计算；简报显示后才记录当天已展示。</small>
+          </span>
+        </label>
+        <label className="ai-data-access-option" htmlFor="daily-brief-recent-summaries">
+          <input
+            id="daily-brief-recent-summaries"
+            type="checkbox"
+            checked={dailyBriefPreferences.includeRecentSummaries}
+            disabled
+            data-testid="daily-brief-recent-summaries"
+          />
+          <span>
+            <strong>参考最近每日总结（最近 3 天）</strong>
+            <small>
+              当前版本尚无正式每日总结数据源；不会改读日记、AI 历史或 Inbox
+              来替代。此选项待迁移评审后启用。
+            </small>
+          </span>
+        </label>
+        {dailyBriefMessage && (
+          <p className="settings-domain-note" role="status" aria-live="polite">
+            {dailyBriefMessage}
+          </p>
+        )}
+      </section>
+
       <section className="settings-section ai-settings-section" aria-labelledby="ai-model-title">
         <div>
           <h3 id="ai-model-title">模型</h3>
@@ -361,7 +426,8 @@ export function AISettingsPanel() {
           </p>
         </div>
         <p className="ai-data-access-disclosure">
-          仅发送当前功能所需且已授权的数据。权限仅保存在本机，不会发送给 DeepSeek。
+          每次只发送当前功能所需且已授权的数据。权限和每日简报偏好仅保存在本机，不会发送给
+          DeepSeek。
         </p>
         <div className="ai-data-access-list">
           {workplaceModuleRegistry.aiContextProviders

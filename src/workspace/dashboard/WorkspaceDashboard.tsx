@@ -18,6 +18,7 @@ import type { AiProposalApplyResult } from "../../application/ai/proposal-runtim
 import { aiPlannerProposalRuntime } from "../../application/ai/proposal-runtime.ts";
 import { todayAssistantService } from "../ai/today-assistant-service.ts";
 import { TodayAssistantPanel } from "../ai/TodayAssistantPanel.tsx";
+import { DailyBriefPanel } from "../ai/DailyBriefPanel.tsx";
 import "./workspace-dashboard.css";
 
 interface WorkspaceDashboardProps {
@@ -471,6 +472,23 @@ export function WorkspaceDashboard({
           </span>
           <span className="workspace-today-summary">{model.todaySummaryText}</span>
         </button>
+        <DailyBriefPanel
+          model={model}
+          sources={sources!}
+          now={now}
+          service={todayAssistantService}
+          onOpenSettings={() => onOpenAISettings?.()}
+          onConfirmProposal={(proposal: AiPlannerProposal): Promise<AiProposalApplyResult> =>
+            aiPlannerProposalRuntime.apply({
+              id: proposal.id,
+              confirmed: true,
+              expectedPreviewRevision: proposal.preview.revision,
+              permissionIds: ["planner.propose"],
+            })
+          }
+          onCancelProposal={(proposal) => aiPlannerProposalRuntime.cancel(proposal.id)}
+          onApplied={() => setRetry((value) => value + 1)}
+        />
         {showTodayDetails && (
           <section
             ref={todayPopoverRef}

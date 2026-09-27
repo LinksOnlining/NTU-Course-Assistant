@@ -54,6 +54,16 @@ const ANALYSIS = {
   suggestions: ["午后预留复习时间。"],
   limitations: [],
 };
+const DAILY_BRIEF = {
+  overview: "今天有两项安排。",
+  scheduleHighlights: ["10:00–11:00 · 课程"],
+  topPriorities: [],
+  risks: [],
+  carryOvers: [],
+  suggestions: [],
+  canWait: [],
+  limitations: [],
+};
 
 function fixture({
   grants = ["workspace.read"],
@@ -211,7 +221,7 @@ function fixture({
     },
     async generateStructured(request, schema) {
       structuredCalls.push(request);
-      return schema.parse(ANALYSIS);
+      return schema.parse(schema.name === "daily_brief_v1" ? DAILY_BRIEF : ANALYSIS);
     },
     async generateText(request) {
       textCalls.push(request);
@@ -342,6 +352,68 @@ test("工作流固定 allowlist：分析只读，安排只开放一个时间块�
   assert.equal(TODAY_AI_WORKFLOWS["today.analyze"].responseMode, "structured-analysis");
   assert.equal(TODAY_AI_WORKFLOWS["today.plan"].responseMode, "proposal-plan");
   assert.ok(TODAY_AI_WORKFLOWS["today.analyze"].allowedReadToolIds.includes("weather.summary"));
+});
+
+test("Daily Brief 通过现有 Context Engine 与 Provider 结构化生成且完全只读", async () => {
+  const testFixture = fixture({
+    grants: ["academic.read", "planner.read", "routine.read", "weather.read"],
+  });
+  const result = await testFixture.orchestrator.run({ workflowId: "dailyBrief.generate" });
+  assert.equal(result.status, "ready", JSON.stringify(result));
+  assert.equal(result.result.workflowId, "dailyBrief.generate");
+  assert.equal(result.result.dailyBrief.mode, "ai");
+  assert.deepEqual(result.result.dailyBrief.carryOvers, []);
+  assert.deepEqual(result.result.usedTools, []);
+  assert.deepEqual(testFixture.providerCalls, []);
+  assert.deepEqual(testFixture.executions, []);
+  assert.deepEqual(testFixture.contextRequests[0].requestedScopes, [
+    "academic.read",
+    "planner.read",
+    "routine.read",
+    "weather.read",
+  ]);
+  assert.deepEqual(testFixture.contextRequests[0].timeRange, {
+    startDate: "2026-09-26",
+    endDate: "2026-09-29",
+  });
+  assert.equal(testFixture.contextRequests[0].requestedScopes.includes("workspace.read"), false);
+  assert.equal(testFixture.contextRequests[0].requestedScopes.includes("diary.body.read"), false);
+  assert.equal(testFixture.contextRequests[0].requestedScopes.includes("inbox.raw.read"), false);
+  assert.match(testFixture.structuredCalls[0].prompt, /<workspace-data>[\s\S]*<\/workspace-data>/u);
+  assert.match(testFixture.structuredCalls[0].prompt, /不可信业务数据/u);
+  assert.ok(result.result.limitations.some((item) => item.includes("每日总结数据源")));
+  assert.equal(
+    result.result.dailyBrief.weatherNote,
+    undefined,
+    "empty or missing weather must not be model-invented",
+  );
+});
+
+test("Daily Brief 无任何已授权数据时不检查凭据、不请求 Provider", async () => {
+  const testFixture = fixture({ grants: [] });
+  assert.deepEqual(await testFixture.orchestrator.run({ workflowId: "dailyBrief.generate" }), {
+    status: "noPermissions",
+  });
+  assert.equal(testFixture.credentialChecks, 0);
+  assert.equal(testFixture.contextBuilds, 0);
+  assert.equal(testFixture.structuredCalls.length, 0);
+  assert.equal(testFixture.executions.length, 0);
+});
+
+test("Daily Brief 行动候选过期时由本地 Planner 重新核验并拒绝旧候选", async () => {
+  const testFixture = fixture({ grants: ["academic.read", "planner.read", "planner.propose"] });
+  const result = await testFixture.orchestrator.run({
+    workflowId: "planner.route",
+    instruction: "今天 10:05 给 AI验收测试任务安排 60 分钟",
+    expectedCandidateId: "stale-daily-brief-candidate",
+  });
+  assert.deepEqual(result, {
+    status: "clarification",
+    message: "简报中的空闲时段已变化，请重新生成安排建议后再试。",
+  });
+  assert.deepEqual(testFixture.executions, []);
+  assert.equal(testFixture.providerCalls.length, 0);
+  assert.equal(testFixture.textCalls.length, 0);
 });
 
 test("无数据权限时不查询凭据、不构建上下文、不调用 Provider", async () => {

@@ -168,9 +168,22 @@ function projectAcademic(input: AiAcademicSnapshot, request: AiContextSourceRequ
     .filter((item) =>
       hasSelectedAcademicRef
         ? hasTaskRef && selectedTaskIds.includes(item.id)
-        : inDateRange(datePart(item.dueAt), request),
+        : inDateRange(datePart(item.dueAt), request) ||
+          (request.intent === "dailyBrief" &&
+            isDatePart(datePart(item.dueAt)) &&
+            datePart(item.dueAt) < request.timeRange.startDate),
     )
-    .sort((a, b) => compareText(a.dueAt, b.dueAt) || compareText(a.id, b.id))
+    .sort((a, b) => {
+      if (request.intent === "dailyBrief") {
+        const leftDate = datePart(a.dueAt);
+        const rightDate = datePart(b.dueAt);
+        const leftOverdue = leftDate < request.timeRange.startDate;
+        const rightOverdue = rightDate < request.timeRange.startDate;
+        if (leftOverdue !== rightOverdue) return leftOverdue ? -1 : 1;
+        if (leftOverdue) return compareText(b.dueAt, a.dueAt) || compareText(a.id, b.id);
+      }
+      return compareText(a.dueAt, b.dueAt) || compareText(a.id, b.id);
+    })
     .map((item) => ({
       id: safeText(item.id),
       title: safeText(item.title),
@@ -464,6 +477,10 @@ function inDateRange(date: string, request: AiContextSourceRequest): boolean {
 
 function datePart(value: string): string {
   return value.slice(0, 10);
+}
+
+function isDatePart(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/u.test(value);
 }
 
 function isoWeekday(date: string): number | null {

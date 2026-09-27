@@ -33,7 +33,7 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
     ).context;
     return { context };
   },
-  async academic({ timeRange }) {
+  async academic({ timeRange, intent }) {
     const termConfig = await loadAcademicTermConfig();
     const [schedule, hub] = await Promise.all([
       loadAcademicScheduleData(),
@@ -53,7 +53,7 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
             updatedAt: "",
           }
         : null);
-    const occurrences = semester
+    const rangeOccurrences = semester
       ? resolveAcademicOccurrences(
           schedule.courses,
           semester,
@@ -62,6 +62,10 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
           schedule.periodTimes ?? [],
         )
       : [];
+    const occurrences =
+      intent === "dailyBrief"
+        ? rangeOccurrences.filter((item) => item.date === timeRange.startDate)
+        : rangeOccurrences;
     const scheduledExams = hub.exams
       .filter((item) => item.status === "SCHEDULED")
       .filter((item) => {
@@ -72,72 +76,125 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
       .filter((item) => item.status !== "COMPLETED")
       .filter((item) => {
         const date = item.dueAt.slice(0, 10);
-        return date >= timeRange.startDate && date <= timeRange.endDate;
+        return (
+          /^\d{4}-\d{2}-\d{2}$/u.test(date) &&
+          (intent === "dailyBrief"
+            ? date <= timeRange.endDate
+            : date >= timeRange.startDate && date <= timeRange.endDate)
+        );
+      })
+      .sort((left, right) => {
+        if (intent !== "dailyBrief") return 0;
+        const leftDate = left.dueAt.slice(0, 10);
+        const rightDate = right.dueAt.slice(0, 10);
+        const leftOverdue = leftDate < timeRange.startDate;
+        const rightOverdue = rightDate < timeRange.startDate;
+        if (leftOverdue !== rightOverdue) return leftOverdue ? -1 : 1;
+        return (
+          (leftOverdue
+            ? right.dueAt.localeCompare(left.dueAt)
+            : left.dueAt.localeCompare(right.dueAt)) || left.id.localeCompare(right.id)
+        );
       });
     return {
       truncated:
-        occurrences.length > MAX_CONTEXT_ITEMS ||
-        scheduledExams.length > MAX_CONTEXT_ITEMS ||
-        openDeadlines.length > MAX_CONTEXT_ITEMS,
-      occurrences: occurrences.slice(0, MAX_CONTEXT_ITEMS).map((item) => ({
-        courseId: item.courseId,
-        date: item.date,
-        teachingWeek: item.teachingWeek,
-        startTime: item.startTime,
-        endTime: item.endTime,
-        room: item.room,
-        teacher: item.teacher,
-        status: item.status,
-      })),
-      exams: scheduledExams.slice(0, MAX_CONTEXT_ITEMS).map((item) => ({
-        id: item.id,
-        title: item.title,
-        startsAt: item.startsAt,
-        endsAt: item.endsAt,
-        location: item.location,
-        status: item.status,
-      })),
-      deadlines: openDeadlines.slice(0, MAX_CONTEXT_ITEMS).map((item) => ({
-        id: item.id,
-        title: item.title,
-        dueAt: item.dueAt,
-        priority: item.priority,
-        status: item.status,
-        type: item.type,
-      })),
+        occurrences.length > (intent === "dailyBrief" ? 12 : MAX_CONTEXT_ITEMS) ||
+        scheduledExams.length > (intent === "dailyBrief" ? 12 : MAX_CONTEXT_ITEMS) ||
+        openDeadlines.length > (intent === "dailyBrief" ? 12 : MAX_CONTEXT_ITEMS),
+      occurrences: occurrences
+        .slice(0, intent === "dailyBrief" ? 12 : MAX_CONTEXT_ITEMS)
+        .map((item) => ({
+          courseId: item.courseId,
+          date: item.date,
+          teachingWeek: item.teachingWeek,
+          startTime: item.startTime,
+          endTime: item.endTime,
+          room: item.room,
+          teacher: item.teacher,
+          status: item.status,
+        })),
+      exams: scheduledExams
+        .slice(0, intent === "dailyBrief" ? 12 : MAX_CONTEXT_ITEMS)
+        .map((item) => ({
+          id: item.id,
+          title: item.title,
+          startsAt: item.startsAt,
+          endsAt: item.endsAt,
+          location: item.location,
+          status: item.status,
+        })),
+      deadlines: openDeadlines
+        .slice(0, intent === "dailyBrief" ? 12 : MAX_CONTEXT_ITEMS)
+        .map((item) => ({
+          id: item.id,
+          title: item.title,
+          dueAt: item.dueAt,
+          priority: item.priority,
+          status: item.status,
+          type: item.type,
+        })),
       courseNames: Object.freeze(
-        Object.fromEntries(schedule.courses.map((course) => [course.id, course.name])),
+        Object.fromEntries(
+          schedule.courses
+            .filter((course) => occurrences.some((item) => item.courseId === course.id))
+            .map((course) => [course.id, course.name]),
+        ),
       ),
     };
   },
-  async planner({ timeRange }) {
+  async planner({ timeRange, intent }) {
     const [tasks, events, timeBlocks] = await Promise.all([
       loadPersonalTasks(),
       loadPlannerEvents(timeRange.startDate, timeRange.endDate),
       loadTimeBlocks(timeRange.startDate, timeRange.endDate),
     ]);
-    const openTasks = tasks.filter((item) => item.status !== "completed");
+    const dailyTimeBlocks =
+      intent === "dailyBrief"
+        ? timeBlocks.filter((item) => item.date === timeRange.startDate)
+        : timeBlocks;
+    const scheduledTaskIds = new Set(dailyTimeBlocks.map((item) => item.personalTaskId));
+    const openTasks = tasks
+      .filter((item) => item.status !== "completed")
+      .filter(
+        (item) =>
+          intent !== "dailyBrief" ||
+          scheduledTaskIds.has(item.id) ||
+          (item.deadlineDate !== null && item.deadlineDate <= timeRange.endDate),
+      )
+      .sort((left, right) => {
+        if (intent !== "dailyBrief") {
+          return (
+            (left.deadlineDate ?? "9999-12-31").localeCompare(right.deadlineDate ?? "9999-12-31") ||
+            left.id.localeCompare(right.id)
+          );
+        }
+        const leftDate = left.deadlineDate ?? "9999-12-31";
+        const rightDate = right.deadlineDate ?? "9999-12-31";
+        const leftOverdue = leftDate < timeRange.startDate;
+        const rightOverdue = rightDate < timeRange.startDate;
+        if (leftOverdue !== rightOverdue) return leftOverdue ? -1 : 1;
+        return (
+          (leftOverdue ? rightDate.localeCompare(leftDate) : leftDate.localeCompare(rightDate)) ||
+          left.id.localeCompare(right.id)
+        );
+      });
+    const dailyEvents =
+      intent === "dailyBrief" ? events.filter((item) => item.date === timeRange.startDate) : events;
+    const itemLimit = intent === "dailyBrief" ? 12 : MAX_CONTEXT_ITEMS;
     return {
       truncated:
-        openTasks.length > MAX_CONTEXT_ITEMS ||
-        events.length > MAX_CONTEXT_ITEMS ||
-        timeBlocks.length > MAX_CONTEXT_ITEMS,
-      tasks: openTasks
-        .sort(
-          (left, right) =>
-            (left.deadlineDate ?? "9999-12-31").localeCompare(right.deadlineDate ?? "9999-12-31") ||
-            left.id.localeCompare(right.id),
-        )
-        .slice(0, MAX_CONTEXT_ITEMS)
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          status: item.status,
-          priority: item.priority,
-          deadlineDate: item.deadlineDate,
-          deadlineTime: item.deadlineTime,
-        })),
-      events: events.slice(0, MAX_CONTEXT_ITEMS).map((item) => ({
+        openTasks.length > itemLimit ||
+        dailyEvents.length > itemLimit ||
+        dailyTimeBlocks.length > itemLimit,
+      tasks: openTasks.slice(0, itemLimit).map((item) => ({
+        id: item.id,
+        title: item.title,
+        status: item.status,
+        priority: item.priority,
+        deadlineDate: item.deadlineDate,
+        deadlineTime: item.deadlineTime,
+      })),
+      events: dailyEvents.slice(0, itemLimit).map((item) => ({
         id: item.id,
         title: item.title,
         date: item.date,
@@ -146,7 +203,7 @@ export const todayAssistantContextSources: AiContextSources = Object.freeze({
         bufferBeforeMinutes: item.bufferBeforeMinutes,
         bufferAfterMinutes: item.bufferAfterMinutes,
       })),
-      timeBlocks: timeBlocks.slice(0, MAX_CONTEXT_ITEMS).map((item) => ({
+      timeBlocks: dailyTimeBlocks.slice(0, itemLimit).map((item) => ({
         id: item.id,
         personalTaskId: item.personalTaskId,
         date: item.date,
