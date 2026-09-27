@@ -15,19 +15,36 @@ import {
   WEATHER_SETTINGS_KEY,
   loadWeatherCache,
   loadWeatherSettings,
+  normalizeWeatherLocation,
   saveWeatherCache,
   saveWeatherSettings,
 } from "../../src/services/weather-storage.ts";
+import {
+  createNativeWeatherLocationProvider,
+  getWeatherMapImage,
+  getWeatherProviderCredentialStatus,
+  removeWeatherProviderKey,
+  saveWeatherProviderKey,
+} from "../../src/services/weather-location-transport.ts";
 import { createOpenMeteoProvider } from "../../src/services/weather-provider.ts";
-import { createNativeGeocodingFetch } from "../../src/services/native-geocoding-transport.ts";
-import { createPhotonLocationSearchProvider } from "../../src/services/photon-location-provider.ts";
-import { createPhotonReverseGeocodingProvider } from "../../src/services/reverse-geocoding-provider.ts";
+import {
+  gcj02PixelForCoordinate,
+  gcj02ToWgs84,
+  mapPixelToGcj02,
+  normalizeWeatherCoordinate,
+  openMeteoCoordinates,
+  panGcj02Map,
+  wgs84ToGcj02,
+} from "../../src/core/weather-coordinate.ts";
 
 const location = {
-  displayName: "南通 · 江苏 · 中国",
+  displayName: "南通",
+  displayAddress: "江苏省 · 南通市",
   latitude: 31.98,
   longitude: 120.89,
+  coordinateSystem: "wgs84",
   timezone: "Asia/Shanghai",
+  source: "manual",
 };
 
 function snapshot(fetchedAt = "2026-09-24T00:00:00.000Z", target = location) {
@@ -52,7 +69,7 @@ function snapshot(fetchedAt = "2026-09-24T00:00:00.000Z", target = location) {
       },
     ],
     daily: Array.from({ length: 7 }, (_, index) => ({
-      date: `2026-09-${String(24 + index).padStart(2, "0")}`,
+      date: "2026-09-" + String(24 + index).padStart(2, "0"),
       highCelsius: 25,
       lowCelsius: 18,
       precipitationProbability: null,
@@ -61,21 +78,38 @@ function snapshot(fetchedAt = "2026-09-24T00:00:00.000Z", target = location) {
   };
 }
 
-function memoryStorage() {
+function memoryStorage({ failWrites = false } = {}) {
   const values = new Map();
   return {
     getItem: (key) => values.get(key) ?? null,
-    setItem: (key, value) => values.set(key, value),
+    setItem: (key, value) => {
+      if (failWrites) throw new Error("storage unavailable");
+      values.set(key, value);
+    },
     removeItem: (key) => values.delete(key),
     values,
   };
 }
 
-function photonFeature(properties, longitude = 120.89, latitude = 31.98) {
+function nativeLocation(overrides = {}) {
   return {
-    type: "Feature",
-    geometry: { type: "Point", coordinates: [longitude, latitude] },
-    properties,
+    displayName: "王村",
+    displayAddress: "江苏省 · 徐州市 · 丰县 · 邢楼镇",
+    latitude: 34.7,
+    longitude: 116.2,
+    coordinateSystem: "gcj02",
+    timezone: null,
+    country: "中国",
+    admin1: "江苏省",
+    admin2: "徐州市",
+    admin3: "丰县",
+    admin4: "邢楼镇",
+    provider: "amap",
+    providerId: "A-1",
+    type: "村庄",
+    precision: "locality",
+    source: "manual",
+    ...overrides,
   };
 }
 
@@ -101,30 +135,61 @@ test("weather is opt-in and settings/cache use namespaced local keys", () => {
   assert.equal(loadWeatherSettings(storage).enabled, true);
 });
 
-test("a selected detailed location persists supported hierarchy and provider identity", () => {
+test("legacy selected locations migrate to explicit WGS-84 metadata without losing settings", () => {
   const storage = memoryStorage();
-  const selected = {
-    displayName: "青年中路",
-    latitude: 31.98123,
-    longitude: 120.86234,
-    timezone: null,
-    country: "中国",
-    admin1: "江苏省",
-    admin2: "南通市",
-    admin3: "崇川区",
-    street: "青年中路",
-    providerId: "W:1234",
-    precision: "street",
-    source: "manual",
+  const legacy = { displayName: "旧版本位置", latitude: 31, longitude: 120, timezone: null };
+  storage.setItem(
+    WEATHER_SETTINGS_KEY,
+    JSON.stringify({ enabled: true, location: legacy, temperatureUnit: "celsius" }),
+  );
+  const loaded = loadWeatherSettings(storage);
+  assert.equal(loaded.enabled, true);
+  assert.equal(loaded.location.coordinateSystem, "wgs84");
+  assert.equal(loaded.location.source, "manual");
+  assert.deepEqual(JSON.parse(storage.getItem(WEATHER_SETTINGS_KEY)).location, loaded.location);
+});
+
+test("legacy location remains usable if local storage rejects migration writes", () => {
+  const storage = memoryStorage();
+  storage.values.set(
+    WEATHER_SETTINGS_KEY,
+    JSON.stringify({
+      enabled: true,
+      location: { displayName: "旧位置", latitude: 31, longitude: 120, timezone: null },
+      temperatureUnit: "celsius",
+    }),
+  );
+  const failingStorage = {
+    ...storage,
+    setItem() {
+      throw new Error("quota exceeded");
+    },
   };
+  const loaded = loadWeatherSettings(failingStorage);
+  assert.equal(loaded.enabled, true);
+  assert.equal(loaded.location.displayName, "旧位置");
+});
+
+test("invalid stored coordinates are rejected; valid coordinate-only map locations persist", () => {
+  assert.equal(normalizeWeatherLocation({ ...location, latitude: Number.NaN }), null);
+  const storage = memoryStorage();
+  const selected = nativeLocation({
+    displayName: "地图选定位置",
+    latitude: 31.2,
+    longitude: 121.4,
+    coordinateSystem: "gcj02",
+    source: "map",
+    precision: "coordinatesOnly",
+  });
   assert.equal(
     saveWeatherSettings({ enabled: true, location: selected, temperatureUnit: "celsius" }, storage),
     true,
   );
-  assert.deepEqual(loadWeatherSettings(storage).location, selected);
+  assert.equal(loadWeatherSettings(storage).location.source, "map");
+  assert.equal(loadWeatherSettings(storage).location.coordinateSystem, "gcj02");
 });
 
-test("weather cache freshness, expiry, future timestamps, and location changes are explicit", () => {
+test("weather cache freshness, expiry, future timestamps, and coordinate-system changes are explicit", () => {
   const now = Date.parse("2026-09-24T12:00:00.000Z");
   assert.equal(classifyWeatherCache(null, location, now), "missing");
   assert.equal(
@@ -145,7 +210,7 @@ test("weather cache freshness, expiry, future timestamps, and location changes a
   );
   assert.equal(
     classifyWeatherCache(
-      snapshot("2026-09-24T11:00:00.000Z", { ...location, latitude: 30 }),
+      snapshot("2026-09-24T11:00:00.000Z", { ...location, coordinateSystem: "gcj02" }),
       location,
       now,
     ),
@@ -153,7 +218,7 @@ test("weather cache freshness, expiry, future timestamps, and location changes a
   );
 });
 
-test("weather storage rejects and removes a malformed persistent cache", () => {
+test("weather storage removes malformed cache and keeps normalized valid cache", () => {
   const storage = memoryStorage();
   storage.setItem(WEATHER_CACHE_KEY, "not-json");
   assert.equal(loadWeatherCache(storage), null);
@@ -162,59 +227,40 @@ test("weather storage rejects and removes a malformed persistent cache", () => {
   assert.deepEqual(loadWeatherCache(storage), snapshot());
 });
 
-test("temperature and WMO labels are normalized for presentation", () => {
+test("temperature, WMO labels, hierarchy and location identity use normalized location metadata", () => {
   assert.equal(formatTemperature(0, "fahrenheit"), "32°F");
   assert.equal(formatTemperature(22.4, "celsius"), "22°C");
   assert.equal(weatherCodeLabel(0), "晴");
   assert.equal(weatherCodeLabel(95), "雷雨");
   assert.equal(weatherCodeLabel(999), "天气情况未知");
-  assert.match(weatherLocationKey(location), /^31\.9800,120\.8900$/u);
+  assert.equal(weatherLocationKey(location), "wgs84:31.9800,120.8900");
+  assert.deepEqual(weatherLocationHierarchy(nativeLocation()), [
+    "王村",
+    "江苏省 · 徐州市 · 丰县 · 邢楼镇",
+  ]);
+  assert.equal(weatherLocationIdentity(nativeLocation()), "amap:A-1");
 });
 
-test("native geocoding transport routes forward and reverse requests through Tauri commands", async () => {
-  const calls = [];
-  const fetcher = createNativeGeocodingFetch(async (command, args) => {
-    calls.push({ command, args });
-    return { type: "FeatureCollection", features: [] };
+test("WGS-84 and GCJ-02 conversions round-trip mainland coordinates and preserve outside coordinates", () => {
+  const wgs = { latitude: 31.2304, longitude: 121.4737 };
+  const gcj = wgs84ToGcj02(wgs.latitude, wgs.longitude);
+  assert.equal(gcj.coordinateSystem, "gcj02");
+  assert.ok(Math.abs(gcj.latitude - wgs.latitude) > 0.001);
+  assert.ok(Math.abs(gcj.longitude - wgs.longitude) > 0.001);
+  const roundTrip = gcj02ToWgs84(gcj.latitude, gcj.longitude);
+  assert.ok(Math.abs(roundTrip.latitude - wgs.latitude) < 0.00001);
+  assert.ok(Math.abs(roundTrip.longitude - wgs.longitude) < 0.00001);
+  assert.deepEqual(normalizeWeatherCoordinate(40, -74, "wgs84"), {
+    latitude: 40,
+    longitude: -74,
+    coordinateSystem: "wgs84",
   });
-  const forward = await fetcher(
-    "https://photon.komoot.io/api?q=%E5%8D%97%E9%80%9A%E5%A4%A7%E5%AD%A6&lang=default&limit=12",
-  );
-  assert.equal(forward.status, 200);
-  assert.deepEqual(calls[0], {
-    command: "search_weather_location",
-    args: { query: "南通大学" },
-  });
-  await fetcher("https://photon.komoot.io/reverse?lat=31.223&lon=120.897&lang=default");
-  assert.deepEqual(calls[1], {
-    command: "reverse_geocode_weather_location",
-    args: { latitude: 31.223, longitude: 120.897 },
-  });
-  await assert.rejects(
-    () => fetcher("https://example.com/api?q=南通大学"),
-    /invalidProviderRequest/u,
-  );
 });
 
-test("native geocoding transport discards a result after its request is aborted", async () => {
-  let resolveInvocation;
-  const fetcher = createNativeGeocodingFetch(
-    () => new Promise((resolve) => (resolveInvocation = resolve)),
-  );
-  const controller = new AbortController();
-  const pending = fetcher("https://photon.komoot.io/api?q=Berlin&lang=default", {
-    signal: controller.signal,
-  });
-  controller.abort();
-  resolveInvocation({ type: "FeatureCollection", features: [] });
-  await assert.rejects(pending, { name: "AbortError" });
-});
-
-test("Open-Meteo adapter only fetches forecasts at the selected coordinates", async () => {
+test("Open-Meteo request converts internal GCJ-02 coordinates back to WGS-84", async () => {
   const urls = [];
   const provider = createOpenMeteoProvider(async (input) => {
-    const url = new URL(String(input));
-    urls.push(url);
+    urls.push(new URL(String(input)));
     return new Response(
       JSON.stringify({
         timezone: "Asia/Shanghai",
@@ -233,7 +279,7 @@ test("Open-Meteo adapter only fetches forecasts at the selected coordinates", as
           precipitation_probability: [null],
         },
         daily: {
-          time: Array.from({ length: 7 }, (_, i) => `2026-09-${String(24 + i).padStart(2, "0")}`),
+          time: Array.from({ length: 7 }, (_, i) => "2026-09-" + String(24 + i).padStart(2, "0")),
           temperature_2m_max: Array(7).fill(25),
           temperature_2m_min: Array(7).fill(18),
           weather_code: Array(7).fill(2),
@@ -243,416 +289,150 @@ test("Open-Meteo adapter only fetches forecasts at the selected coordinates", as
       { status: 200 },
     );
   });
-
-  const result = await provider.fetchForecast(location);
-  assert.equal(result.current.temperatureCelsius, 22);
-  assert.equal(result.hourly[0].precipitationProbability, null);
-  assert.equal(result.daily.length, 7);
-  assert.ok(Number.isFinite(Date.parse(result.fetchedAt)));
-  assert.deepEqual(
-    urls.map((url) => url.hostname),
-    ["api.open-meteo.com"],
-  );
-  assert.equal(urls[0].searchParams.get("latitude"), "31.98");
-  assert.equal(urls[0].searchParams.get("longitude"), "120.89");
+  const gcj = wgs84ToGcj02(location.latitude, location.longitude);
+  await provider.fetchForecast({
+    ...location,
+    latitude: gcj.latitude,
+    longitude: gcj.longitude,
+    coordinateSystem: "gcj02",
+  });
+  const expected = openMeteoCoordinates({
+    ...location,
+    latitude: gcj.latitude,
+    longitude: gcj.longitude,
+    coordinateSystem: "gcj02",
+  });
+  assert.equal(Number(urls[0].searchParams.get("latitude")), expected.latitude);
+  assert.equal(Number(urls[0].searchParams.get("longitude")), expected.longitude);
+  assert.notEqual(urls[0].searchParams.get("latitude"), String(gcj.latitude));
   assert.equal(urls[0].searchParams.get("forecast_days"), "7");
   assert.equal(urls[0].searchParams.has("task"), false);
   assert.equal(urls[0].searchParams.has("diary"), false);
   assert.equal(urls[0].searchParams.has("inbox"), false);
-  assert.equal(urls[0].searchParams.has("course"), false);
-  assert.equal(urls[0].searchParams.has("query"), false);
 });
 
-test("Photon forward search supports the required Chinese detailed-place queries without layer filtering", async () => {
-  const queries = [
-    "崇川区",
-    "南通市崇川区",
-    "文峰街道",
-    "南通市崇川区文峰街道",
-    "青年中路",
-    "南通大学",
-  ];
-  const requested = [];
-  const provider = createPhotonLocationSearchProvider(async (input) => {
-    const url = new URL(String(input));
-    requested.push(url);
-    const query = url.searchParams.get("q");
-    const properties = {
-      崇川区: {
-        name: "崇川区",
-        type: "district",
-        osm_key: "place",
-        osm_value: "city_district",
-        district: "崇川区",
-        state: "江苏省",
-        country: "中国",
-        osm_type: "R",
-        osm_id: 100,
-      },
-      南通市崇川区: {
-        name: "崇川区",
-        type: "district",
-        district: "崇川区",
-        city: "南通市",
-        state: "江苏省",
-        country: "中国",
-        osm_type: "R",
-        osm_id: 101,
-      },
-      文峰街道: {
-        name: "文峰街道",
-        type: "locality",
-        locality: "文峰街道",
-        city: "南通市",
-        state: "江苏省",
-        country: "中国",
-        osm_type: "R",
-        osm_id: 102,
-      },
-      南通市崇川区文峰街道: {
-        name: "文峰街道",
-        type: "locality",
-        locality: "文峰街道",
-        district: "崇川区",
-        city: "南通市",
-        state: "江苏省",
-        country: "中国",
-        osm_type: "R",
-        osm_id: 103,
-      },
-      青年中路: {
-        name: "青年中路",
-        type: "street",
-        street: "青年中路",
-        district: "崇川区",
-        city: "南通市",
-        state: "江苏省",
-        country: "中国",
-        osm_key: "highway",
-        osm_value: "residential",
-        osm_type: "W",
-        osm_id: 104,
-      },
-      南通大学: {
-        name: "南通大学",
-        type: "other",
-        street: "啬园路",
-        district: "崇川区",
-        city: "南通市",
-        state: "江苏省",
-        country: "中国",
-        osm_key: "amenity",
-        osm_value: "university",
-        osm_type: "N",
-        osm_id: 105,
-      },
-    }[query];
-    return new Response(
-      JSON.stringify({ features: properties ? [photonFeature(properties)] : [] }),
-      { status: 200 },
-    );
+test("map projection maps center, clicks, and drag pans in intuitive directions", () => {
+  const center = { latitude: 31.23, longitude: 121.47 };
+  const centerPoint = mapPixelToGcj02(center, 12, 320, 210, 640, 420);
+  assert.ok(Math.abs(centerPoint.latitude - center.latitude) < 1e-8);
+  assert.ok(Math.abs(centerPoint.longitude - center.longitude) < 1e-8);
+  assert.equal(centerPoint.coordinateSystem, "gcj02");
+  const east = mapPixelToGcj02(center, 12, 400, 210, 640, 420);
+  const north = mapPixelToGcj02(center, 12, 320, 130, 640, 420);
+  assert.ok(east.longitude > center.longitude);
+  assert.ok(Math.abs(east.latitude - center.latitude) < 1e-8);
+  assert.ok(north.latitude > center.latitude);
+  const panned = panGcj02Map(center, 12, 80, 40);
+  assert.ok(panned.longitude < center.longitude);
+  assert.ok(panned.latitude > center.latitude);
+  const pixel = gcj02PixelForCoordinate(center, east, 12, 640, 420);
+  assert.ok(Math.abs(pixel.x - 400) < 0.001);
+});
+
+test("native weather transport sends text only to Rust and normalizes backend results", async () => {
+  const calls = [];
+  const provider = createNativeWeatherLocationProvider(async (command, args) => {
+    calls.push({ command, args });
+    if (command === "search_weather_location") return [nativeLocation()];
+    if (command === "cancel_weather_location_search") return null;
+    if (command === "reverse_geocode_weather_location") return nativeLocation();
+    throw new Error("unexpected command");
   });
-
-  for (const query of queries) {
-    const locations = await provider.searchLocation(query);
-    assert.equal(locations.length, 1, query);
-    assert.equal(locations[0].source, "manual");
-    assert.equal(locations[0].timezone, null);
-  }
-  assert.deepEqual(
-    requested.map((url) => url.searchParams.get("q")),
-    queries,
-  );
-  assert.ok(requested.every((url) => url.pathname === "/api"));
-  assert.ok(requested.every((url) => url.searchParams.get("lang") === "default"));
-  assert.ok(requested.every((url) => url.searchParams.get("limit") === "12"));
-  assert.ok(requested.every((url) => !url.searchParams.has("layer")));
-  assert.ok(requested.every((url) => !url.searchParams.has("countrycode")));
-});
-
-test("Photon normalization accepts missing city/district, maps layers, ranks exact detailed results, and deduplicates", async () => {
-  const provider = createPhotonLocationSearchProvider(
-    async () =>
-      new Response(
-        JSON.stringify({
-          features: [
-            photonFeature({
-              name: "南通市",
-              type: "city",
-              city: "南通市",
-              state: "江苏省",
-              osm_type: "R",
-              osm_id: 1,
-            }),
-            photonFeature({
-              name: "崇川区",
-              type: "district",
-              district: "崇川区",
-              state: "江苏省",
-              country: "中国",
-              osm_type: "R",
-              osm_id: 2,
-            }),
-            photonFeature({
-              name: "崇川区",
-              type: "district",
-              district: "崇川区",
-              state: "江苏省",
-              country: "中国",
-              osm_type: "R",
-              osm_id: 2,
-            }),
-            photonFeature({
-              name: "文峰街道",
-              type: "locality",
-              locality: "文峰街道",
-              district: "崇川区",
-              state: "江苏省",
-              country: "中国",
-              osm_type: "R",
-              osm_id: 3,
-            }),
-            photonFeature({
-              name: "青年中路",
-              type: "street",
-              street: "青年中路",
-              city: "南通市",
-              state: "江苏省",
-              osm_type: "W",
-              osm_id: 4,
-            }),
-            photonFeature({
-              name: "命名住宅",
-              type: "house",
-              street: "青年中路",
-              housenumber: "88",
-              osm_type: "W",
-              osm_id: 5,
-            }),
-            photonFeature({
-              name: "88号",
-              type: "house",
-              street: "青年中路",
-              housenumber: "88",
-              osm_type: "W",
-              osm_id: 12,
-            }),
-            photonFeature({
-              name: "南通大学",
-              type: "other",
-              street: "啬园路",
-              osm_key: "amenity",
-              osm_value: "university",
-              osm_type: "N",
-              osm_id: 6,
-            }),
-            photonFeature({
-              name: "崇川片区",
-              type: "locality",
-              locality: "崇川片区",
-              state: "江苏省",
-              osm_type: "R",
-              osm_id: 7,
-            }),
-            photonFeature({
-              name: "海安县",
-              type: "county",
-              county: "海安县",
-              state: "江苏省",
-              osm_type: "R",
-              osm_id: 8,
-            }),
-            photonFeature({
-              name: "江苏省",
-              type: "state",
-              state: "江苏省",
-              country: "中国",
-              osm_type: "R",
-              osm_id: 9,
-            }),
-            photonFeature({
-              name: "中国",
-              type: "country",
-              country: "中国",
-              osm_type: "R",
-              osm_id: 10,
-            }),
-            photonFeature({
-              name: "未分类地点",
-              type: "building",
-              city: "南通市",
-              osm_type: "W",
-              osm_id: 11,
-            }),
-          ],
-        }),
-        { status: 200 },
-      ),
-  );
-
-  const results = await provider.searchLocation("崇川区");
-  assert.deepEqual(
-    results.slice(0, 3).map((item) => item.displayName),
-    ["崇川区", "文峰街道", "青年中路"],
-  );
-  assert.equal(results.filter((item) => item.providerId === "R:2").length, 1);
-  assert.equal(results.find((item) => item.displayName === "崇川区").precision, "district");
-  assert.equal(results.find((item) => item.displayName === "文峰街道").precision, "locality");
-  assert.equal(results.find((item) => item.displayName === "青年中路").precision, "street");
-  assert.equal(results.find((item) => item.displayName === "命名住宅").precision, "house");
-  assert.equal(results.find((item) => item.providerId === "W:12").displayName, "青年中路");
-  assert.equal(results.find((item) => item.providerId === "W:12").precision, "house");
-  assert.equal(results.find((item) => item.displayName === "青年中路").precision, "street");
-  assert.equal(results.find((item) => item.displayName === "南通大学").precision, "other");
-  assert.equal(results.find((item) => item.displayName === "海安县").precision, "county");
-  assert.equal(results.find((item) => item.displayName === "江苏省").precision, "state");
-  assert.equal(results.find((item) => item.displayName === "中国").precision, "country");
-  assert.equal(results.find((item) => item.displayName === "未分类地点").precision, "other");
-  const districtWithoutCity = results.find((item) => item.displayName === "崇川区");
-  const localityWithoutDistrict = results.find((item) => item.displayName === "崇川片区");
-  assert.equal(districtWithoutCity.admin2, undefined);
-  assert.equal(localityWithoutDistrict.admin3, undefined);
-  assert.deepEqual(weatherLocationHierarchy(districtWithoutCity), ["崇川区", "江苏省", "中国"]);
-  assert.equal(JSON.stringify(results).includes("housenumber"), false);
-  assert.equal(JSON.stringify(results).includes("88"), false);
-  assert.equal(weatherLocationIdentity(results[0]), "osm:R:2");
-});
-
-test("Photon HTTP 200 empty results do not trigger another query and malformed data remains an error", async () => {
-  const requested = [];
-  const provider = createPhotonLocationSearchProvider(async (input) => {
-    const url = new URL(String(input));
-    requested.push(url.searchParams.get("q"));
-    return new Response(JSON.stringify({ features: [] }), { status: 200 });
+  const results = await provider.searchLocation("王村", undefined, "江苏省徐州市丰县");
+  assert.equal(results[0].coordinateSystem, "gcj02");
+  assert.deepEqual(calls[0].args, {
+    query: "王村",
+    adminHint: "江苏省徐州市丰县",
+    requestId: calls[0].args.requestId,
   });
-  const results = await provider.searchLocation("崇川区");
-  assert.deepEqual(requested, ["崇川区"]);
-  assert.deepEqual(results, []);
-  const malformed = createPhotonLocationSearchProvider(
-    async () =>
-      new Response(JSON.stringify({ features: [{ properties: { name: "缺少坐标" } }] }), {
-        status: 200,
-      }),
-  );
-  await assert.rejects(() => malformed.searchLocation("青年中路"), /invalid-location-response/u);
+  assert.equal(typeof calls[0].args.requestId, "string");
+  assert.deepEqual(await provider.reverseGeocode(34.7, 116.2), nativeLocation());
 });
 
-test("production weather provider searches Photon and forecasts the exact selected coordinates", async () => {
-  const urls = [];
-  const provider = createWorkspaceWeatherProvider(async (input) => {
-    const url = new URL(String(input));
-    urls.push(url);
-    if (url.hostname === "photon.komoot.io") {
-      return new Response(
-        JSON.stringify({
-          features: [
-            photonFeature(
-              {
-                name: "崇川区",
-                type: "district",
-                district: "崇川区",
-                city: "南通市",
-                state: "江苏省",
-                country: "中国",
-              },
-              120.86234,
-              31.98123,
-            ),
-          ],
-        }),
-        { status: 200 },
-      );
+test("aborted native search requests cancel the backend and discard stale responses", async () => {
+  let finishSearch;
+  const calls = [];
+  const provider = createNativeWeatherLocationProvider((command) => {
+    calls.push(command);
+    if (command === "search_weather_location") {
+      return new Promise((resolve) => {
+        finishSearch = resolve;
+      });
     }
-    return new Response(
-      JSON.stringify({
-        timezone: "Asia/Shanghai",
-        current: { time: "2026-09-24T08:00", temperature_2m: 22, weather_code: 2, is_day: 1 },
-        hourly: {
-          time: ["2026-09-24T08:00"],
-          temperature_2m: [22],
-          weather_code: [2],
-          precipitation_probability: [null],
-        },
-        daily: {
-          time: Array.from(
-            { length: 7 },
-            (_, index) => `2026-09-${String(24 + index).padStart(2, "0")}`,
-          ),
-          temperature_2m_max: Array(7).fill(25),
-          temperature_2m_min: Array(7).fill(18),
-          weather_code: Array(7).fill(2),
-          precipitation_probability_max: Array(7).fill(null),
-        },
-      }),
-      { status: 200 },
-    );
+    return Promise.resolve(null);
   });
-
-  const selected = (await provider.searchLocation("崇川区"))[0];
-  const result = await provider.fetchForecast(selected);
-  const forecastUrl = urls.find((url) => url.hostname === "api.open-meteo.com");
-  assert.equal(urls[0].hostname, "photon.komoot.io");
-  assert.equal(urls[0].pathname, "/api");
-  assert.equal(forecastUrl.searchParams.get("latitude"), String(selected.latitude));
-  assert.equal(forecastUrl.searchParams.get("longitude"), String(selected.longitude));
-  assert.deepEqual(result.location, selected);
-  assert.equal(selected.latitude, 31.98123);
-  assert.equal(selected.longitude, 120.86234);
+  const controller = new AbortController();
+  const pending = provider.searchLocation("李庄", controller.signal);
+  controller.abort();
+  await new Promise((resolve) => setImmediate(resolve));
+  finishSearch([nativeLocation()]);
+  await assert.rejects(pending, { name: "AbortError" });
+  assert.ok(calls.includes("cancel_weather_location_search"));
 });
 
-test("Photon reverse geocoding keeps only administrative hierarchy and preserves rounded coordinates", async () => {
-  let requestedUrl;
-  const provider = createPhotonReverseGeocodingProvider(async (input) => {
-    requestedUrl = new URL(String(input));
-    return new Response(
-      JSON.stringify({
-        features: [
-          {
-            properties: {
-              name: "崇川区",
-              locality: "观音山街道",
-              district: "崇川区",
-              city: "南通市",
-              state: "江苏省",
-              country: "中国",
-              street: "私人道路名称",
-              housenumber: "88",
-              postcode: "226000",
-            },
-          },
-        ],
-      }),
-      { status: 200 },
-    );
+test("location credentials stay write-only in UI status and map bytes retain safe image MIME", async () => {
+  const calls = [];
+  const invoke = async (command, args) => {
+    calls.push({ command, args });
+    if (command === "get_weather_credential_status") {
+      return { amapConfigured: true, baiduConfigured: false };
+    }
+    if (command === "set_weather_provider_key" || command === "delete_weather_provider_key") {
+      return true;
+    }
+    if (command === "get_weather_map_image") {
+      return { mimeType: "image/jpeg", bytes: [255, 216, 255] };
+    }
+    return null;
+  };
+  assert.deepEqual(await getWeatherProviderCredentialStatus(invoke), {
+    amapConfigured: true,
+    baiduConfigured: false,
   });
-
-  const location = await provider.reverseGeocode(31.223, 120.897);
-  assert.equal(requestedUrl.hostname, "photon.komoot.io");
-  assert.equal(requestedUrl.pathname, "/reverse");
-  assert.equal(requestedUrl.searchParams.get("lat"), "31.223");
-  assert.equal(requestedUrl.searchParams.get("lon"), "120.897");
-  assert.deepEqual(location, {
-    displayName: "观音山街道",
-    latitude: 31.223,
-    longitude: 120.897,
-    timezone: null,
-    country: "中国",
-    admin1: "江苏省",
-    admin2: "南通市",
-    admin3: "崇川区",
-    admin4: "观音山街道",
-    precision: "locality",
-    source: "device",
-  });
-  assert.ok(!JSON.stringify(location).includes("私人道路名称"));
-  assert.ok(!JSON.stringify(location).includes("226000"));
+  assert.equal(await saveWeatherProviderKey("amap", "private-key", invoke), true);
+  assert.equal(await removeWeatherProviderKey("amap", invoke), true);
+  const image = await getWeatherMapImage(35, 105, 6, invoke);
+  assert.equal(image.type, "image/jpeg");
+  assert.deepEqual(
+    calls.map((item) => item.command),
+    [
+      "get_weather_credential_status",
+      "set_weather_provider_key",
+      "delete_weather_provider_key",
+      "get_weather_map_image",
+    ],
+  );
+  assert.deepEqual(Object.keys(await getWeatherProviderCredentialStatus(invoke)).sort(), [
+    "amapConfigured",
+    "baiduConfigured",
+  ]);
 });
 
 test("Open-Meteo adapter rejects malformed and failed service responses", async () => {
-  const malformed = createOpenMeteoProvider(
-    async () => new Response(JSON.stringify({ current: {} }), { status: 200 }),
-  );
-  await assert.rejects(() => malformed.fetchForecast(location), /invalid-weather-response/u);
+  const provider = createOpenMeteoProvider(async () => new Response("nope", { status: 200 }));
+  await assert.rejects(() => provider.fetchForecast(location));
   const failed = createOpenMeteoProvider(async () => new Response("", { status: 503 }));
   await assert.rejects(() => failed.fetchForecast(location), /weather-provider-unavailable/u);
+});
+
+test("production weather composition keeps forecast lookup separate from native location resolution", async () => {
+  const calls = [];
+  const provider = createWorkspaceWeatherProvider(
+    async (input) => {
+      calls.push(String(input));
+      return new Response("{}", { status: 500 });
+    },
+    {
+      searchLocation: async (query, _signal, adminHint) => {
+        calls.push(JSON.stringify({ query, adminHint }));
+        return [nativeLocation()];
+      },
+      reverseGeocode: async () => null,
+    },
+  );
+  const result = await provider.searchLocation("王村", undefined, "丰县");
+  assert.equal(result[0].provider, "amap");
+  assert.equal(calls[0], JSON.stringify({ query: "王村", adminHint: "丰县" }));
+  await assert.rejects(() => provider.fetchForecast(location), /weather-provider-unavailable/u);
+  assert.match(calls[1], /^https:\/\/api\.open-meteo\.com\/v1\/forecast/u);
 });

@@ -6,34 +6,32 @@ import type {
   WorkspaceWeatherProvider,
 } from "../../types/weather.ts";
 import { createOpenMeteoProvider } from "../../services/weather-provider.ts";
-import { createPhotonReverseGeocodingProvider } from "../../services/reverse-geocoding-provider.ts";
-import { createPhotonLocationSearchProvider } from "../../services/photon-location-provider.ts";
-import type { GeocodingFetch } from "../../services/native-geocoding-transport.ts";
-import { nativeGeocodingFetch } from "../../services/native-geocoding-transport.ts";
+import { createNativeWeatherLocationProvider } from "../../services/weather-location-transport.ts";
 
 /** Weather Application boundary owns the production provider selection. */
 export function createWorkspaceWeatherProvider(
   fetcher: typeof fetch = fetch,
-  geocodingFetcher: GeocodingFetch = fetcher === fetch ? nativeGeocodingFetch : fetcher,
+  locationProvider = createNativeWeatherLocationProvider(),
 ): WorkspaceWeatherProvider {
   return {
     ...createOpenMeteoProvider(fetcher),
-    ...createPhotonLocationSearchProvider(geocodingFetcher),
-    ...createPhotonReverseGeocodingProvider(geocodingFetcher),
+    ...locationProvider,
   };
 }
 
 export function weatherLocationHierarchy(location: WeatherLocation): string[] {
-  return [
-    location.displayName,
-    location.street,
-    location.admin4,
-    location.admin3,
-    location.county,
-    location.admin2,
+  const administrativePath = [
     location.admin1,
-    location.country,
-  ].filter((part, index, parts): part is string => Boolean(part) && parts.indexOf(part) === index);
+    location.admin2,
+    location.admin3,
+    location.admin4,
+  ].filter((part): part is string => Boolean(part));
+  const details = location.displayAddress
+    ? [location.displayAddress]
+    : [...administrativePath, location.street, location.country];
+  return [location.displayName, ...details].filter(
+    (part, index, parts): part is string => Boolean(part) && parts.indexOf(part) === index,
+  );
 }
 
 export function weatherLocationPrecisionLabel(
@@ -68,20 +66,22 @@ export function weatherLocationPrecisionLabel(
 }
 
 export function weatherLocationSourceLabel(source: WeatherLocation["source"]): string {
-  return source === "device" ? "当前位置" : "手动选择";
+  if (source === "device") return "当前位置";
+  if (source === "map") return "地图选点";
+  return "手动选择";
 }
 
 export const WEATHER_FRESH_FOR_MS = 30 * 60 * 1000;
 export const WEATHER_STALE_FOR_MS = 24 * 60 * 60 * 1000;
 
 export function weatherLocationKey(location: WeatherLocation): string {
-  return `${location.latitude.toFixed(4)},${location.longitude.toFixed(4)}`;
+  return `${location.coordinateSystem}:${location.latitude.toFixed(4)},${location.longitude.toFixed(4)}`;
 }
 
 export function weatherLocationIdentity(location: WeatherLocation): string {
   return location.providerId
-    ? `osm:${location.providerId}`
-    : `${location.latitude.toFixed(6)},${location.longitude.toFixed(6)}:${location.displayName}`;
+    ? `${location.provider ?? "unknown"}:${location.providerId}`
+    : `${weatherLocationKey(location)}:${location.displayName}`;
 }
 
 export function classifyWeatherCache(

@@ -1,0 +1,64 @@
+# Phase 4.8.2 — Weather Location Resolver 2.0 验证记录
+
+## 状态
+
+- 基线：`v2/workspace-rebase`，起始 HEAD `5e4d7955b45b99a5d0cd1ef0ae09c2e52f240489`
+- 实现：COMPLETE
+- 自动验证：PASS
+- AMap / Baidu 实际凭据调用：PENDING
+- Windows 人工验收：PENDING
+- Phase 4.8.2 Overall：PENDING（等待 provider live 与 Windows 人工验收）
+- SQLite schema：8；Migration：0
+- 应用元数据版本保持 `1.3.1`
+- Phase 4.9：NOT STARTED
+
+## 变更范围与复用审计
+
+- 移除旧 Photon / Nominatim 地点搜索与逆地理编码路径；天气预报仍使用既有 Open-Meteo 经纬度接口和缓存。
+- **REUSE**：既有 Weather 设置/缓存和天气预报路径、Tauri command 边界、Rust `reqwest` 与 `keyring` 依赖。
+- **ADAPT**：将既有 Windows Credential Manager 读写封装为 `secure_credentials`，供 AI 与 Weather 共用；Weather 不建立第二套凭据存储。
+- **REFERENCE**：只参考官方 API 文档，没有复制第三方 SDK 或非官方实现代码。
+- **REJECT**：未引入新的位置 SDK、运行时依赖、地图 WebView SDK 或新数据库表；没有更换现有 Open-Meteo 天气预报 provider。
+
+## Resolver 与坐标边界
+
+- 地点解析在 Rust 侧执行；输入限制为 2–160 个字符，提示不超过 80 个字符，拒绝控制字符。请求使用固定 HTTPS provider endpoint、8 秒 timeout 与有界响应读取。
+- 查询分为详细地址、行政区、POI、一般关键词。高德按意图从行政区查询、输入提示、POI、地理编码中最多执行两种主策略；有用户提供的行政区提示时最多增加一次高德增强查询。
+- 高德没有候选结果时才尝试百度；百度搜索与坐标转换为批量请求。非详细地址且首轮无结果时，可使用提示进行一次增强搜索。最坏路径最多 7 次位置服务请求；命中本地进程缓存时不发网络请求。
+- 候选合并后按规范化文本、行政层级、结果类型与坐标去重/排序，最多返回 12 条。村/镇、学校、地址和同名地点展示分类与行政层级，供用户区分。
+- 高德返回的地点坐标按 GCJ-02 处理；百度 BD-09 通过百度坐标转换接口 `model=5` 转到应用内部 GCJ-02。预报请求边界再将 GCJ-02 转为 WGS84。坐标系随 Location DTO 明确表达，不靠城市 ID 或 `locationId`。
+- 手动坐标支持坐标系选择并归一到 GCJ-02；无地图凭据时该路径仍可用。地图选择器以高德静态地图图像为底图，由 Rust 下载并校验 PNG/JPEG、大小与坐标；不把 Web 服务 Key 暴露给前端。
+- 当前位置仍需用户明确同意与系统定位授权；发给位置服务前会降低坐标精度。逆地理编码依次尝试高德、百度；失败时保留坐标型位置，不阻断天气功能。
+
+## 凭据、隐私与降级
+
+- 高德与百度 Web 服务 Key 复用 Windows Credential Manager，分别使用 `links-workplace.weather` 下的 provider account；前端仅获取配置状态，不获得 Key。
+- 天气关闭时不发起地点搜索。用户提交关键词或明确确认当前位置后才请求位置服务；取消/新请求会取消或丢弃过期响应。
+- 搜索原文只用于当次 provider 查询与进程内短期缓存键；不写入搜索历史、数据库或日志。缓存为内存 15 分钟、最多 64 项；日志只包含 provider、操作类型、HTTP/结果状态、耗时与数量，不记录搜索词、地址、坐标或密钥。
+- Open-Meteo 仍只接收天气所需坐标与 forecast 参数，不接收位置搜索关键词或 provider credentials。地点解析失败与天气预报失败分开呈现；网络不可用时核心工作台仍可用，现有天气缓存保留。
+- Daily Brief 的 `weather.read` 边界没有扩大：只读取现有已授权的天气缓存，不获得位置搜索、反向地理编码或地图能力，也不接触 Diary / Inbox 私密正文。
+
+## 官方接口参考
+
+- 高德：[输入提示](https://lbs.amap.com/api/webservice/guide/api-advanced/inputtips)、[行政区域查询](https://lbs.amap.com/api/webservice/guide/api/district)、[POI 搜索](https://lbs.amap.com/api/webservice/guide/api/search/)、[静态地图](https://lbs.amap.com/api/webservice/guide/api/staticmaps)
+- 百度：[地点检索](https://lbsyun.baidu.com/docs/webapi?title=placev3/guide/webservice-placeapiV3/interfaceDocumentV3)、[地理编码](https://lbsyun.baidu.com/docs/webapi?title=geocoding/guide/webservice-geocoding-base)、[坐标转换](https://lbsyun.baidu.com/docs/webapi?title=geoconv/guide/changeposition-base)
+
+## 自动验证
+
+- Weather targeted unit：15 PASS。
+- Rust geocoding targeted：11 PASS；覆盖 query 分类、层级提取、坐标转换、合并排序、provider fallback、取消和无效输入。
+- Weather targeted UI：6 PASS；覆盖离线默认、地点搜索/分类、手动坐标、无地图 Key、当前位置授权、失败分类与重试。
+- `npm run verify`：PASS；typecheck、389 unit、141 architecture、1,218 UI PASS / 15 条件跳过、lint、Prettier、前端 production build 均通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml`：106 PASS。
+- `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`：PASS。
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`：PASS。
+- `npm run tauri build`：PASS；当前 HEAD 生成 `src-tauri/target/release/bundle/nsis/NTU Course Assistant_1.3.1_x64-setup.exe`（52,573,905 bytes）及其 `.sig`（436 bytes），和 `src-tauri/target/release/bundle/msi/NTU Course Assistant_1.3.1_x64_en-US.msi`（54,550,528 bytes）及其 `.sig`（436 bytes）。构建产物留在忽略的 `src-tauri/target/`，没有启动 EXE、安装 installer 或访问用户数据库。
+- 曾有一个既有 timetable UI 测试在全量运行时 beforeEach 超时；单项复跑 PASS，随后完整 `npm run verify` 再跑一次全部 PASS。该间歇性 UI 启动延迟未通过改宽全局 timeout 掩盖。
+
+## 尚未执行 / 已知限制
+
+- 未提供或验证 AMap / Baidu production credential，因此没有真实 provider live 结果，也没有真实农村地点覆盖 PASS 结论。
+- 未进行 Windows 安装态或真实窗口 GUI 验收；未运行 build 出来的 EXE / installer。需 Ethan 配置 provider Key 并在 Windows 开发/安装态完成一次农村地点、重名地点、地图选点、当前位置、离线降级与天气预报的人工验收。
+- 无 AMap Key 时地图底图不可用，但手动坐标路径仍保留；当前不提供地图瓦片离线包。
+- QWeather 未采用；应用天气预报继续使用 Open-Meteo。Phase 4.8.1 Daily Summary 的 DeepSeek Live / Windows Manual 仍为 PENDING，本阶段没有改变其状态。
+- 未创建 tag、未 push、未发布 Release；没有新增 schema 或 migration。

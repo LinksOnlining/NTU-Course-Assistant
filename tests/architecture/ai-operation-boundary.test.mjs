@@ -224,7 +224,8 @@ test("API Key 仅有瞬态输入和专用凭据命令，不进入浏览器持久
   assert.doesNotMatch(settings, /apiKey|secret|credential/iu);
   assert.match(rust, /SERVICE_NAME: &str = "links-workplace\.ai"/u);
   assert.match(rust, /ACCOUNT_NAME: &str = "deepseek\.default"/u);
-  assert.match(rust, /keyring::Entry/u);
+  assert.match(rust, /secure_credentials::(?:set|get|delete)/u);
+  assert.doesNotMatch(rust, /keyring::Entry/u);
   assert.doesNotMatch(rust, /sqlite|rusqlite|courses\.sqlite/u);
   assert.doesNotMatch(rust, /println!|dbg!|tracing::/u);
 });

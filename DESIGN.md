@@ -218,3 +218,9 @@ schema 5 使用非破坏 migration 新增 `semesters`、`course_overrides`、`ac
 ## Links Workplace v2.0 — Workspace Dashboard Planner 集成
 
 Phase 2.6 的 Dashboard 由 Workspace Application composition 读取 Academic canonical occurrences、PlannerEvent、TimeBlock、AcademicTask 与 PersonalTask。当天时间轴只展示真实占时安排；任务截止日期不进入时间轴，个人任务只有关联的 TimeBlock 才显示为一段安排。任务摘要合并显示“个人 / 学业”来源并保留两种任务事实边界。Time Context 依据已解析安排及 Planner buffer 计算当前状态、空闲区间和下一项来源；buffer 不改变实际或展示起止时间。相关验证见 `docs/v2-phase-2.6-verification.md`。
+
+## Phase 4.8.2 Weather Location Resolver 2.0
+
+Weather 默认关闭，地点解析只在用户明确搜索或确认当前位置后发起。查询文本与候选解析留在 Rust；高德 Web 服务按意图调用行政区查询、输入提示、POI 与地理编码，未得到结果或主服务失败时可使用百度地点检索 / 地理编码，并把百度 BD-09 结果转换到应用内部 GCJ-02。候选经去重与排序后，仅最终选中的位置进入既有天气设置；搜索文本不作为历史记录持久化。AMap / Baidu 凭据通过既有 Windows Credential Manager 适配器读写，前端只接收“是否已配置”状态。
+
+天气预报仍使用 Open-Meteo 的经纬度接口；内部 GCJ-02 坐标在请求边界转换为 WGS84。静态地图图像由 Rust 侧使用高德 Web 服务取得，不把密钥放入 WebView。无地图凭据时，手动坐标入口仍可用。当前定位仍需用户显式同意并取得系统定位授权；上传位置坐标先做精度模糊化。Weather 与 AI Context 的权限边界不变：Daily Brief 仅可读取已有授权的天气缓存，不参与地点解析，也不读取 Diary / Inbox 私密正文。实现和自动验证记录见 `docs/v2-phase-4-8-2-weather-location-verification.md`。

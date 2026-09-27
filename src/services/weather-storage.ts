@@ -33,18 +33,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isWeatherLocation(value: unknown): value is WeatherLocation {
-  const precision = isRecord(value) ? value.precision : undefined;
-  const source = isRecord(value) ? value.source : undefined;
-  const optionalLocationMetadataIsValid =
-    isRecord(value) &&
-    ["country", "admin1", "admin2", "admin3", "admin4", "county", "street", "providerId"].every(
-      (key) => value[key] === undefined || typeof value[key] === "string",
-    );
-  return (
-    isRecord(value) &&
-    optionalLocationMetadataIsValid &&
-    (precision === undefined ||
-      [
+  return normalizeWeatherLocation(value) !== null;
+}
+
+export function normalizeWeatherLocation(value: unknown): WeatherLocation | null {
+  if (!isRecord(value)) return null;
+  const precision = value.precision;
+  const source = value.source;
+  const stringFields = [
+    "displayAddress",
+    "country",
+    "admin1",
+    "admin2",
+    "admin3",
+    "admin4",
+    "county",
+    "street",
+    "providerId",
+    "provider",
+    "type",
+  ];
+  if (
+    stringFields.some((key) => value[key] !== undefined && typeof value[key] !== "string") ||
+    (precision !== undefined &&
+      ![
         "house",
         "street",
         "locality",
@@ -57,20 +69,38 @@ export function isWeatherLocation(value: unknown): value is WeatherLocation {
         "region",
         "coordinatesOnly",
         "unknown",
-      ].includes(String(precision))) &&
-    (source === undefined || source === "manual" || source === "device") &&
-    typeof value.displayName === "string" &&
-    value.displayName.trim().length > 0 &&
-    typeof value.latitude === "number" &&
-    Number.isFinite(value.latitude) &&
-    value.latitude >= -90 &&
-    value.latitude <= 90 &&
-    typeof value.longitude === "number" &&
-    Number.isFinite(value.longitude) &&
-    value.longitude >= -180 &&
-    value.longitude <= 180 &&
-    (value.timezone === null || typeof value.timezone === "string")
-  );
+      ].includes(String(precision))) ||
+    (source !== undefined && source !== "manual" && source !== "device" && source !== "map") ||
+    (value.coordinateSystem !== undefined &&
+      value.coordinateSystem !== "gcj02" &&
+      value.coordinateSystem !== "wgs84") ||
+    typeof value.displayName !== "string" ||
+    value.displayName.trim().length === 0 ||
+    typeof value.latitude !== "number" ||
+    !Number.isFinite(value.latitude) ||
+    value.latitude < -90 ||
+    value.latitude > 90 ||
+    typeof value.longitude !== "number" ||
+    !Number.isFinite(value.longitude) ||
+    value.longitude < -180 ||
+    value.longitude > 180 ||
+    (value.timezone !== undefined && value.timezone !== null && typeof value.timezone !== "string")
+  ) {
+    return null;
+  }
+  const normalized: Record<string, unknown> = {
+    displayName: value.displayName.trim(),
+    latitude: value.latitude,
+    longitude: value.longitude,
+    coordinateSystem: value.coordinateSystem ?? "wgs84",
+    timezone: typeof value.timezone === "string" ? value.timezone : null,
+    source: source ?? "manual",
+  };
+  for (const key of stringFields) {
+    if (typeof value[key] === "string" && value[key].trim()) normalized[key] = value[key].trim();
+  }
+  if (typeof precision === "string") normalized.precision = precision;
+  return normalized as unknown as WeatherLocation;
 }
 
 export function loadWeatherSettings(storage = browserStorage()): WeatherSettings {
@@ -81,11 +111,20 @@ export function loadWeatherSettings(storage = browserStorage()): WeatherSettings
     if (!isRecord(parsed)) return DEFAULT_WEATHER_SETTINGS;
     const temperatureUnit: TemperatureUnit =
       parsed.temperatureUnit === "fahrenheit" ? "fahrenheit" : "celsius";
-    return {
+    const location = normalizeWeatherLocation(parsed.location);
+    const settings: WeatherSettings = {
       enabled: parsed.enabled === true,
-      location: isWeatherLocation(parsed.location) ? parsed.location : null,
+      location,
       temperatureUnit,
     };
+    if (location && JSON.stringify(parsed.location) !== JSON.stringify(location)) {
+      try {
+        storage?.setItem(WEATHER_SETTINGS_KEY, JSON.stringify(settings));
+      } catch {
+        // A legacy value is still usable when storage is temporarily read-only.
+      }
+    }
+    return settings;
   } catch {
     return DEFAULT_WEATHER_SETTINGS;
   }
@@ -96,15 +135,19 @@ export function saveWeatherSettings(
   storage = browserStorage(),
 ): boolean {
   try {
-    storage?.setItem(WEATHER_SETTINGS_KEY, JSON.stringify(settings));
+    const location = settings.location ? normalizeWeatherLocation(settings.location) : null;
+    if (settings.location && !location) return false;
+    storage?.setItem(WEATHER_SETTINGS_KEY, JSON.stringify({ ...settings, location }));
     return storage !== null;
   } catch {
     return false;
   }
 }
 
-function isWeatherSnapshot(value: unknown): value is WeatherSnapshot {
-  if (!isRecord(value) || !isWeatherLocation(value.location)) return false;
+function normalizeWeatherSnapshot(value: unknown): WeatherSnapshot | null {
+  if (!isRecord(value)) return null;
+  const location = normalizeWeatherLocation(value.location);
+  if (!location) return null;
   if (
     typeof value.fetchedAt !== "string" ||
     !Number.isFinite(Date.parse(value.fetchedAt)) ||
@@ -114,10 +157,10 @@ function isWeatherSnapshot(value: unknown): value is WeatherSnapshot {
     !Array.isArray(value.daily) ||
     value.daily.length !== 7
   ) {
-    return false;
+    return null;
   }
   const current = value.current;
-  return (
+  const valid =
     typeof current.time === "string" &&
     typeof current.temperatureCelsius === "number" &&
     (current.apparentTemperatureCelsius === null ||
@@ -143,8 +186,8 @@ function isWeatherSnapshot(value: unknown): value is WeatherSnapshot {
         (item.precipitationProbability === null ||
           typeof item.precipitationProbability === "number") &&
         typeof item.weatherCode === "number",
-    )
-  );
+    );
+  return valid ? ({ ...value, location } as unknown as WeatherSnapshot) : null;
 }
 
 export function loadWeatherCache(storage = browserStorage()): WeatherSnapshot | null {
@@ -152,11 +195,19 @@ export function loadWeatherCache(storage = browserStorage()): WeatherSnapshot | 
     const raw = storage?.getItem(WEATHER_CACHE_KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    if (!isWeatherSnapshot(parsed)) {
+    const snapshot = normalizeWeatherSnapshot(parsed);
+    if (!snapshot) {
       storage?.removeItem(WEATHER_CACHE_KEY);
       return null;
     }
-    return parsed;
+    if (isRecord(parsed) && JSON.stringify(parsed.location) !== JSON.stringify(snapshot.location)) {
+      try {
+        storage?.setItem(WEATHER_CACHE_KEY, JSON.stringify(snapshot));
+      } catch {
+        // Keep the valid in-memory cache even when migration cannot be persisted.
+      }
+    }
+    return snapshot;
   } catch {
     try {
       storage?.removeItem(WEATHER_CACHE_KEY);
@@ -169,7 +220,9 @@ export function loadWeatherCache(storage = browserStorage()): WeatherSnapshot | 
 
 export function saveWeatherCache(snapshot: WeatherSnapshot, storage = browserStorage()): boolean {
   try {
-    storage?.setItem(WEATHER_CACHE_KEY, JSON.stringify(snapshot));
+    const location = normalizeWeatherLocation(snapshot.location);
+    if (!location) return false;
+    storage?.setItem(WEATHER_CACHE_KEY, JSON.stringify({ ...snapshot, location }));
     return storage !== null;
   } catch {
     return false;

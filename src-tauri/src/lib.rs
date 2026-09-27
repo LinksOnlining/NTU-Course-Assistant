@@ -4,6 +4,7 @@ mod geocoding;
 mod models;
 mod notification;
 mod scheduler;
+mod secure_credentials;
 
 use std::{
     path::{Path, PathBuf},
@@ -1310,7 +1311,12 @@ pub fn run() {
             delete_routine,
             confirm_routine_suggestion,
             geocoding::search_weather_location,
+            geocoding::cancel_weather_location_search,
             geocoding::reverse_geocode_weather_location,
+            geocoding::get_weather_map_image,
+            geocoding::get_weather_credential_status,
+            geocoding::set_weather_provider_key,
+            geocoding::delete_weather_provider_key,
             load_time_blocks,
             load_time_blocks_for_task,
             create_time_block,

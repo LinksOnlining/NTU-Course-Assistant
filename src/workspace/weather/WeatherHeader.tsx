@@ -155,8 +155,7 @@ export function WeatherHeader({ weather }: WeatherHeaderProps) {
                 ))}
               </div>
               <p className="weather-attribution">
-                天气数据由 Open-Meteo 提供（CC BY 4.0）；地点由 Photon 解析，必要时使用 Nominatim。
-                地图数据 © OpenStreetMap contributors。
+                天气数据由 Open-Meteo 提供（CC BY 4.0）；地点与地图由高德服务提供。
               </p>
             </>
           ) : (

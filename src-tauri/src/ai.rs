@@ -1,5 +1,6 @@
 use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::Duration};
 
+use crate::secure_credentials;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::State;
@@ -273,33 +274,20 @@ trait CredentialStore: Send + Sync {
 struct SystemCredentialStore;
 
 #[cfg(target_os = "windows")]
-impl SystemCredentialStore {
-    fn entry() -> Result<keyring::Entry, CredentialError> {
-        keyring::Entry::new(SERVICE_NAME, ACCOUNT_NAME).map_err(|_| CredentialError::Unavailable)
-    }
-}
-
-#[cfg(target_os = "windows")]
 impl CredentialStore for SystemCredentialStore {
     fn set(&self, secret: &str) -> Result<(), CredentialError> {
-        Self::entry()?
-            .set_password(secret)
+        secure_credentials::set(SERVICE_NAME, ACCOUNT_NAME, secret)
             .map_err(|_| CredentialError::Unavailable)
     }
 
     fn get(&self) -> Result<Option<String>, CredentialError> {
-        match Self::entry()?.get_password() {
-            Ok(secret) => Ok(Some(secret)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(_) => Err(CredentialError::Unavailable),
-        }
+        secure_credentials::get(SERVICE_NAME, ACCOUNT_NAME)
+            .map_err(|_| CredentialError::Unavailable)
     }
 
     fn delete(&self) -> Result<(), CredentialError> {
-        match Self::entry()?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(_) => Err(CredentialError::Unavailable),
-        }
+        secure_credentials::delete(SERVICE_NAME, ACCOUNT_NAME)
+            .map_err(|_| CredentialError::Unavailable)
     }
 }
 

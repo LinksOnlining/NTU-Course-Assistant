@@ -7,6 +7,7 @@ import type {
   WeatherRequestSignal,
   WeatherSnapshot,
 } from "../types/weather.ts";
+import { openMeteoCoordinates } from "../core/weather-coordinate.ts";
 
 type JsonRecord = Record<string, unknown>;
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -151,9 +152,10 @@ async function getJson(
 export function createOpenMeteoProvider(fetcher: FetchLike = fetch): ForecastProvider {
   return {
     async fetchForecast(location, signal) {
+      const coordinates = openMeteoCoordinates(location);
       const url = new URL("https://api.open-meteo.com/v1/forecast");
-      url.searchParams.set("latitude", String(location.latitude));
-      url.searchParams.set("longitude", String(location.longitude));
+      url.searchParams.set("latitude", String(coordinates.latitude));
+      url.searchParams.set("longitude", String(coordinates.longitude));
       url.searchParams.set("timezone", location.timezone ?? "auto");
       url.searchParams.set("forecast_days", "7");
       url.searchParams.set("forecast_hours", "48");

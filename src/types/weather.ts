@@ -1,7 +1,9 @@
 export interface WeatherLocation {
   readonly displayName: string;
+  readonly displayAddress?: string;
   readonly latitude: number;
   readonly longitude: number;
+  readonly coordinateSystem: WeatherCoordinateSystem;
   readonly timezone: string | null;
   /** Provider-reported hierarchy; selected street names may be retained, never house numbers. */
   readonly country?: string;
@@ -12,9 +14,13 @@ export interface WeatherLocation {
   readonly county?: string;
   readonly street?: string;
   readonly providerId?: string;
+  readonly provider?: string;
+  readonly type?: string;
   readonly precision?: WeatherLocationPrecision;
-  readonly source?: "manual" | "device";
+  readonly source?: "manual" | "device" | "map";
 }
+
+export type WeatherCoordinateSystem = "gcj02" | "wgs84";
 
 export type WeatherLocationPrecision =
   | "house"
@@ -31,7 +37,11 @@ export type WeatherLocationPrecision =
   | "unknown";
 
 export interface LocationSearchProvider {
-  searchLocation(query: string, signal?: WeatherRequestSignal): Promise<readonly WeatherLocation[]>;
+  searchLocation(
+    query: string,
+    signal?: WeatherRequestSignal,
+    adminHint?: string,
+  ): Promise<readonly WeatherLocation[]>;
 }
 
 export interface ForecastProvider {
@@ -52,6 +62,12 @@ export type WorkspaceWeatherProvider = WeatherProvider & ReverseGeocodingProvide
 
 export type WeatherErrorCategory =
   | "geocodingUnavailable"
+  | "locationProvidersNotConfigured"
+  | "locationProviderRateLimited"
+  | "weatherCredentialUnavailable"
+  | "credentialStoreUnavailable"
+  | "locationProvidersUnavailable"
+  | "mapUnavailable"
   | "reverseGeocodingUnavailable"
   | "forecastUnavailable"
   | "permissionDenied"

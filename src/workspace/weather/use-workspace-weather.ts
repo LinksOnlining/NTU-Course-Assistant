@@ -12,6 +12,7 @@ import {
   saveWeatherCache,
   saveWeatherSettings,
 } from "../../application/weather/weather-storage.ts";
+import { normalizeWeatherCoordinate } from "../../core/weather-coordinate.ts";
 import type {
   TemperatureUnit,
   WeatherLocation,
@@ -21,6 +22,7 @@ import type {
   WeatherViewState,
   WeatherLocationRequestState,
   WeatherErrorCategory,
+  WeatherCoordinateSystem,
   WorkspaceWeatherProvider,
 } from "../../types/weather.ts";
 import { weatherErrorCategory, weatherErrorMessage } from "./weather-errors.ts";
@@ -32,8 +34,14 @@ export interface WorkspaceWeatherController {
   readonly locationRequestState: WeatherLocationRequestState;
   readonly isRefreshing: boolean;
   readonly storageWarning: string;
-  readonly searchLocation: (query: string) => Promise<void>;
+  readonly searchLocation: (query: string, adminHint?: string) => Promise<void>;
   readonly selectLocation: (location: WeatherLocation) => void;
+  readonly selectCoordinates: (
+    latitude: number,
+    longitude: number,
+    coordinateSystem: WeatherCoordinateSystem,
+    source: "manual" | "map",
+  ) => Promise<void>;
   readonly useCurrentLocation: () => Promise<void>;
   readonly setEnabled: (enabled: boolean) => void;
   readonly setTemperatureUnit: (unit: TemperatureUnit) => void;
@@ -202,14 +210,18 @@ export function useWorkspaceWeather(
   }, [settings.enabled, locationKey, refreshLocation]);
 
   const searchLocation = useCallback(
-    async (query: string) => {
+    async (query: string, adminHint?: string) => {
       if (!settings.enabled || !query.trim()) return;
       searchController.current?.abort();
       const controller = new AbortController();
       searchController.current = controller;
       setSearchState({ kind: "searching" });
       try {
-        const locations = await provider.searchLocation(query.trim(), controller.signal);
+        const locations = await provider.searchLocation(
+          query.trim(),
+          controller.signal,
+          adminHint?.trim() || undefined,
+        );
         if (!controller.signal.aborted) setSearchState({ kind: "results", locations });
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -243,6 +255,49 @@ export function useWorkspaceWeather(
     [persistSettings, settings],
   );
 
+  const selectCoordinates = useCallback(
+    async (
+      latitude: number,
+      longitude: number,
+      coordinateSystem: WeatherCoordinateSystem,
+      source: "manual" | "map",
+    ) => {
+      if (
+        !Number.isFinite(latitude) ||
+        latitude < -90 ||
+        latitude > 90 ||
+        !Number.isFinite(longitude) ||
+        longitude < -180 ||
+        longitude > 180
+      ) {
+        setLocationRequestState({
+          kind: "error",
+          category: "invalidProviderRequest",
+          message: "经纬度超出有效范围。",
+        });
+        return;
+      }
+      const coordinates = normalizeWeatherCoordinate(latitude, longitude, coordinateSystem);
+      const fallbackName = source === "map" ? "地图选定位置" : "手动坐标";
+      const selected: WeatherLocation = {
+        displayName: fallbackName,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        coordinateSystem: coordinates.coordinateSystem,
+        timezone: null,
+        precision: "coordinatesOnly",
+        source,
+        provider: source,
+      };
+      selectLocation(selected);
+      setLocationRequestState({
+        kind: "notice",
+        message: `${fallbackName}已保存；正在按坐标更新天气。`,
+      });
+    },
+    [provider, selectLocation],
+  );
+
   const useCurrentLocation = useCallback(async () => {
     if (!settings.enabled) return;
     const generation = ++locationGeneration.current;
@@ -274,12 +329,13 @@ export function useWorkspaceWeather(
         });
         return;
       }
-      const latitude = roundedWeatherCoordinate(rawLatitude);
-      const longitude = roundedWeatherCoordinate(rawLongitude);
+      const privacyLatitude = roundedWeatherCoordinate(rawLatitude);
+      const privacyLongitude = roundedWeatherCoordinate(rawLongitude);
+      const coordinates = normalizeWeatherCoordinate(privacyLatitude, privacyLongitude, "wgs84");
       setLocationRequestState({ kind: "resolving" });
       let resolved: WeatherLocation | null = null;
       try {
-        resolved = await provider.reverseGeocode(latitude, longitude);
+        resolved = await provider.reverseGeocode(coordinates.latitude, coordinates.longitude);
       } catch {
         // Forecast may still use the selected coordinates without inventing a place name.
       }
@@ -290,8 +346,9 @@ export function useWorkspaceWeather(
           timezone: null,
           precision: "coordinatesOnly" as const,
         }),
-        latitude,
-        longitude,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        coordinateSystem: coordinates.coordinateSystem,
         source: "device",
       };
       selectLocation(selected);
@@ -352,6 +409,7 @@ export function useWorkspaceWeather(
     storageWarning,
     searchLocation,
     selectLocation,
+    selectCoordinates,
     useCurrentLocation,
     setEnabled,
     setTemperatureUnit,
