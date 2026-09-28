@@ -8,7 +8,7 @@
 - Phase 4.8：**COMPLETE**
 - Phase 4.8.1 Daily Summary：**DE-SCOPED / REMOVED**
 - Phase 4.8.2 Weather：用户确认 Implementation、Automated、AMap Live、Map Picker Live、Windows Manual 均 **PASS**；Overall **COMPLETE**
-- Phase 4.9：Implementation / Hardening **COMPLETE**；Automated **PASS**；Live DeepSeek 与 Windows Manual **PENDING**；Overall **PENDING**。Phase 5：**NOT STARTED**。
+- Phase 4.9：Implementation / Hardening **COMPLETE**；Automated **PASS**；Live DeepSeek 与 Windows Manual **PASS（Ethan 于 2026-09-28 确认）**；Overall **COMPLETE**。Phase 5.0：**BLOCKED**（发布数据基线不一致）；Phase 5.1：**NOT STARTED**。
 
 ## Daily Summary 移除边界
 
@@ -25,21 +25,23 @@
 
 ## 最终 AI 能力 / 安全回归台账
 
-| 范围 | 自动回归 | 真实 Live / Windows |
+> Ethan 于 2026-09-28 确认本阶段真实 DeepSeek 与 Windows 人工验收全部 PASS。没有收到逐项操作日志，因此下表记录阶段级用户确认，不表示 Codex 在本次收尾中独立重跑或掌握逐项结果。
+
+| 范围 | 自动回归 | Live / Windows 阶段级用户确认（未逐项日志化） |
 |---|---|---|
-| Provider GET `/models`、text、structured、tool calling | PASS（自动门禁） | PENDING；不得以 mock 记作 live |
-| Timeout、network、401、429、5xx、invalid response | PASS（自动门禁） | PENDING（真实错误码若未实际触发则注明模拟） |
-| Credential Manager 存储、frontend 不回传 secret、日志脱敏 | PASS（自动门禁） | PENDING |
-| Persistent permissions 默认拒绝、关闭后不投影数据 | PASS（自动门禁） | PENDING |
-| Sensitive Diary/Inbox consent 的 object/request/single-use 绑定 | PASS（自动门禁） | PENDING |
-| Context 最小化、预算、Diary/Inbox raw 隔离、Weather 权限 | PASS（自动门禁） | PENDING |
-| Diary/Inbox/业务文本 Prompt Injection | PASS（自动门禁） | PENDING |
-| Read tools 校验与无隐藏写入 | PASS（自动门禁） | PENDING |
-| Task/Event/TimeBlock Proposal → Preview → Revalidate → Confirm → Application UseCase | PASS（自动门禁） | PENDING |
-| TimeBlock 不改变 Task Deadline；未来日期与模糊时间 | PASS（自动门禁） | PENDING |
-| Daily Brief opt-in、每日 gate、本地 fallback、无历史总结 | PASS（自动门禁） | PENDING |
+| Provider GET `/models`、text、structured、tool calling | PASS（自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
+| Timeout、network、401、429、5xx、invalid response | PASS（自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
+| Credential Manager 存储、frontend 不回传 secret、日志脱敏 | PASS（自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
+| Persistent permissions 默认拒绝、关闭后不投影数据 | PASS（自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
+| Sensitive Diary/Inbox consent 的 object/request/single-use 绑定 | PASS（自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
+| Context 最小化、预算、Diary/Inbox raw 隔离、Weather 权限 | PASS（自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
+| Diary/Inbox/业务文本 Prompt Injection | PASS（自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
+| Read tools 校验与无隐藏写入 | PASS（自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
+| Task/Event/TimeBlock Proposal → Preview → Revalidate → Confirm → Application UseCase | PASS（自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
+| TimeBlock 不改变 Task Deadline；未来日期与模糊时间 | PASS（自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
+| Daily Brief opt-in、每日 gate、本地 fallback、无历史总结 | PASS（自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
 | Weather / 位置隐私 / offline cache | Phase 4.8.2 验收已由 Ethan 确认 PASS；Phase 4.9 自动回归待记录 | 既有 Phase 4.8.2 Live / Manual PASS；Phase 4.9 不重复声称新验收 |
-| Light / Dark、多窗口尺寸、frameless window | PASS（Playwright 自动门禁） | PENDING（Windows GUI） |
+| Light / Dark、多窗口尺寸、frameless window | PASS（Playwright 自动门禁） | 未提供逐项日志；阶段级人工验收 PASS |
 
 ## Phase 4.9 Live DeepSeek 清单
 
@@ -54,7 +56,7 @@
 - Daily Brief
 - 无 Key、离线、timeout、401、429、5xx、invalid response、权限撤销、stale proposal、重复确认与 Prompt Injection
 
-**当前状态：PENDING。**
+**阶段级最终验收：PASS（Ethan 确认）。** 个别错误注入场景未获得逐项实测日志时，不在本文件中伪造单项证据。
 
 ## 最终门禁结果
 
@@ -67,19 +69,19 @@
 - `cargo clippy --all-targets -- -D warnings`：PASS
 - `npm run tauri build`：PASS；仓库内既有 release EXE 被运行中的进程占用，未终止该进程，改用隔离的临时 Cargo target directory 完成构建。产物：`ntu-course-assistant.exe`（68,264,960 bytes）、`NTU Course Assistant_1.3.1_x64_en-US.msi`（54,476,800 bytes）、`NTU Course Assistant_1.3.1_x64-setup.exe`（52,401,813 bytes），以及 MSI / NSIS 各自的 `.sig`（各 436 bytes）。未运行 EXE、未安装 MSI/NSIS。
 
-Windows 真实 GUI 人工验收：**PENDING**。自动浏览器测试不等同于 Windows WebView / frameless 窗口人工验收。
+Windows 真实 GUI 人工验收：**PASS（Ethan 于 2026-09-28 确认）**。自动浏览器测试本身不等同于 Windows WebView / frameless 窗口人工验收；本结论来自用户人工验收。
 
 ## 阶段状态
 
 - Phase 4.9 Implementation / Hardening：COMPLETE。
 - Phase 4.9 Automated：PASS。
-- Phase 4.9 DeepSeek Live：PENDING。
-- Phase 4.9 Windows Manual：PENDING。
-- Phase 4.9 Overall：PENDING。
-- Phase 5：NOT STARTED。
+- Phase 4.9 DeepSeek Live：PASS（Ethan 确认）。
+- Phase 4.9 Windows Manual：PASS（Ethan 确认）。
+- Phase 4.9 Overall：COMPLETE。
+- Phase 5.0：BLOCKED；Phase 5.1：NOT STARTED。
 - Push / Tag / Release：本阶段不执行。
 
 ## 本轮小型 UI polish
 
 - 主界面 AI 助手标题由“AI 助手 ✨”改为“AI 助手”；仅去除装饰星光，不改变 AI 功能或交互。
-- 本轮未进行 Windows GUI / DeepSeek Live 验收，因此相关状态仍为 PENDING。
+- 本次收尾根据 Ethan 的明示确认记录 Live DeepSeek 与 Windows 人工验收 PASS；本轮没有重复运行 GUI 或 DeepSeek 调用，也没有逐项日志可独立归档。

@@ -6,7 +6,7 @@
 
 - 当前 v2 产品需求单一事实来源：[`PROJECT_BRIEF.md`](PROJECT_BRIEF.md)。
 - 当前 v2 架构及依赖方向契约：[`docs/v2-architecture-contract.md`](docs/v2-architecture-contract.md)。
-- Phase 3.8.2 与 Phase 3.9 已通过各自验收。Phase 4.0–4.7-P COMPLETE；Phase 4.8 Core COMPLETE；Phase 4.8.2 Weather 用户确认 Implementation / Automated / AMap Live / Map Picker Live / Windows Manual 均 PASS。用户决定从 v2 产品中移除 Daily Summary：Phase 4.8.1 标记 DE-SCOPED / REMOVED；schema=8 与 migration history 保留，`daily_summaries` 为 dormant / unused legacy schema，不再有运行时读写、UI、workflow、设置或 AI context。本轮 migration=0。Phase 4.8 Overall COMPLETE。Phase 4.9 AI Final Acceptance 的 Implementation / Hardening 与自动门禁已完成；DeepSeek Live 与 Windows Manual 仍待实际验收，Overall PENDING。Phase 5 NOT STARTED。主窗口无原生装饰、默认最大化（非 fullscreen），不拦截标准关闭事件。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md)、[`docs/v2-phase-4-7-verification.md`](docs/v2-phase-4-7-verification.md)、[`docs/v2-phase-4-8-verification.md`](docs/v2-phase-4-8-verification.md)、[`docs/v2-phase-4-8-daily-summary-verification.md`](docs/v2-phase-4-8-daily-summary-verification.md) 与 [`docs/v2-phase-4-9-final-ai-acceptance.md`](docs/v2-phase-4-9-final-ai-acceptance.md)。
+- Phase 3.8.2 与 Phase 3.9 已通过各自验收。Phase 4.0–4.7-P COMPLETE；Phase 4.8 Core COMPLETE；Phase 4.8.2 Weather 用户确认 Implementation / Automated / AMap Live / Map Picker Live / Windows Manual 均 PASS。用户决定从 v2 产品中移除 Daily Summary：Phase 4.8.1 标记 DE-SCOPED / REMOVED；schema=8 与 migration history 保留，`daily_summaries` 为 dormant / unused legacy schema，不再有运行时读写、UI、workflow、设置或 AI context。本轮 migration=0。Phase 4.8 Overall COMPLETE。Phase 4.9 AI Final Acceptance 的 Implementation、Automated、DeepSeek Live 与 Windows Manual 均已完成 / PASS（Live 由 Ethan 确认）。Phase 5.0 Release Preflight 因公开 v1.3.1 schema 5、本机安装态 1.3.0、当前旧 identity DB schema 8 无法映射为已确认迁移源而 BLOCKED；Phase 5.1 NOT STARTED。主窗口无原生装饰、默认最大化（非 fullscreen），不拦截标准关闭事件。详见 [`docs/v2-ai-architecture-contract.md`](docs/v2-ai-architecture-contract.md)、[`docs/v2-phase-4-7-verification.md`](docs/v2-phase-4-7-verification.md)、[`docs/v2-phase-4-8-verification.md`](docs/v2-phase-4-8-verification.md)、[`docs/v2-phase-4-8-daily-summary-verification.md`](docs/v2-phase-4-8-daily-summary-verification.md) 与 [`docs/v2-phase-4-9-final-ai-acceptance.md`](docs/v2-phase-4-9-final-ai-acceptance.md)。
 - 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。
 
 ## 技术方案
@@ -224,3 +224,13 @@ Phase 2.6 的 Dashboard 由 Workspace Application composition 读取 Academic ca
 Weather 默认关闭，地点解析只在用户明确搜索或确认当前位置后发起。查询文本与候选解析留在 Rust；高德 Web 服务按意图调用行政区查询、输入提示、POI 与地理编码，未得到结果或主服务失败时可使用百度地点检索 / 地理编码，并把百度 BD-09 结果转换到应用内部 GCJ-02。候选经去重与排序后，仅最终选中的位置进入既有天气设置；搜索文本不作为历史记录持久化。AMap / Baidu 凭据通过既有 Windows Credential Manager 适配器读写，前端只接收“是否已配置”状态。
 
 天气预报仍使用 Open-Meteo 的经纬度接口；内部 GCJ-02 坐标在请求边界转换为 WGS84。静态地图图像由 Rust 侧使用高德 Web 服务取得，不把密钥放入 WebView。无地图凭据时，手动坐标入口仍可用。当前定位仍需用户显式同意并取得系统定位授权；上传位置坐标先做精度模糊化。Weather 与 AI Context 的权限边界不变：Daily Brief 仅可读取已有授权的天气缓存，不参与地点解析，也不读取 Diary / Inbox 私密正文。实现和自动验证记录见 `docs/v2-phase-4-8-2-weather-location-verification.md`。
+
+## Links Workplace 2.0 — Release Identity Migration
+
+Phase 5.0 只做只读预检。当前 Tauri identifier 为 `com.ntu-course-assistant.desktop`，release DB 位于 `%LOCALAPPDATA%\com.ntu-course-assistant.desktop\courses.sqlite3`；debug 构建使用同一 app-local 根路径下的 `dev-v2\courses.sqlite3`。目标候选 identifier `com.links.workplace.desktop` 会导向新的 app-local 数据目录，因此不能期待 DB 或 WebView localStorage 自动共享。
+
+Phase 5.0 的 Windows 审计发现：公开 v1.3.1 tag 源码使用 schema 5，本机卸载注册表仍记录 1.3.0，但旧 identifier 根路径现有 DB 为 schema 8。该 DB 的来源未获证实，不能称为未迁移的公开 v1.3.1 DB。故 Phase 5.0 BLOCKED，Phase 5.1 NOT STARTED；未经用户确认来源前，不得对真实 DB 迁移。详细路径、完整性、安装器、updater、凭据与迁移策略见 `docs/v2-phase-5-0-release-preflight.md`。
+
+新身份迁移的安全边界：先用匿名 schema 5 / schema 8 fixture 和隔离安装测试；真实迁移前创建 SQLite 一致性备份，staging 中迁移并验证后再激活，旧 DB 保留可回滚；新旧路径同时存在时安全停止。AI 数据授权不迁移，天气缓存不迁移；Credential Manager 的 service/account 标识若保持不变则不需复制 secret。
+
+Tauri 官方配置说明 identifier 参与应用目录解析；MSI 未显式固定的 UpgradeCode 默认受 ProductName 影响。更名时必须同时验证 NSIS/MSI 的升级、卸载、快捷方式与数据迁移行为；本阶段没有改变配置。
