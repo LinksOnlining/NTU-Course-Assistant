@@ -6,7 +6,9 @@ async function openAISettings(
 ) {
   if (options.viewport) await page.setViewportSize(options.viewport);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Links Workplace" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Links Workplace" })).toBeVisible({
+    timeout: 15_000,
+  });
   await page.getByRole("button", { name: "设置" }).click();
   const settings = page.getByRole("dialog", { name: "设置" });
   await page.evaluate((shouldFail) => {

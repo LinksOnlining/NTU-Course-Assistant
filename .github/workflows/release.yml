@@ -49,16 +49,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: NTU Course Assistant ${{ github.ref_name }}
+          releaseName: Links Workplace ${{ github.ref_name }}
           releaseBody: |
-            ### 修复
+            ### Links Workplace
 
-            - PDF 导入的按节次课程现在以课程节次作为时间事实来源。
-            - 修改作息后，已有按节次课程会立即按新时间显示，无需重新导入或重启。
-            - 固定钟点课程不受影响；换教室、调课、补课与停课继续遵循各自的时间语义。
+            Links Workplace 是 NTU Course Assistant 的后续版本。本次构建资产仅用于对应版本的验收；请以 Release 页面提供的版本说明为准。
 
-            Windows 10 是主要验收环境。首选下载 NSIS setup.exe；当前版本未进行 Windows Authenticode 商业代码签名。
-          releaseDraft: false
+            Windows 构建目前未进行 Authenticode 商业代码签名，可能显示未知发布者或 SmartScreen 提示。
+          releaseDraft: true
           prerelease: false
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true

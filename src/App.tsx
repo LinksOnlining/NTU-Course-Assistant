@@ -711,7 +711,7 @@ export function App() {
     currentRoute.area !== "academic"
       ? undefined
       : currentRoute.page === "schedule"
-        ? "大学课程表"
+        ? "课表"
         : currentRoute.page === "changes"
           ? "课程变化"
           : currentRoute.page === "tasks-legacy"

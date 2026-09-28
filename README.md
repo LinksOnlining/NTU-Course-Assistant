@@ -1,8 +1,8 @@
-# NTU Course Assistant
+# Links Workplace
 
-Windows 10 本地课程表与学习中心：管理课程、课表变化、任务、考试，导入已支持的南通大学课表 PDF，并在上课前发送提醒。
+面向 Windows 的本地个人工作台，包含课程表、Planner、Diary、Inbox、天气和可选 AI 能力。Links Workplace 2.0 在本仓库内从 NTU Course Assistant 渐进演进，不创建第二套课程数据库。
 
-当前稳定版本：**v1.3.1**
+> **版本说明：**Links Workplace 2.0.0 当前处于开发与迁移验收阶段，尚未发布。当前公开稳定版本仍为 **NTU Course Assistant v1.3.1**；下方安装链接仅适用于该旧版，不代表 Links Workplace 2.0 可安装或已完成升级验收。
 
 ## 主要功能
 
@@ -19,7 +19,7 @@ Windows 10 本地课程表与学习中心：管理课程、课表变化、任务
 ## 系统要求与安装
 
 - Windows 10 是当前主要实际运行与验收环境，Windows 11 作为兼容目标。
-- 从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 下载 `NTU.Course.Assistant_1.3.1_x64-setup.exe`，按安装向导完成安装后，从开始菜单启动应用。当前版本未进行 Windows Authenticode 商业代码签名，Windows 可能显示未知发布者提示。
+- 当前公开版可从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 下载 `NTU.Course.Assistant_1.3.1_x64-setup.exe`。Links Workplace 2.0 安装包尚未发布；本阶段不执行安装、卸载或旧版升级。
 - 首次使用请在“设置”中确认作息时间、学期首周和提醒选项。
 
 ## 使用说明
@@ -42,7 +42,7 @@ Windows 10 本地课程表与学习中心：管理课程、课表变化、任务
 
 ## 隐私
 
-课程数据、PDF 文字提取和 OCR 均在本机处理。课程数据保存于 Tauri 应用本地数据目录的 SQLite 数据库；应用没有账号系统、云同步或服务器上传功能。
+课程数据和 PDF 文字提取 / OCR 在本机处理，并保存于 Tauri app-local 目录中的 SQLite 数据库。应用没有云同步或账号系统。天气请求会访问配置的天气/地理编码服务；使用 AI 时，用户明确授权提供给该工作流的上下文会发送到已配置的 AI 服务。API 凭据保存在 Windows 安全凭据存储中，不写入 SQLite。
 
 ## 已知限制
 

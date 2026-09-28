@@ -3,6 +3,7 @@ mod db;
 mod geocoding;
 mod models;
 mod notification;
+mod release_data_migration;
 mod scheduler;
 mod secure_credentials;
 
@@ -21,6 +22,7 @@ use models::{
     PeriodTime, PersonalTask, PlannerEvent, ReminderSettings, Routine, Semester, TermConfig,
     TimeBlock, WidgetSettings, WidgetSettingsPatch,
 };
+use release_data_migration::{InitializationOutcome, LINKS_PRODUCT_NAME};
 use serde::Serialize;
 use tauri::{
     image::Image,
@@ -1125,7 +1127,7 @@ fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let icon = Image::from_bytes(include_bytes!("../icons/tray/tray-icon.png"))?;
     TrayIconBuilder::with_id("main-tray")
         .icon(icon)
-        .tooltip("大学课程表")
+        .tooltip(LINKS_PRODUCT_NAME)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -1170,28 +1172,64 @@ pub fn run() {
         .setup(|app| {
             let course_state = match app.path().app_local_data_dir() {
                 Ok(directory) => {
-                    let path = database_path_for_build(&directory);
-                    match CourseDatabase::open(&path) {
-                        Ok(database) => {
-                            match database.schema_version() {
-                                Ok(version) => eprintln!(
-                                    "Course database ready at {} (schema {version})",
-                                    path.display()
-                                ),
-                                Err(error) => {
-                                    eprintln!("Course database schema read failed: {error}")
+                    let path = if cfg!(debug_assertions) {
+                        Ok(database_path_for_build(&directory))
+                    } else {
+                        app.path()
+                            .local_data_dir()
+                            .map_err(|_| "本地应用数据目录不可用。".to_string())
+                            .and_then(|local_data| {
+                                release_data_migration::prepare_release_database(
+                                    &directory,
+                                    &local_data,
+                                )
+                                .map(|outcome| {
+                                    match outcome {
+                                        InitializationOutcome::Fresh => eprintln!(
+                                            "[migration] source_class=NONE source_schema=none stage=discovery result=fresh"
+                                        ),
+                                        InitializationOutcome::Existing => eprintln!(
+                                            "[migration] source_class=NEW_IDENTIFIER_SCHEMA_8 source_schema=8 stage=discovery result=existing"
+                                        ),
+                                        InitializationOutcome::Migrated(report) => {
+                                            let backup_ok = report.backup_path.is_file();
+                                            eprintln!(
+                                                "[migration] source_class={} source_schema={} target_schema={} migration_count={} stage=activation result=success backup_verified={backup_ok}",
+                                                report.source_class.label(),
+                                                report.source_schema,
+                                                report.target_schema,
+                                                report.schema_migrations
+                                            );
+                                            #[cfg(not(test))]
+                                            let _ = report.rows;
+                                        }
+                                    }
+                                    database_path_for_build(&directory)
+                                })
+                                .map_err(|error| {
+                                    eprintln!("{}", error.log_line());
+                                    error.to_string()
+                                })
+                            })
+                    };
+                    match path {
+                        Ok(path) => match CourseDatabase::open(&path) {
+                            Ok(database) => {
+                                match database.schema_version() {
+                                    Ok(version) => eprintln!(
+                                        "Course database ready (schema {version})"
+                                    ),
+                                    Err(_) => eprintln!("Course database schema read failed"),
                                 }
+                                drop(database);
+                                CourseState::ready(path)
                             }
-                            drop(database);
-                            CourseState::ready(path)
-                        }
-                        Err(error) => {
-                            eprintln!(
-                                "Course database initialization failed at {}: {error}",
-                                path.display()
-                            );
-                            CourseState::unavailable(initialization_message(&error))
-                        }
+                            Err(error) => {
+                                eprintln!("Course database initialization failed");
+                                CourseState::unavailable(initialization_message(&error))
+                            }
+                        },
+                        Err(message) => CourseState::unavailable(message),
                     }
                 }
                 Err(error) => {

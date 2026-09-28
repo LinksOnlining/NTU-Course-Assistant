@@ -5,7 +5,7 @@
 ## 1. Product
 
 - **Name:** Links Workplace
-- **Version target:** 2.0
+- **Version target:** 2.0.0
 - **Platform:** Windows 10 first for product compatibility; v2 development and primary manual acceptance run on Windows 11 Pro.
 - **Evolution:** NTU Course Assistant → Links Workplace, in-place within this repository and existing application.
 
@@ -85,8 +85,9 @@ Clean Minimal Desktop Workspace：清晰、安静、高信息密度、不拥挤�
 ## 16. Technical / Data / Network Constraints
 
 - 继续使用现有 Tauri 2 + React + TypeScript + Rust + SQLite 应用和同一用户数据，不创建第二个 Academic DB。
-- 技术 identifier `com.ntu-course-assistant.desktop` 和 `courses.sqlite3` 保持不变；GitHub repo / updater source 在专门迁移任务前保持不变。品牌名与技术身份不得混为一谈。
-- 当前 SQLite schema 为 7。未来 Workspace tables 复用同一 DB；任何 schema bump 必须先完成 migration backup/recovery gate。Phase 4 AI 设计只允许评审一次 `7 → 8` migration，API Key 必须在系统安全凭据存储中，绝不进入 SQLite 或备份。UI 不直连 DB，Workspace 不绕过 Application API 访问 Academic 内部表。
+- 正式 v2 身份为 Product `Links Workplace`、Version `2.0.0`、Tauri identifier `com.links.workplace.desktop`；旧 `com.ntu-course-assistant.desktop` 与 `courses.sqlite3` 是获准的数据迁移源，GitHub repo / updater endpoint 保持不变。品牌名与数据身份不得混为一谈。
+- 当前 SQLite schema 为 8。Phase 5.1 获批支持旧 identifier 根数据库 schema 5/6/7/8，按已有 migration chain 迁移到 schema 8；旧源先备份、再对副本迁移并校验后激活。新旧库同时存在且没有匹配完成标记时安全停止，不合并、不按时间或大小覆盖。`dev-v2` 永远不是迁移源。此身份迁移不新增 schema。
+- SQLite `app_settings` 随获选数据库整体保留；不复制 WebView `localStorage`、缓存、AI 权限授权、临时状态或任何 secret。Daily Brief / Weather 本地偏好不跨身份迁移，除非另有明确逐项用户同意。Keyring 凭据沿用原 service/account，不导出或复制密钥。UI 不直连 DB，Workspace 不绕过 Application API 访问 Academic 内部表。
 - Weather 可访问外部服务，但离线或服务故障不能破坏本地核心功能。AI 网络不可用不能妨碍 Academic、Planner、Tasks、Diary、Inbox、Timeline、Reminder 或本地 Search。
 - AI key 必须放系统安全凭据存储，不入 DB、不入 backup。
 

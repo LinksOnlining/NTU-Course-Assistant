@@ -4,6 +4,8 @@
 审计基线：`v2/workspace-rebase` / `c6f21f072e7c7d608d9c4011f9c5c17efdfa51a9`
 范围：只读调查、发布身份与数据迁移设计；未修改产品代码或发布配置。
 
+> **后续状态更新：**本文件以下记录是 Phase 5.0 审计当时的事实。Migration Source Policy 3 已获批准：独立支持旧 release lineage schema 5–7 与旧 identifier schema 8，不合并、不覆盖；存在无法证明关系的多源时安全停止。Phase 5.0 为 COMPLETE；Phase 5.1 identity / 迁移实现、真实数据库 dry-run 与本地 production build 已完成。最近完整 npm verify 有 2 个 UI 白屏/应用未挂载失败，隔离重跑通过；自动化门禁记 FAIL、Phase 5.1 Overall 未完成。真实库激活和安装/升级/卸载、自启动、Updater E2E 与发布未执行，详见 [`v2-phase-5-1-identity-data-migration.md`](v2-phase-5-1-identity-data-migration.md)。
+
 ## Baseline
 
 - Phase 4.9：Ethan 确认真实 DeepSeek 与 Windows 人工验收全部 PASS，正式 COMPLETE。
@@ -25,6 +27,8 @@
 当前 release 文件 `src-tauri/target/release/ntu-course-assistant.exe` 的文件版本是 1.3.1，但不是运行中的进程，也不是本机当前注册的安装版本。
 
 ## Target Identity Proposal（未采用）
+
+> 以下是审计时的候选方案快照；后续用户批准并实施的正式 identity 以本节顶部状态更新及 Phase 5.1 记录为准。
 
 - ProductName：`Links Workplace`
 - Version：`2.0.0`
@@ -144,6 +148,16 @@ Phase 5.0 不降级或“修复”该 DB，也不按 mtime 选择数据。需要
 
 - 起始 HEAD：`c6f21f072e7c7d608d9c4011f9c5c17efdfa51a9`。
 - Push：NO；Tag：NO；Release：NO。
+
+## Ethan 批准的最终迁移决策
+
+- Migration Source Decision：**APPROVED — Policy 3**。
+- Source policy：支持旧正式版本 lineage 的 schema 5/6/7，通过正式 5→6→7→8 migration chain 迁移；支持旧 identifier 根路径中的合法 schema 8，零 schema migration、备份并复制到新身份。
+- 不根据安装版本推断数据库 schema；不将公开 Release 当作本机额外数据库来源。
+- `%LOCALAPPDATA%\com.ntu-course-assistant.desktop\dev-v2\courses.sqlite3` 明确为 DEVELOPMENT ONLY，release discovery 永远忽略。
+- old/new 数据库同时存在时，仅接受匹配的 sidecar migration completion marker；否则分类为 CONFLICT。禁止 merge、mtime winner、文件大小 winner 或静默覆盖。
+- 目标 Tauri identity：`Links Workplace` / `2.0.0` / `com.links.workplace.desktop`；GitHub repository、updater endpoint、数据库文件名 `courses.sqlite3` 不变。
+- Phase 5.0：**COMPLETE**；Phase 5.1 implementation：**COMPLETE**，dry-run / build：**PASS**；automated gate：**FAIL**（完整 npm verify 最近一次有 2 个 UI failure，隔离复跑通过）；真实数据 activation、installer / updater E2E：**NOT EXECUTED**（最终实现和验证见 Phase 5.1 记录）。
 
 ## References
 

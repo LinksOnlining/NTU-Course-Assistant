@@ -223,7 +223,114 @@ fn migrate_schema_five_to_six_with_hook(
     Ok(())
 }
 
-fn validate_schema_six(connection: &Connection) -> Result<(), StorageError> {
+fn validate_schema_five_structure(connection: &Connection) -> Result<(), StorageError> {
+    const REQUIRED_TABLES: &[&str] = &[
+        "courses",
+        "period_times",
+        "app_settings",
+        "handled_reminders",
+        "semesters",
+        "course_overrides",
+        "academic_tasks",
+        "exams",
+        "reminder_rules",
+        "reminder_instances",
+    ];
+    const REQUIRED_INDEXES: &[&str] = &[
+        "handled_reminders_handled_at",
+        "semesters_one_active",
+        "course_overrides_lookup",
+        "course_overrides_course",
+        "academic_tasks_due",
+        "exams_start",
+        "reminder_rules_target",
+        "reminder_instances_pending",
+    ];
+    for (kind, name) in REQUIRED_TABLES
+        .iter()
+        .map(|name| ("table", *name))
+        .chain(REQUIRED_INDEXES.iter().map(|name| ("index", *name)))
+    {
+        let exists: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = ?1 AND name = ?2)",
+            params![kind, name],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Err(StorageError::InvalidData(format!(
+                "schema 5 缺少必需的 {kind}: {name}"
+            )));
+        }
+    }
+    for query in [
+        "SELECT id, name, teacher, classroom, weekday, start_time, end_time,
+                start_period, end_period, weeks FROM courses LIMIT 0",
+        "SELECT period, start_time, end_time FROM period_times LIMIT 0",
+        "SELECT key, value FROM app_settings LIMIT 0",
+        "SELECT occurrence_key, handled_at_milliseconds FROM handled_reminders LIMIT 0",
+        "SELECT id, name, first_week_monday, total_weeks, timezone, status,
+                created_at, updated_at FROM semesters LIMIT 0",
+        "SELECT id, course_id, semester_id, kind, original_occurrence_key, original_date,
+                target_date, start_period, end_period, start_time, end_time, classroom,
+                teacher, note, active, created_at, updated_at FROM course_overrides LIMIT 0",
+        "SELECT id, semester_id, course_id, type, title, note, due_at, priority, status,
+                completed_at, created_at, updated_at FROM academic_tasks LIMIT 0",
+        "SELECT id, semester_id, course_id, title, starts_at, ends_at, location, seat_info,
+                note, status, created_at, updated_at FROM exams LIMIT 0",
+        "SELECT id, target_type, target_id, offsets_minutes, enabled, created_at, updated_at
+                FROM reminder_rules LIMIT 0",
+        "SELECT id, rule_id, occurrence_key, trigger_at_milliseconds, status,
+                handled_at_milliseconds FROM reminder_instances LIMIT 0",
+    ] {
+        connection.prepare(query)?;
+    }
+    for (table, target, from, to, on_delete) in [
+        ("course_overrides", "courses", "course_id", "id", "CASCADE"),
+        (
+            "course_overrides",
+            "semesters",
+            "semester_id",
+            "id",
+            "CASCADE",
+        ),
+        (
+            "academic_tasks",
+            "semesters",
+            "semester_id",
+            "id",
+            "CASCADE",
+        ),
+        ("academic_tasks", "courses", "course_id", "id", "SET NULL"),
+        ("exams", "semesters", "semester_id", "id", "CASCADE"),
+        ("exams", "courses", "course_id", "id", "SET NULL"),
+        (
+            "reminder_instances",
+            "reminder_rules",
+            "rule_id",
+            "id",
+            "CASCADE",
+        ),
+    ] {
+        let exists: bool = connection.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pragma_foreign_key_list(?1)
+                WHERE \"table\" = ?2 AND \"from\" = ?3 AND \"to\" = ?4
+                  AND upper(\"on_delete\") = ?5
+            )",
+            params![table, target, from, to, on_delete],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Err(StorageError::InvalidData(format!(
+                "schema 5 缺少必需的 {table} → {target} 外键"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_schema_six_structure(connection: &Connection) -> Result<(), StorageError> {
+    validate_schema_five_structure(connection)?;
     const REQUIRED_TABLES: &[&str] = &[
         "courses",
         "period_times",
@@ -280,6 +387,22 @@ fn validate_schema_six(connection: &Connection) -> Result<(), StorageError> {
         ));
     }
 
+    for query in [
+        "SELECT id, title, description, status, priority, deadline_date, deadline_time,
+                created_at, updated_at, completed_at FROM personal_tasks LIMIT 0",
+        "SELECT id, title, description, date, start_time, end_time, location,
+                buffer_before_minutes, buffer_after_minutes, created_at, updated_at
+                FROM planner_events LIMIT 0",
+        "SELECT id, personal_task_id, date, start_time, end_time, buffer_before_minutes,
+                buffer_after_minutes, created_at, updated_at FROM time_blocks LIMIT 0",
+    ] {
+        connection.prepare(query)?;
+    }
+    Ok(())
+}
+
+fn validate_schema_six(connection: &Connection) -> Result<(), StorageError> {
+    validate_schema_six_structure(connection)?;
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if version != SCHEMA_SIX_VERSION {
         return Err(StorageError::InvalidData("schema 6 版本校验失败。".into()));
@@ -383,6 +506,7 @@ fn validate_schema_seven(connection: &Connection) -> Result<(), StorageError> {
 }
 
 fn validate_schema_seven_structure(connection: &Connection) -> Result<(), StorageError> {
+    validate_schema_six_structure(connection)?;
     const REQUIRED_TABLES: &[&str] = &["diary_entries", "inbox_items", "routines"];
     const REQUIRED_INDEXES: &[&str] = &["inbox_items_status_created_at", "routines_enabled"];
     for (kind, name) in REQUIRED_TABLES
@@ -507,6 +631,30 @@ fn validate_schema_eight(connection: &Connection) -> Result<(), StorageError> {
         return Err(StorageError::InvalidData("schema 8 版本校验失败。".into()));
     }
     validate_integrity(connection)
+}
+
+pub(crate) fn validate_release_database_connection(
+    connection: &Connection,
+) -> Result<i64, StorageError> {
+    let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    let validation = match version {
+        5 => {
+            validate_schema_five_structure(connection)?;
+            validate_integrity(connection)
+        }
+        6 => validate_schema_six(connection),
+        7 => validate_schema_seven(connection),
+        8 => validate_schema_eight(connection),
+        _ => return Err(StorageError::UnsupportedSchema(version)),
+    };
+    validation?;
+    Ok(version)
+}
+
+pub(crate) fn inspect_release_database(path: &Path) -> Result<i64, StorageError> {
+    let connection = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    connection.busy_timeout(Duration::from_secs(3))?;
+    validate_release_database_connection(&connection)
 }
 
 impl CourseDatabase {
@@ -760,6 +908,46 @@ impl CourseDatabase {
         Ok(self
             .connection
             .pragma_query_value(None, "user_version", |row| row.get(0))?)
+    }
+
+    pub(crate) fn checkpoint_for_migration(&self) -> Result<(), StorageError> {
+        let (busy, _, _): (i64, i64, i64) =
+            self.connection
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })?;
+        if busy != 0 {
+            return Err(StorageError::InvalidData(
+                "迁移副本的 WAL checkpoint 未完成。".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn migration_row_counts(&self) -> Result<[i64; 10], StorageError> {
+        let mut counts = [0; 10];
+        for (index, table) in [
+            "courses",
+            "period_times",
+            "semesters",
+            "academic_tasks",
+            "personal_tasks",
+            "planner_events",
+            "time_blocks",
+            "diary_entries",
+            "inbox_items",
+            "routines",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            counts[index] =
+                self.connection
+                    .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                        row.get(0)
+                    })?;
+        }
+        Ok(counts)
     }
 
     pub fn load_courses(&self) -> Result<LoadResult, StorageError> {
@@ -3262,6 +3450,8 @@ mod tests {
                         occurrence_key TEXT PRIMARY KEY NOT NULL,
                         handled_at_milliseconds INTEGER NOT NULL
                     );
+                    CREATE INDEX handled_reminders_handled_at
+                        ON handled_reminders(handled_at_milliseconds);
                     PRAGMA user_version = 4;",
                 )
                 .expect("create schema four tables");

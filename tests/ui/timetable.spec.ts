@@ -70,7 +70,7 @@ async function selectScheduleMode(page: Page) {
     .getByRole("navigation", { name: "产品模式" })
     .getByRole("button", { name: "课表" })
     .click();
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("heading", { name: "课表" })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("timetable-grid")).toBeVisible();
 }
 
@@ -188,7 +188,7 @@ async function seedPeriodCourseRuntime(
     .getByRole("navigation", { name: "产品模式" })
     .getByRole("button", { name: "课表" })
     .click();
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "课表" })).toBeVisible();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -393,7 +393,7 @@ test("widget route provides Today and Week controls without mounting the timetab
   await expect(page.getByRole("tab", { name: "今日" })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("tab", { name: "本周" }).click();
   await expect(page.getByRole("tab", { name: "本周" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toHaveCount(0);
+  await expect(page.getByTestId("timetable-grid")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "打开课程表" })).toBeVisible();
 });
 
@@ -461,7 +461,7 @@ test("seven fixed days and teaching-week filter", async ({ page }) => {
 });
 
 test("week navigation and 5-day view keep the timetable data intact", async ({ page }) => {
-  await expect(page.getByRole("heading", { name: "Links Workplace" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "课表" })).toBeVisible();
   await expect(page.locator(".shell-daily-quote")).toBeVisible();
   await expect(page.getByText("已使用自定义作息。")).toHaveCount(0);
   await page.getByRole("button", { name: "5天" }).click();
@@ -983,7 +983,7 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
     });
   });
   await reloadTimetable(page);
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "课表" })).toBeVisible();
   await page.getByRole("button", { name: "设置" }).click();
   const settings = page.getByRole("dialog", { name: "设置" });
 
@@ -1856,7 +1856,9 @@ test("manual updater failures can be retried and dismissed without blocking the 
   await settings.getByRole("button", { name: "检查更新" }).click();
   await expect(updateError).toBeVisible();
   await updateError.getByText("关闭", { exact: true }).click();
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "课表页面导航" }).getByRole("heading", { name: "课表" }),
+  ).toBeVisible();
 });
 
 test("a stored course outside the current axis is skipped without crashing", async ({ page }) => {

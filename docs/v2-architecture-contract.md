@@ -42,17 +42,17 @@ Unified Timeline 是 Presentation/Application projection，不是数据库实体
 
 ## 7.9 Database Evolution
 
-当前 SQLite schema 为 5。未来 Workspace tables 与 Academic 共用同一个 DB，不另建 Links Workplace DB。已知当前代码没有 migration 前自动备份。任何正式 schema > 5 的 migration 前必须定义并验证备份、事务迁移、迁后校验及失败恢复；这是 schema bump gate。UI 不直连 DB。
+当前 SQLite schema 为 8。Workspace 与 Academic 共用同一个 DB，不另建 Links Workplace DB。已有 5→6→7→8 migration chain；身份迁移只对副本运行并保留源库，不增加 schema。任何未来 schema bump 仍须定义并验证备份、事务迁移、迁后校验及失败恢复；这是 schema bump gate。UI 不直连 DB。
 
 ## 7.10 Technical Identity
 
-**CRITICAL — KEEP:** Tauri identifier `com.ntu-course-assistant.desktop`。当前 AppData 数据路径依赖该 identifier，DB 文件名为 `courses.sqlite3`。不得因产品改名而变更。任何未来迁移必须先完成数据迁移设计、Windows installer E2E、old→new updater E2E、DB persistence、Start Menu、uninstall entry、tray、notification 的 Windows 10/11 兼容验收，并获 Ethan 明确批准。
+**当前 v2 身份：**Product `Links Workplace`，version `2.0.0`，Tauri identifier `com.links.workplace.desktop`，DB 文件名 `courses.sqlite3`。v1 的 `com.ntu-course-assistant.desktop` 是受控 legacy 数据源，不再是 v2 目标身份。Ethan 已批准 Phase 5.1 的数据迁移实现；真实迁移激活、安装器升级/卸载、自启动与 updater E2E 仍须在相应阶段另行验收，当前不得宣称通过。
 
 ## 7.11 Brand Strategy
 
-区分 user-facing brand 与 technical identity。用户可见品牌目标为 Links Workplace；为兼容允许继续保留 NTU 技术命名。不要为了“名字干净”破坏升级或 AppData 兼容。productName、EXE/installer branding 在独立 Brand Compatibility Phase 处理；初始 v2 开发保持 GitHub repo 与 updater source 不变。
+用户可见品牌及 v2 Tauri/installer identity 均为 Links Workplace；仅迁移发现、历史 release 兼容与旧数据来源保留 NTU legacy 常量。ProductName、window title 与 executable 使用 Links Workplace 命名；GitHub repo 与 updater source 在当前阶段保持不变。旧安装与新安装是否 side-by-side 或升级由后续 Windows installer E2E 决定。
 
-Phase 1.5 已将 Links Workplace 用于 React 主窗口公共 Header 与纯 UI About 展示；Tauri `productName`、系统窗口标题、Tray、安装器、identifier、GitHub repo 与 updater source 均未迁移。Weather slot 仍无数据，不展示天气占位或假数据。
+Phase 1.5 起 React 主窗口使用 Links Workplace 品牌；Phase 5.1 实现 Tauri `productName`、系统窗口标题、Tray tooltip、安装身份和 identifier 向 Links Workplace 的统一。GitHub repo/updater source 保持原值。Weather slot 仍无数据时不展示天气占位或假数据。
 
 ## 7.12 Design System Contract
 

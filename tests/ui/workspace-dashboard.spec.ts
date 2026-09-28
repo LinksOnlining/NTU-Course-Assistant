@@ -916,7 +916,7 @@ test("Diary, Inbox and schedule routes remain explicit, and returning to Workspa
   const mode = page.getByRole("navigation", { name: "产品模式" });
   previousLoads = await getLoads();
   await mode.getByRole("button", { name: "课表" }).click();
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "课表" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "课表二级导航" })).toBeVisible();
   await mode.getByRole("button", { name: "工作台" }).click();
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
@@ -1653,7 +1653,7 @@ test("failed Weather requests never block offline core routes", async ({ page })
     .getByRole("navigation", { name: "产品模式" })
     .getByRole("button", { name: "课表" })
     .click();
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "课表" })).toBeVisible();
   await page
     .getByRole("navigation", { name: "产品模式" })
     .getByRole("button", { name: "工作台" })

@@ -63,7 +63,7 @@ test("Links 顶栏提供独立空白拖动区，交互控件不在拖动区内",
     .getByRole("navigation", { name: "产品模式" })
     .getByRole("button", { name: "课表" })
     .click();
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "课表" })).toBeVisible();
   await header.getByRole("button", { name: "设置" }).click();
   await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
 });
@@ -73,7 +73,7 @@ test("课表模式显示 Academic 导航与控件，并记住离开前的 Academ
   const mode = page.getByRole("navigation", { name: "产品模式" });
   await mode.getByRole("button", { name: "课表" }).focus();
   await mode.getByRole("button", { name: "课表" }).press("Enter");
-  await expect(page.getByRole("heading", { name: "大学课程表" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "课表" })).toBeVisible();
   const subnav = page.getByRole("navigation", { name: "课表二级导航" });
   await expect(subnav.getByRole("button")).toHaveText([
     "周课表",
