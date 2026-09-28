@@ -6,7 +6,7 @@
 
 - 当前 v2 产品需求单一事实来源：[`PROJECT_BRIEF.md`](PROJECT_BRIEF.md)。
 - 当前 v2 架构及依赖方向契约：[`docs/v2-architecture-contract.md`](docs/v2-architecture-contract.md)。
-- Phase 3.8.2 与 3.9、Phase 4.0–4.9 均按各自文档完成；Phase 4.8.1 Daily Summary 为 DE-SCOPED / REMOVED，schema 8 的 `daily_summaries` 仅 dormant 保留。Phase 5.0 Migration Source Policy 3 已批准并 COMPLETE；Phase 5.1 Links Workplace 2.0.0 identity、迁移实现、真实数据隔离 dry-run 与 production build 均 PASS。最新完整 npm verify 的 UI 子套件有 2 个白屏/应用未挂载失败（隔离复跑通过），因此 Automated gate = FAIL，Phase 5.1 Overall 未完成。真实数据尚未激活，安装/升级/卸载、自启动、Updater E2E 与发布均未执行。主窗口无原生装饰、默认最大化（非 fullscreen），不拦截标准关闭事件。详见 `docs/v2-phase-5-1-identity-data-migration.md`。
+- Phase 3.8.2 与 3.9、Phase 4.0–4.9 均按各自文档完成；Phase 4.8.1 Daily Summary 为 DE-SCOPED / REMOVED，schema 8 的 `daily_summaries` 仅 dormant 保留。Phase 5.0 Migration Source Policy 3 已批准并 COMPLETE；Phase 5.1 Links Workplace 2.0.0 identity、迁移实现、真实数据隔离 dry-run、两轮完整 npm verify 与 production build 均 PASS，Overall COMPLETE。Phase 5.2 正在进行：代码级合成迁移 / 配置门禁通过，MSI UpgradeCode 已固定到 v1.3.x 产品线；但隔离 Windows 安装、升级、卸载与登录自启动 E2E 尚未执行，当前状态 BLOCKED，不能据静态审计宣称 installer/autostart PASS。真实用户数据库未读取、复制、修改或激活；Phase 5.3 与发布均未开始。主窗口无原生装饰、默认最大化（非 fullscreen），不拦截标准关闭事件。详见 `docs/v2-phase-5-1-identity-data-migration.md` 与 `docs/v2-phase-5-2-windows-installer-autostart.md`。
 - 本文后续保留的 Academic 设计与 v1 历史事实不被覆盖；如旧 v2 预留方向与上述当前契约冲突，以 Brief 和 Architecture Contract 为准。
 
 ## 技术方案
@@ -229,8 +229,8 @@ Weather 默认关闭，地点解析只在用户明确搜索或确认当前位置
 
 Phase 5.1 将正式 Tauri identity 定为 `com.links.workplace.desktop`；release DB 从 Tauri app-local path API 得到，文件名仍为 `courses.sqlite3`。旧 release DB 来源限定为 `%LOCALAPPDATA%\com.ntu-course-assistant.desktop\courses.sqlite3`；debug 的 `dev-v2\courses.sqlite3` 永远不参与迁移。identifier 改变会新建数据与 WebView 目录，不能期待 WebView localStorage 自动共享。
 
-Phase 5.0 审计时公开 v1.3.1 源码 schema 为 5，本机安装记录为 1.3.0，而旧 identifier 根数据库 schema 为 8；三者 provenance 不作强行推断。Ethan 随后批准 Migration Source Policy 3：独立支持旧 release schema 5–7 与旧 identifier schema 8，不合并、不覆盖，冲突时安全停止。Phase 5.0 已 COMPLETE；Phase 5.1 实施细节与状态见 `docs/v2-phase-5-1-identity-data-migration.md`。
+Phase 5.0 审计时公开 v1.3.1 源码 schema 为 5，本机安装记录为 1.3.0，而旧 identifier 根数据库 schema 为 8；三者 provenance 不作强行推断。Ethan 随后批准 Migration Source Policy 3：独立支持旧 release schema 5–7 与旧 identifier schema 8，不合并、不覆盖，冲突时安全停止。Phase 5.0 已 COMPLETE；Phase 5.1 实施细节与状态见 `docs/v2-phase-5-1-identity-data-migration.md`。Phase 5.2 的 Windows 安装与升级实测状态见 `docs/v2-phase-5-2-windows-installer-autostart.md`。
 
 新身份迁移的安全边界：先用匿名 schema 5 / schema 8 fixture 和隔离安装测试；真实迁移前创建 SQLite 一致性备份，staging 中迁移并验证后再激活，旧 DB 保留可回滚；新旧路径同时存在时安全停止。AI 数据授权不迁移，天气缓存不迁移；Credential Manager 的 service/account 标识若保持不变则不需复制 secret。
 
-Tauri 官方配置说明 identifier 参与应用目录解析；MSI 未显式固定的 UpgradeCode 默认受 ProductName 影响。更名时必须同时验证 NSIS/MSI 的升级、卸载、快捷方式与数据迁移行为；本阶段没有改变配置。
+Tauri 配置中的 MSI UpgradeCode 默认会随产品身份派生。Phase 5.2 已将 WiX UpgradeCode 固定为 NTU Course Assistant v1.3.x MSI 使用的 `{2F689303-B82C-571D-BCD4-3DDF71E745AF}`，当前构建的 MSI 表静态核验一致；这只证明身份元数据连续，不等于已实测升级。NSIS/MSI 安装、升级、卸载、快捷方式、自启动清理和数据迁移仍须在隔离 Windows 环境完成端到端验收。

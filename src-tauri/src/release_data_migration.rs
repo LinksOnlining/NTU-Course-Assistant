@@ -1260,7 +1260,7 @@ mod tests {
                  INSERT INTO courses
                     (id, name, teacher, classroom, weekday, start_time, end_time,
                      start_period, end_period, weeks)
-                 VALUES ('course-fixture', 'synthetic course', NULL, NULL, 1,
+                 VALUES ('course-fixture', 'COURSE_MIGRATION_SENTINEL', NULL, NULL, 1,
                          '08:00', '08:45', 1, 1, '[1]');
                  INSERT INTO academic_tasks
                     (id, semester_id, type, title, due_at, priority, status, created_at, updated_at)
@@ -1269,7 +1269,7 @@ mod tests {
                  INSERT INTO app_settings (key, value) VALUES ('day_count', '5');
                  INSERT INTO personal_tasks
                     (id, title, status, priority, created_at, updated_at)
-                 VALUES ('task-fixture', 'synthetic personal task', 'OPEN', 'MEDIUM', 'fixture', 'fixture');
+                 VALUES ('task-fixture', 'TASK_MIGRATION_SENTINEL', 'OPEN', 'MEDIUM', 'fixture', 'fixture');
                  INSERT INTO planner_events
                     (id, title, date, start_time, end_time, buffer_before_minutes,
                      buffer_after_minutes, created_at, updated_at)
@@ -1279,12 +1279,12 @@ mod tests {
                      buffer_after_minutes, created_at, updated_at)
                  VALUES ('block-fixture', 'task-fixture', '2026-09-24', '13:00', '14:00', 0, 0, 'fixture', 'fixture');
                  INSERT INTO diary_entries (id, entry_date, body, created_at, updated_at)
-                 VALUES ('diary-fixture', '2026-09-24', 'synthetic body', 'fixture', 'fixture');
+                 VALUES ('diary-fixture', '2026-09-24', 'DIARY_MIGRATION_SENTINEL', 'fixture', 'fixture');
                  INSERT INTO inbox_items (id, raw_text, status, created_at, updated_at)
-                 VALUES ('inbox-fixture', 'synthetic raw text', 'pending', 'fixture', 'fixture');
+                 VALUES ('inbox-fixture', 'INBOX_MIGRATION_SENTINEL', 'pending', 'fixture', 'fixture');
                  INSERT INTO routines
                     (id, title, target_duration_minutes, weekdays_mask, enabled, created_at, updated_at)
-                 VALUES ('routine-fixture', 'synthetic routine', 30, 127, 1, 'fixture', 'fixture');
+                 VALUES ('routine-fixture', 'ROUTINE_MIGRATION_SENTINEL', 30, 127, 1, 'fixture', 'fixture');
                  INSERT INTO daily_summaries
                     (id, summary_date, overview, highlights_json, unfinished_json,
                      tomorrow_notes_json, created_at, updated_at, revision)
@@ -1331,6 +1331,22 @@ mod tests {
             .expect("count synthetic rows")
     }
 
+    fn text_value(path: &Path, query: &str) -> String {
+        Connection::open(path)
+            .expect("open migration fixture")
+            .query_row(query, [], |row| row.get(0))
+            .expect("read migration sentinel")
+    }
+
+    fn assert_integrity(path: &Path) {
+        assert_eq!(
+            text_value(path, "PRAGMA integrity_check"),
+            "ok",
+            "{} must pass SQLite integrity_check",
+            path.display()
+        );
+    }
+
     #[test]
     fn schema_five_six_seven_and_eight_sources_copy_to_schema_eight_without_entity_loss() {
         for schema in 5..=8 {
@@ -1371,20 +1387,66 @@ mod tests {
             assert_eq!(count(&target.join(DATABASE_FILE), "academic_tasks"), 1);
             assert_eq!(count(&target.join(DATABASE_FILE), "app_settings"), 1);
             assert_eq!(count(&source_path, "courses"), 1);
+            let target_path = target.join(DATABASE_FILE);
+            assert_eq!(
+                text_value(
+                    &target_path,
+                    "SELECT name FROM courses WHERE id = 'course-fixture'"
+                ),
+                "COURSE_MIGRATION_SENTINEL"
+            );
+            assert_eq!(
+                text_value(
+                    &source_path,
+                    "SELECT name FROM courses WHERE id = 'course-fixture'"
+                ),
+                "COURSE_MIGRATION_SENTINEL"
+            );
             if schema >= 6 {
                 assert_eq!(count(&target.join(DATABASE_FILE), "personal_tasks"), 1);
                 assert_eq!(count(&target.join(DATABASE_FILE), "planner_events"), 1);
                 assert_eq!(count(&target.join(DATABASE_FILE), "time_blocks"), 1);
+                assert_eq!(
+                    text_value(
+                        &target_path,
+                        "SELECT title FROM personal_tasks WHERE id = 'task-fixture'"
+                    ),
+                    "TASK_MIGRATION_SENTINEL"
+                );
             }
             if schema >= 7 {
                 assert_eq!(count(&target.join(DATABASE_FILE), "diary_entries"), 1);
                 assert_eq!(count(&target.join(DATABASE_FILE), "inbox_items"), 1);
                 assert_eq!(count(&target.join(DATABASE_FILE), "routines"), 1);
+                assert_eq!(
+                    text_value(
+                        &target_path,
+                        "SELECT body FROM diary_entries WHERE id = 'diary-fixture'"
+                    ),
+                    "DIARY_MIGRATION_SENTINEL"
+                );
+                assert_eq!(
+                    text_value(
+                        &target_path,
+                        "SELECT raw_text FROM inbox_items WHERE id = 'inbox-fixture'"
+                    ),
+                    "INBOX_MIGRATION_SENTINEL"
+                );
+                assert_eq!(
+                    text_value(
+                        &target_path,
+                        "SELECT title FROM routines WHERE id = 'routine-fixture'"
+                    ),
+                    "ROUTINE_MIGRATION_SENTINEL"
+                );
             }
             if schema == 8 {
                 assert_eq!(count(&target.join(DATABASE_FILE), "daily_summaries"), 1);
             }
             assert!(report.backup_path.is_file());
+            assert_integrity(&source_path);
+            assert_integrity(&target_path);
+            assert_integrity(&report.backup_path);
             fs::remove_dir_all(root).expect("remove fixture root");
         }
     }
