@@ -48,6 +48,7 @@ import {
   updateStoredCourse,
 } from "./services/course-storage.ts";
 import { DEFAULT_WIDGET_SETTINGS } from "./services/widget-data.ts";
+import { recordStartupStage } from "./startup-diagnostics.ts";
 import { checkForApplicationUpdate, installApplicationUpdate } from "./services/updater.ts";
 import {
   buildReminderPlans,
@@ -438,6 +439,7 @@ export function App() {
 
   useEffect(() => {
     let active = true;
+    recordStartupStage("app-data-bootstrap-started");
     void Promise.all([
       loadAcademicScheduleData(),
       loadStoredReminderConfiguration(),
@@ -481,15 +483,23 @@ export function App() {
         setUserCourses(renderableCourses);
         setStorageMessage(warnings.join(" "));
         setStorageStatus("ready");
+        recordStartupStage("app-data-bootstrap-ready");
       })
       .catch((error: unknown) => {
         if (!active) return;
         setStorageMessage(error instanceof Error ? error.message : "本地课程数据库不可用。");
         setStorageStatus("error");
+        recordStartupStage("app-data-bootstrap-failed", {
+          message: error instanceof Error ? error.message : String(error),
+        });
       });
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    recordStartupStage("app-mounted");
   }, []);
 
   useEffect(() => {

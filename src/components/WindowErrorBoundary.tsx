@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { recordStartupStage } from "../startup-diagnostics.ts";
 
 interface WindowErrorBoundaryProps {
   readonly children: ReactNode;
@@ -20,6 +21,10 @@ export class WindowErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    recordStartupStage("react-render-error", {
+      message: error.message,
+      componentStack: info.componentStack,
+    });
     console.error(`${this.props.title} render failed`, error, info.componentStack);
   }
 

@@ -4,12 +4,13 @@ export default defineConfig({
   testDir: "tests/ui",
   fullyParallel: false,
   workers: 1,
-  reporter: "line",
+  reporter: [["line"], ["./tests/ui/failureContextReporter.ts"]],
   use: {
     baseURL: "http://127.0.0.1:1420",
     channel: "msedge",
     headless: true,
     screenshot: "only-on-failure",
+    trace: "retain-on-failure",
   },
   projects: [
     ...[1, 1.25, 1.5].map((deviceScaleFactor) => ({
@@ -26,7 +27,7 @@ export default defineConfig({
     })),
   ],
   webServer: {
-    command: "npm run dev -- --mode playwright",
+    command: "npm run build:playwright && npm run preview:playwright",
     url: "http://127.0.0.1:1420",
     reuseExistingServer: false,
     timeout: 30_000,

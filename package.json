@@ -9,6 +9,8 @@
   "scripts": {
     "prepare:pdf-assets": "node scripts/copy-pdf-assets.mjs",
     "dev": "npm run prepare:pdf-assets && vite --host 127.0.0.1",
+    "build:playwright": "npm run prepare:pdf-assets && vite build --mode playwright",
+    "preview:playwright": "vite preview --host 127.0.0.1 --port 1420 --strictPort",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.core.json",
     "test:unit": "node --test tests/unit/*.test.mjs",
     "test:arch": "node --test tests/architecture/*.test.mjs",

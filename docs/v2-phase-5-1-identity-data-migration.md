@@ -4,8 +4,8 @@
 
 - Phase 5.0：**COMPLETE**；Migration Source Policy 3 已获 Ethan 批准。
 - Phase 5.1 Implementation：**COMPLETE**。
-- Phase 5.1 Automated：**FAIL（最新完整门禁）**；最近一次完整 `npm run verify` 有 2 个 UI 用例失败，均为白屏 / 应用导航未挂载；随后单独重跑这 2 个用例均 PASS。未将该轮完整门禁标为 PASS。
-- Phase 5.1 Overall：**NOT COMPLETE**，完整自动化门禁仍需通过。
+- Phase 5.1 Automated：**PASS**；Playwright 完整套件、双轮 `npm run verify` 与 4-worker 套件均稳定通过。
+- Phase 5.1 Overall：**COMPLETE**。本阶段没有执行真实用户数据库激活、安装/升级/卸载、Autostart 或 updater E2E。
 - Phase 5.1 Real Data Dry Run：**PASS**。
 - Phase 5.1 Production Build：**PASS**。
 - 起始 HEAD：`bd7eb232be9fda979c31ce9a039187343a45c2bb`；分支：`v2/workspace-rebase`。
@@ -31,12 +31,20 @@ SQLite `app_settings` 随选定数据库整体迁移。WebView `localStorage`、
 
 | 门禁 | 结果 |
 |---|---|
-| `npm run verify`（typecheck、unit、architecture、UI、lint、Prettier、frontend build） | 最近一次完整运行 **FAIL**：Playwright 1153 passed、15 skipped、2 failed（`workspace-schedule.spec.ts:394` 未挂载 Workspace Dashboard；`timetable.spec.ts:929` 在 beforeEach 未挂载“课表”导航；失败截图均为白屏）。两个失败用例随后分别单独重跑均 PASS。 |
+| `npm run verify`（typecheck、unit、architecture、UI、lint、Prettier、frontend build） | **PASS ×2**；两轮各 Playwright 1155 passed、15 skipped、0 failed。 |
+| Playwright 并行完整套件（`--workers=4`） | **PASS**；1155 passed、15 skipped、0 failed。 |
 | 独立前端门禁 | **PASS**：typecheck、unit 140、architecture 140、lint、Prettier；frontend bundle 随 Tauri production build 成功生成。 |
 | `cargo test --manifest-path src-tauri/Cargo.toml` | **PASS**；113 passed、0 failed、2 ignored |
 | `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` | **PASS** |
 | `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings` | **PASS** |
 | 迁移定向测试 | **PASS**；schema 5/6/7/8、冲突/marker、损坏库、staging/backup/activation 失败、重试/idempotency、source lock 与 `dev-v2` 排除均有覆盖 |
+
+## Playwright 白屏 / 未挂载回归
+
+- 根因：失败 trace 中 HTML 的 `#root` 已存在并记录 `html-root-ready`，但 React 入口模块没有执行；浏览器日志与网络 trace 显示启动脚本请求以 `net::ERR_NO_BUFFER_SPACE` 失败（先后在 Vite 源模块和静态预览拆分 chunk 复现）。因此 Workspace / 课表导航未挂载是入口资源请求失败的后果，不是 React render、数据库初始化或测试持久状态污染。
+- 完整 suite 才暴露的原因：每个 Playwright case 使用隔离页面/上下文，Vite 开发服务器会在整套 9 个 viewport/DPR 项目中反复传输分散的源码模块；长序列下 Windows Chromium 的本机网络资源请求失败。诊断记录了 worker/执行顺序；例如 `timetable.spec.ts` 在 `persisted period-based course follows schedule edits without rewriting the course` 后失败时，trace 在入口执行前记录到 `ERR_NO_BUFFER_SPACE`。前序用例是执行顺序信息，不构成应用共享状态污染证据。
+- 修复：Playwright 改用 test-mode 静态预览构建；将应用共享模块合并为 test-only shared chunk，同时保留 index 与每个 HTML harness 的独立入口，避免测试模块互相执行。生产构建分包行为未改变。启动时间线现在覆盖 HTML/root、main module、React root、App mount、数据 bootstrap 和 render error；失败时保留 Playwright trace，并由 reporter 记录 worker、序号和前序用例。
+- 回归证据：根因相关 25 次重复序列 **PASS**；原失败测试包含在两轮完整 verify 中均通过；完整 Playwright workers=1（经两轮 verify）及 workers=4 均 **PASS**，未再观察到 `ERR_NO_BUFFER_SPACE` 或白屏。
 
 ## 本机真实数据库 dry-run
 
@@ -51,13 +59,13 @@ SQLite `app_settings` 随选定数据库整体迁移。WebView `localStorage`、
 ## Production Build 与产物
 
 - `npm run tauri -- --version`：`tauri-cli 2.11.4`。
-- `npm run tauri build`：**PASS**，2026-09-28 11:04（Asia/Shanghai）；构建前仅检查 updater signing 环境变量存在性，未读取或输出私钥/密码。
+- `npm run tauri build`：**PASS**，2026-09-28 14:27（Asia/Shanghai）；只确认 updater signing 环境变量存在，未读取或输出私钥/密码。
 - Tauri config / Cargo / npm metadata：产品名 `Links Workplace`、版本 `2.0.0`、identifier `com.links.workplace.desktop`；MSI Property 表只读核验 `ProductName=Links Workplace`、`ProductVersion=2.0.0`。
-- EXE：`src-tauri/target/release/links-workplace.exe`，68,404,736 bytes，SHA-256 `0762B61A5E9C9924D38D1BDC07CDB6CF9D7073062024338C191DB5AD4E44DCAF`。
-- MSI：`src-tauri/target/release/bundle/msi/Links Workplace_2.0.0_x64_en-US.msi`，54,525,952 bytes，SHA-256 `3C06A9DF991C84696FB2634406DE578187900000D21F133477B2487B6392E3E0`。
-- MSI updater signature：同目录 `.msi.sig`，428 bytes，SHA-256 `2FEBA8D54EB07D070F95D55BA1D42A8F6C3BBA741D181E0B28F7500E740C6B73`。
-- NSIS：`src-tauri/target/release/bundle/nsis/Links Workplace_2.0.0_x64-setup.exe`，52,549,841 bytes，SHA-256 `4340008B411A09964CEEF366500A4872B2E04B2DC1CB7861F18379615B6CA0E2`。
-- NSIS updater signature：同目录 `.exe.sig`，428 bytes，SHA-256 `6EDE4DDA57104816DB0F5F119BAD02B99FC8C34F88717B75706CB1C33B2BB8AD`。
+- EXE：`src-tauri/target/release/links-workplace.exe`，68,404,736 bytes，SHA-256 `2B75B0F1CDAFA9DDC973CFAC593E1C52D708E81511114A540F7D4A44A5018C54`。
+- MSI：`src-tauri/target/release/bundle/msi/Links Workplace_2.0.0_x64_en-US.msi`，54,525,952 bytes，SHA-256 `B6DEAF74B349D3FC6BADCB135BA216033B7C2478BC99E513E410AE8B158B1166`。
+- MSI updater signature：同目录 `.msi.sig`，428 bytes，SHA-256 `2DA7ED34A1E1F13682581779476BBB6939CE7F31D5B5C62164F7031F0C3D7F1C`。
+- NSIS：`src-tauri/target/release/bundle/nsis/Links Workplace_2.0.0_x64-setup.exe`，52,463,333 bytes，SHA-256 `2B72923BE09536C0D7C9183DA23CBA03C07A3E6411ABCD9615A4BC7538D8DB0F`。
+- NSIS updater signature：同目录 `.exe.sig`，428 bytes，SHA-256 `A6CFEFBB3814D871D703D7669C3C698F029A63E9FAEA4442B618BFAC490BBCB3`。
 - `.sig` 由本次 build 新生成；GitHub `latest.json` / 云端签名发布属于后续 release 阶段，当前没有生成或上传。
 
 ## 尚未执行的验收
