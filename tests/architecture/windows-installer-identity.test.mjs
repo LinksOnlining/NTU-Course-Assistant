@@ -8,6 +8,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const config = JSON.parse(readFileSync(path.join(root, "src-tauri/tauri.conf.json"), "utf8"));
 const hookPath = path.join(root, "src-tauri/windows/nsis-hooks.nsh");
 const hook = readFileSync(hookPath, "utf8");
+const wixCleanupPath = path.join(root, "src-tauri/windows/wix/legacy-shortcut-cleanup.wxs");
+const wixCleanup = readFileSync(wixCleanupPath, "utf8");
 
 test("MSI upgrade code stays compatible with the NTU Course Assistant 1.3.x lineage", () => {
   assert.equal(config.productName, "Links Workplace");
@@ -16,6 +18,32 @@ test("MSI upgrade code stays compatible with the NTU Course Assistant 1.3.x line
   assert.equal(
     config.bundle.windows.wix.upgradeCode.toLowerCase(),
     "2f689303-b82c-571d-bcd4-3ddf71e745af",
+  );
+});
+
+test("MSI upgrade retires only the two exact legacy NTU shortcuts", () => {
+  assert.deepEqual(config.bundle.windows.wix.fragmentPaths, [
+    "windows/wix/legacy-shortcut-cleanup.wxs",
+  ]);
+  assert.deepEqual(config.bundle.windows.wix.componentRefs, [
+    "RetireLegacyNtuStartMenuShortcut",
+    "RetireLegacyNtuDesktopShortcut",
+  ]);
+  assert.match(
+    wixCleanup,
+    /DirectoryRef Id="ProgramMenuFolder"[\s\S]*?Name="NTU Course Assistant"/,
+  );
+  assert.match(wixCleanup, /DirectoryRef Id="DesktopFolder"/);
+  assert.equal((wixCleanup.match(/<RemoveFile\b/g) ?? []).length, 2);
+  assert.equal(
+    (wixCleanup.match(/Name="NTU Course Assistant\.lnk" On="install"/g) ?? []).length,
+    2,
+  );
+  assert.equal((wixCleanup.match(/<RemoveFolder\b/g) ?? []).length, 1);
+  assert.match(wixCleanup, /RemoveFolder Id="RemoveEmptyLegacyNtuProgramsFolder" On="uninstall"/);
+  assert.doesNotMatch(
+    wixCleanup,
+    /\*\.lnk|courses\.sqlite3|com\.ntu-course-assistant\.desktop|links-workplace\.exe|<CustomAction/i,
   );
 });
 
