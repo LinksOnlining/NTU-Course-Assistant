@@ -10,6 +10,8 @@ const hookPath = path.join(root, "src-tauri/windows/nsis-hooks.nsh");
 const hook = readFileSync(hookPath, "utf8");
 const wixCleanupPath = path.join(root, "src-tauri/windows/wix/legacy-shortcut-cleanup.wxs");
 const wixCleanup = readFileSync(wixCleanupPath, "utf8");
+const autostartCleanupPath = path.join(root, "src-tauri/windows/wix/autostart_cleanup.rs");
+const autostartCleanup = readFileSync(autostartCleanupPath, "utf8");
 
 test("MSI upgrade code stays compatible with the NTU Course Assistant 1.3.x lineage", () => {
   assert.equal(config.productName, "Links Workplace");
@@ -41,10 +43,30 @@ test("MSI upgrade retires only the two exact legacy NTU shortcuts", () => {
   );
   assert.equal((wixCleanup.match(/<RemoveFolder\b/g) ?? []).length, 1);
   assert.match(wixCleanup, /RemoveFolder Id="RemoveEmptyLegacyNtuProgramsFolder" On="uninstall"/);
-  assert.doesNotMatch(
-    wixCleanup,
-    /\*\.lnk|courses\.sqlite3|com\.ntu-course-assistant\.desktop|links-workplace\.exe|<CustomAction/i,
+  assert.doesNotMatch(wixCleanup, /\*\.lnk|courses\.sqlite3|com\.ntu-course-assistant\.desktop/i);
+});
+
+test("MSI removes only the exact owned current-user autostart value on full uninstall", () => {
+  assert.equal(
+    config.build.beforeBundleCommand,
+    "node src-tauri/windows/wix/build-autostart-cleanup.mjs",
   );
+  assert.match(wixCleanup, /SourceFile="windows\/wix\/autostart-cleanup\.dll"/);
+  assert.match(wixCleanup, /Property="RemoveLinksWorkplaceAutostart"/);
+  assert.match(wixCleanup, /Value="\[INSTALLDIR\]links-workplace\.exe"/);
+  assert.match(wixCleanup, /DllEntry="RemoveLinksWorkplaceAutostart"/);
+  assert.match(wixCleanup, /Execute="deferred"\s+Impersonate="yes"\s+Return="check"/);
+  assert.match(wixCleanup, /REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE/);
+  assert.match(autostartCleanup, /Software\\Microsoft\\Windows\\CurrentVersion\\Run/);
+  assert.match(autostartCleanup, /const RUN_VALUE_NAME: &str = "Links Workplace"/);
+  assert.match(autostartCleanup, /should_remove_owned_value/);
+  assert.match(autostartCleanup, /HKEY_CURRENT_USER/);
+  assert.match(autostartCleanup, /KEY_WOW64_64KEY/);
+  assert.match(
+    autostartCleanup,
+    /#\[no_mangle\][\s\S]*?pub extern "system" fn RemoveLinksWorkplaceAutostart/,
+  );
+  assert.doesNotMatch(wixCleanup, /RemoveRegistryKey|courses\.sqlite3|REAL_HOLD/i);
 });
 
 test("Tauri NSIS installerHooks config loads the preinstall retirement hook", () => {

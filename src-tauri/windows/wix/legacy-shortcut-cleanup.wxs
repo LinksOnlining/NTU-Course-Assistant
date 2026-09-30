@@ -1,6 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
+    <Binary Id="LinksWorkplaceAutostartCleanupBinary" SourceFile="windows/wix/autostart-cleanup.dll" />
+
+    <CustomAction
+      Id="SetLinksWorkplaceAutostartCleanupData"
+      Property="RemoveLinksWorkplaceAutostart"
+      Value="[INSTALLDIR]links-workplace.exe"
+    />
+    <CustomAction
+      Id="RemoveLinksWorkplaceAutostart"
+      BinaryKey="LinksWorkplaceAutostartCleanupBinary"
+      DllEntry="RemoveLinksWorkplaceAutostart"
+      Execute="deferred"
+      Impersonate="yes"
+      Return="check"
+      HideTarget="yes"
+    />
+    <InstallExecuteSequence>
+      <Custom Action="SetLinksWorkplaceAutostartCleanupData" Before="RemoveLinksWorkplaceAutostart">
+        REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE
+      </Custom>
+      <Custom Action="RemoveLinksWorkplaceAutostart" Before="RemoveFiles">
+        REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE
+      </Custom>
+    </InstallExecuteSequence>
+
     <DirectoryRef Id="ProgramMenuFolder">
       <Directory Id="LegacyNtuProgramsFolder" Name="NTU Course Assistant" />
     </DirectoryRef>

@@ -2,6 +2,8 @@ node_modules/
 dist/
 src-tauri/target/
 src-tauri/gen/
+src-tauri/windows/wix/autostart-cleanup.dll
+src-tauri/windows/wix/.autostart-cleanup-*
 coverage/
 playwright-report/
 test-results/
