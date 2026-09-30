@@ -51,7 +51,7 @@ test("MSI removes only the exact owned current-user autostart value on full unin
     config.build.beforeBundleCommand,
     "node src-tauri/windows/wix/build-autostart-cleanup.mjs",
   );
-  assert.match(wixCleanup, /SourceFile="autostart-cleanup\.dll"/);
+  assert.match(wixCleanup, /SourceFile="\$\(sys\.SOURCEFILEDIR\)autostart-cleanup\.dll"/);
   assert.match(wixCleanup, /Property="RemoveLinksWorkplaceAutostart"/);
   assert.match(wixCleanup, /Value="\[INSTALLDIR\]links-workplace\.exe"/);
   assert.match(wixCleanup, /DllEntry="RemoveLinksWorkplaceAutostart"/);
