@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
-    <Binary Id="LinksWorkplaceAutostartCleanupBinary" SourceFile="windows/wix/autostart-cleanup.dll" />
+    <Binary Id="LwAutoCleanupDll" SourceFile="autostart-cleanup.dll" />
 
     <CustomAction
       Id="SetLinksWorkplaceAutostartCleanupData"
@@ -10,7 +10,7 @@
     />
     <CustomAction
       Id="RemoveLinksWorkplaceAutostart"
-      BinaryKey="LinksWorkplaceAutostartCleanupBinary"
+      BinaryKey="LwAutoCleanupDll"
       DllEntry="RemoveLinksWorkplaceAutostart"
       Execute="deferred"
       Impersonate="yes"
