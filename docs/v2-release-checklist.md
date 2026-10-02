@@ -1,6 +1,6 @@
 # Links Workplace 2.0 — Release checklist
 
-更新：2026-09-30。产品代码基线：`0185cd722c1c072730190a716a4376e4c22ecbcb`。
+更新：2026-10-03。新产物源码候选：`c45953e44c635b8fe18b4878e52653977f99f9c8`；0185 保持缺陷复现基线。
 
 不得把 bootstrap harness、静态审查或 registry backend 验证写成真实安装态 GUI E2E PASS。
 
@@ -24,6 +24,6 @@
 
 用户已批准无法快速稳定完成的纯 harness 场景透明延期；以上延期不表示测试 PASS，也不表示已证明产品 FAIL。任何真实产品缺陷必须修复与回归，不能借此豁免。
 
-真实 MSI uninstall cleanup 失败是产品缺陷，不是 harness false positive：不可变证据位于 `D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\c7d3dfbf8fec4be9b274db5fc7b0f99a\cleanup-execution\result.json`。修复与自动测试已完成；新候选 build、MSI/NSIS fresh OFF/ON uninstall 验收尚待完成。当前 Phase 5.2 **IN PROGRESS — WAITING FOR NEW CANDIDATE AND ADMIN CLEANUP EXECUTION**。收口后可记 **COMPLETE WITH ACCEPTED DEFERRED COVERAGE**，逐项列出缺口；当前不能提前记 COMPLETE。
+真实 MSI uninstall cleanup 失败是产品缺陷，不是 harness false positive：不可变证据位于 `D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\c7d3dfbf8fec4be9b274db5fc7b0f99a\cleanup-execution\result.json`。修复与自动测试已完成；新候选 production build PASS；四项产物大小/hash 与一次管理员脚本已记录；MSI/NSIS fresh OFF/ON uninstall 真实验收待管理员执行。当前 Phase 5.2 **IN PROGRESS — BUILD PASS — WAITING FOR ADMIN CLEANUP EXECUTION**。收口后可记 **COMPLETE WITH ACCEPTED DEFERRED COVERAGE**，逐项列出缺口；当前不能提前记 COMPLETE。
 
 NO PUSH / NO TAG / NO RELEASE，直到 Ethan 最终明确授权。

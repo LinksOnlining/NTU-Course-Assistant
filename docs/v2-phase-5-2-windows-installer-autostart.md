@@ -1,8 +1,8 @@
 # Phase 5.2 — Windows Integration & Installer Upgrade
 
-## 当前有效状态（2026-09-30）
+## 当前有效状态（2026-10-03）
 
-缺陷复现基线：`0185cd722c1c072730190a716a4376e4c22ecbcb`；Phase 5.2：**IN PROGRESS — MSI cleanup defect confirmed; fixed candidate pending build and admin validation**。
+缺陷复现基线：`0185cd722c1c072730190a716a4376e4c22ecbcb`；Phase 5.2：**IN PROGRESS — MSI cleanup defect confirmed; fixed candidate build PASS; admin cleanup validation PENDING**。
 
 ### 封板与用户接受的覆盖缺口
 
@@ -21,6 +21,25 @@
 - 修复已在当前工作区实现：MSI 嵌入小型 x64 Rust DLL custom action，仅在 `REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE` 执行、以安装用户身份访问 64 位 HKCU Run，只读取/处理精确 `Links Workplace` value；仅当 value data（允许插件尾空白/外层引号）与 MSI `[INSTALLDIR]links-workplace.exe` 完全匹配时删除。值缺失/target 不同/类型不支持时安全 no-op；不会删除其他 Run values、整棵 key、其它 startup 入口或任何用户数据。代码未检查目标 EXE 是否还存在，因此 EXE 已提前缺失时仍能清理。
 - 自动验证：cleanup decision A–F 的 6 个 Rust 测试 PASS；相关 architecture tests 10/10 PASS；完整 `npm run verify`：1155 UI PASS / 15 skipped；Cargo：113 passed / 2 ignored + 6 cleanup tests PASS；fmt 与 clippy PASS。`0185` 的失败记录保持不可变，不改写成 PASS。
 - 当前实现提交、生产 build、新 MSI/NSIS 与安装态测试结果稍后补入。本次不会重装已卸载的旧 MSI；只对新候选执行 fresh MSI OFF/ON 与 NSIS OFF/ON uninstall 验证。Phase 5.2 仍未完成；NO PUSH / TAG / RELEASE。
+
+### 新 cleanup 候选与一次管理员验证（2026-10-03）
+
+- 源码候选：`c45953e44c635b8fe18b4878e52653977f99f9c8`；生产构建于 2026-10-01 00:12（Asia/Shanghai）完成，`npm run tauri build` PASS。后续文档提交不改变产物源码来源。
+- MSI ProductCode 从实际候选派生：`{7EC5FA8B-B416-497B-B8AB-484BA198DEA8}`；稳定 UpgradeCode 保持 `{2F689303-B82C-571D-BCD4-3DDF71E745AF}`。只读 MSI 表确认 deferred uninstall action 与嵌入 DLL 存在；WiX DLL SourceFile 使用 `$(sys.SOURCEFILEDIR)`，修正先前两次打包路径失败。
+- 以下均为本次 production build 的新产物，不复用 0185 旧候选。签名为构建实际生成的 sidecars，未宣称完成独立密码学验签或 Updater E2E。
+
+| 文件 | bytes | SHA-256 |
+| --- | ---: | --- |
+| Links Workplace_2.0.0_x64_en-US.msi | 54681600 | `63DF3EA7B0295F26FCA86AB309ACCAF621B507A859029D5661B7C6C61C3AF1C8` |
+| Links Workplace_2.0.0_x64_en-US.msi.sig | 428 | `182EFE8EDC469D0B2BCBE075E1F3A154D407F6F7E3DF5DB01354D80FF9070A44` |
+| Links Workplace_2.0.0_x64-setup.exe | 52465987 | `702E53C49AC6F6271644140926FCCBF9EB0E1037F9BA4183BA3AEE5602E5B86C` |
+| Links Workplace_2.0.0_x64-setup.exe.sig | 428 | `58B03A461E47DFA563679322036C407E85679FAB7E74062EA7BEE52B6BB14136` |
+
+- 原始产物目录：`src-tauri/target/release/bundle/msi/` 与 `src-tauri/target/release/bundle/nsis/`（ignored）。隔离 staging：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-c45953e44c63\input\`；四个文件复制后的 SHA-256 再次全部一致。
+- 唯一管理员脚本：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-c45953e44c63\scripts\run-autostart-cleanup-matrix.ps1`；SHA-256：`E978FE4891CAB1D62E3CCD8FC03B05316F1328F084BEAC28A47E1F74EDA13C82`。PowerShell 5.1 parse PASS；4/4 静态自检 PASS（解析、scenario 内路径允许、外部路径拒绝、已有结果在执行主体前拒绝覆盖）。这些不替代真实安装验证。
+- 四场景：MSI OFF / MSI ON / NSIS OFF / NSIS ON，分别 fresh install→uninstall。ON 注入与官方 backend 格式一致的精确测试 Run 值，不宣称 Settings UI 已验收。动态读取 MSI ProductCode；已有 related MSI、ARP、同名快捷方式、Run 项或运行中应用时安全停止；只操作 scenario-owned 安装目录。不启动应用、不读取真实 AppData、DB、Credential 或 REAL_HOLD。用户数据保留未由本脚本实测，保持独立 PENDING。
+- 结果：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-c45953e44c63\results\cleanup-matrix-result.json`。当前四场景全部 **PENDING_ADMIN_EXECUTION**，不写 PASS。
+- 工作区存在用户无关 untracked 脚本，保留且不提交。Phase 5.2 尚未关闭；Phase 5.3 NOT STARTED；NO PUSH / TAG / RELEASE。
 
 ### 独立 Windows synthetic bootstrap 验证
 
@@ -41,7 +60,7 @@ Conflict installed-app launch、DB Lock installed-app UI recovery 与 Running Le
 
 - 官方 Tauri autostart 2.5.1 使用 auto-launch 0.5.0。外部 CLI 复用同一个已编译 Windows backend，临时唯一 `LinksRC-*` Run 名称：OFF→ON→OFF、真实 HKCU registry readback **PASS**；Run / StartupApproved 测试项已清理。证据：`autostart-result.json`。未借此宣称安装态 Settings UI / Login PASS。
 - 安装态 UI 与系统一致：**PENDING_MANUAL**；logout/login：**PENDING_MANUAL**。
-- 0185 MSI cleanup **FAIL（已确认产品缺陷）**；新 candidate 的四条 fresh install/uninstall（MSI OFF/ON、NSIS OFF/ON）尚未执行。待新 installer 构建完成后再准备一次合并管理员脚本；MSI ProductCode 必须由候选 MSI 动态读取，不复用 0185 ProductCode。
+- 0185 MSI cleanup **FAIL（已确认产品缺陷）**；新 candidate build PASS；四条 fresh install/uninstall（MSI OFF/ON、NSIS OFF/ON）尚未执行。合并管理员脚本已准备并静态验证；MSI ProductCode 必须由候选 MSI 动态读取，不复用 0185 ProductCode。
 - 新验证只操作 scenario-owned 安装目录、installer 与唯一临时测试 Run 值；不启动业务 app，不读取 active AppData/用户数据库/REAL_HOLD，不安装旧包。脚本会在结束时恢复自己创建的测试 Run 项，并验证其它 sentinel Run values 未变。
 - 当前旧 MSI 哈希/ProductCode 只属于失败复现证据，不再作为候选。新 MSI、NSIS、签名 sidecars、文件大小/SHA-256、UpgradeCode 与 build time 待生产构建后补记。
 
