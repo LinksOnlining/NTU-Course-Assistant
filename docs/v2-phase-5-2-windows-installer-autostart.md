@@ -36,9 +36,11 @@
 | Links Workplace_2.0.0_x64-setup.exe.sig | 428 | `58B03A461E47DFA563679322036C407E85679FAB7E74062EA7BEE52B6BB14136` |
 
 - 原始产物目录：`src-tauri/target/release/bundle/msi/` 与 `src-tauri/target/release/bundle/nsis/`（ignored）。隔离 staging：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-c45953e44c63\input\`；四个文件复制后的 SHA-256 再次全部一致。
-- 唯一管理员脚本：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-c45953e44c63\scripts\run-autostart-cleanup-matrix.ps1`；SHA-256：`E978FE4891CAB1D62E3CCD8FC03B05316F1328F084BEAC28A47E1F74EDA13C82`。PowerShell 5.1 parse PASS；4/4 静态自检 PASS（解析、scenario 内路径允许、外部路径拒绝、已有结果在执行主体前拒绝覆盖）。这些不替代真实安装验证。
-- 四场景：MSI OFF / MSI ON / NSIS OFF / NSIS ON，分别 fresh install→uninstall。ON 注入与官方 backend 格式一致的精确测试 Run 值，不宣称 Settings UI 已验收。动态读取 MSI ProductCode；已有 related MSI、ARP、同名快捷方式、Run 项或运行中应用时安全停止；只操作 scenario-owned 安装目录。不启动应用、不读取真实 AppData、DB、Credential 或 REAL_HOLD。用户数据保留未由本脚本实测，保持独立 PENDING。
-- 结果：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-c45953e44c63\results\cleanup-matrix-result.json`。当前四场景全部 **PENDING_ADMIN_EXECUTION**，不写 PASS。
+- 唯一管理员脚本：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-c45953e44c63\scripts\run-autostart-cleanup-matrix.ps1`；SHA-256：`6B67BF8AC0C04142AA0B171868C6DB7997DF991AFB8EFBFF8BB9F6FD3E0345D3`。PowerShell 5.1 parse、scenario 内/外路径保护、旧 ARP 双视图快照与变化拒绝自检 PASS。这些不替代真实安装验证。
+- 第一次管理员执行在安全预检处停止：发现 NTU Course Assistant 1.3.1 的 HKCU ARP 项在 32/64 view 各有镜像，UninstallString 指向旧产品自己的 `uninstall.exe`；`cases=0`，没有运行候选安装/卸载，不是产品 cleanup PASS/FAIL。
+- 脚本现在只接受该精确 1.3.1 NSIS 形态并保存 ARP 快照；每个场景后检查它未改变。若发现 Links Workplace ARP、非该版本/非 NSIS 的 NTU 项、related MSI、正在运行的相关程序等，仍会停止。脚本不会启动旧程序或访问其 AppData。
+- 修订脚本 SHA-256：`6B67BF8AC0C04142AA0B171868C6DB7997DF991AFB8EFBFF8BB9F6FD3E0345D3`；PowerShell 5.1 parse 与旧 ARP snapshot / mutation guard 自检 PASS。两次原始失败预检结果均保留在候选 `results` 目录，未覆盖。
+- 四场景尚未运行：MSI OFF / ON、NSIS OFF / ON fresh install→uninstall，均 **PENDING_ADMIN_EXECUTION**。
 - 工作区存在用户无关 untracked 脚本，保留且不提交。Phase 5.2 尚未关闭；Phase 5.3 NOT STARTED；NO PUSH / TAG / RELEASE。
 
 ### 独立 Windows synthetic bootstrap 验证
