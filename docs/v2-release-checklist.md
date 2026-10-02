@@ -14,8 +14,8 @@
 | Running Legacy App | DEFERRED / NOT TESTED — USER ACCEPTED | 无独立 known-folder 测试运行态；NSIS 关闭旧进程 guard 仅静态审查，不能记 E2E PASS |
 | Autostart OFF/ON/OFF | Official Windows backend PASS；installed Settings UI PENDING_MANUAL | 唯一临时 Run value，系统 readback 与清理 PASS；不改已有用户项 |
 | Autostart logout/login | PENDING_MANUAL | 未进行真实登录启动；不得记 PASS |
-| MSI uninstall cleanup | **0185cd7 PRODUCT DEFECT CONFIRMED; FIX AUTOMATED PASS; CANDIDATE UAC PENDING** | 真正卸载 exit=0 后，Links Workplace 的 HKCU Run value 仍存在；修复已加入 MSI-only exact-path deferred cleanup，候选安装态验证待一次管理员执行 |
-| NSIS uninstall cleanup | PENDING UAC / NOT EXECUTED | 已检查生成脚本在非升级卸载时删除精确 `Links Workplace` Run value；新候选 fresh OFF/ON 安装卸载测试待一次管理员执行 |
+| MSI uninstall cleanup | **0185cd7 PRODUCT DEFECT CONFIRMED; FIX AUTOMATED PASS; CANDIDATE ADMIN MATRIX PENDING** | 07:09:44 尝试在 MSI 执行前因 COM 输出污染造成候选身份假阴性；`cases=0`、未运行 `msiexec`、产品 NOT TESTED。identity helper 已修复并通过 PS5/PS7 与实际 MSI 元数据验证 |
+| NSIS uninstall cleanup | PENDING ADMIN MATRIX / NOT EXECUTED | 已检查生成脚本在非升级卸载时删除精确 `Links Workplace` Run value；新候选 fresh OFF/ON 安装卸载测试与 MSI 合并执行 |
 | 安装器用户数据保留 | PENDING | Bootstrap 不等同卸载保留验证；不读取/删除当前 active AppData |
 | REAL_HOLD / recovery protection | 4/4 hash verification PASS | 只读核验；不修改 HOLD / recovery backup；不访问真实 credentials |
 | Phase 5.3 Updater E2E | NOT STARTED | Phase 5.2 收口后继续 |
@@ -24,6 +24,6 @@
 
 用户已批准无法快速稳定完成的纯 harness 场景透明延期；以上延期不表示测试 PASS，也不表示已证明产品 FAIL。任何真实产品缺陷必须修复与回归，不能借此豁免。
 
-真实 MSI uninstall cleanup 失败是产品缺陷，不是 harness false positive：不可变证据位于 `D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\c7d3dfbf8fec4be9b274db5fc7b0f99a\cleanup-execution\result.json`。修复与自动测试已完成；新候选 production build PASS；四项产物大小/hash 与一次管理员脚本已记录；MSI/NSIS fresh OFF/ON uninstall 真实验收待管理员执行。当前 Phase 5.2 **IN PROGRESS — BUILD PASS — WAITING FOR ADMIN CLEANUP EXECUTION**。收口后可记 **COMPLETE WITH ACCEPTED DEFERRED COVERAGE**，逐项列出缺口；当前不能提前记 COMPLETE。
+真实 MSI uninstall cleanup 失败是产品缺陷，不是 harness false positive：不可变证据位于 `D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\c7d3dfbf8fec4be9b274db5fc7b0f99a\cleanup-execution\result.json`。修复与自动测试及新候选 production build 已完成。07:09:44 的候选身份预检假阴性没有运行安装器；COM helper 已修复，候选 MSI 元数据、PS5/PS7 parse 和自检 PASS。MSI/NSIS fresh OFF/ON uninstall 真实矩阵仍待用户实际管理员 PowerShell 中执行；该上下文必须确认 NTU 1.3.1 镜像 ARP 与 Links Workplace absent 后才继续。当前 Phase 5.2 **IN PROGRESS — BUILD PASS — WAITING FOR ADMIN CLEANUP MATRIX**。收口后可记 **COMPLETE WITH ACCEPTED DEFERRED COVERAGE**，逐项列出缺口；当前不能提前记 COMPLETE。
 
 NO PUSH / NO TAG / NO RELEASE，直到 Ethan 最终明确授权。

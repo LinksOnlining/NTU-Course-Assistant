@@ -36,11 +36,14 @@
 | Links Workplace_2.0.0_x64-setup.exe.sig | 428 | `58B03A461E47DFA563679322036C407E85679FAB7E74062EA7BEE52B6BB14136` |
 
 - 原始产物目录：`src-tauri/target/release/bundle/msi/` 与 `src-tauri/target/release/bundle/nsis/`（ignored）。隔离 staging：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-c45953e44c63\input\`；四个文件复制后的 SHA-256 再次全部一致。
-- 唯一管理员脚本：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-c45953e44c63\scripts\run-autostart-cleanup-matrix.ps1`；SHA-256：`6B67BF8AC0C04142AA0B171868C6DB7997DF991AFB8EFBFF8BB9F6FD3E0345D3`。PowerShell 5.1 parse、scenario 内/外路径保护、旧 ARP 双视图快照与变化拒绝自检 PASS。这些不替代真实安装验证。
-- 第一次管理员执行在安全预检处停止：发现 NTU Course Assistant 1.3.1 的 HKCU ARP 项在 32/64 view 各有镜像，UninstallString 指向旧产品自己的 `uninstall.exe`；`cases=0`，没有运行候选安装/卸载，不是产品 cleanup PASS/FAIL。
-- 脚本现在只接受该精确 1.3.1 NSIS 形态并保存 ARP 快照；每个场景后检查它未改变。若发现 Links Workplace ARP、非该版本/非 NSIS 的 NTU 项、related MSI、正在运行的相关程序等，仍会停止。脚本不会启动旧程序或访问其 AppData。
-- 修订脚本 SHA-256：`6B67BF8AC0C04142AA0B171868C6DB7997DF991AFB8EFBFF8BB9F6FD3E0345D3`；PowerShell 5.1 parse 与旧 ARP snapshot / mutation guard 自检 PASS。两次原始失败预检结果均保留在候选 `results` 目录，未覆盖。
-- 四场景尚未运行：MSI OFF / ON、NSIS OFF / ON fresh install→uninstall，均 **PENDING_ADMIN_EXECUTION**。
+- 管理员脚本：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-c45953e44c63\scripts\run-autostart-cleanup-matrix.ps1`；当前 SHA-256：`323BD05A7F6717B762A98F2C450C2D0E197294CFAD92E6CE1C1C5742B53F71C1`。scenario 路径保护、candidate identity 与 ARP 镜像去重逻辑均有自检；自动检查不替代真实安装验证。
+- 第二次管理员尝试结果 `cleanup-matrix-result-20261003-070944-366.json`：预检看到两条相同 HKCU NTU Course Assistant 1.3.1 记录（Registry32/Registry64），随后在候选身份校验处停止；`cases=[]`、ProductCode/UpgradeCode 未读取写入结果，`msi-logs` 不存在。脚本顺序证明没有进入 `msiexec`：`CANDIDATE_MSI_EXECUTED=False`、`MSI_INSTALL_EXIT_CODE=NOT_RUN`；产品判定为 **NOT TESTED IN THIS ATTEMPT**，不是产品 FAIL。
+- 根因是 PowerShell MSI COM helper 的 `Execute()` / `Close()` 调用结果未抑制，旧函数返回 `Object[]`（最小复现捕获 3 项：空值、`Links Workplace`、空值），导致候选字符串身份比较误报。现在用 `$null = ...` 抑制 COM 返回并返回单一字符串；`Read-CandidateMsiIdentity` 每次从实际 MSI Property / Upgrade 表读取 ProductName、ProductVersion、ProductCode、UpgradeCode、Manufacturer，ProductCode 来源为 `LIVE_MSI_PROPERTY`，没有硬编码旧 ProductCode。
+- 候选身份已直接从实际 MSI 读取并通过校验：`Links Workplace` / `2.0.0` / ProductCode `{7EC5FA8B-B416-497B-B8AB-484BA198DEA8}` / UpgradeCode `{2F689303-B82C-571D-BCD4-3DDF71E745AF}` / Manufacturer `links`。文件为 `input\Links Workplace_2.0.0_x64_en-US.msi`，54,681,600 bytes，SHA-256 `63DF3EA7B0295F26FCA86AB309ACCAF621B507A859029D5661B7C6C61C3AF1C8`，与 candidate manifest 一致。
+- `input\candidate-manifest.json` 将产品源码明确记为 commit `c45953e44c635b8fe18b4878e52653977f99f9c8`（Git commit subject：`fix: resolve WiX cleanup DLL source path`）。`autostart-cleanup-c45953e44c63` 是 scenario id / 目录名，不是 commit 或 artifact id；candidate source commit 不靠目录名推断。
+- 用户管理员终端此前观察的两条 NTU ARP 是同一 HKCU uninstall key 在 32/64 registry view 的镜像：逻辑记录去重为一条并保留两个 view；其 1.3.1 NSIS `uninstall.exe` 形态是允许保留的 pre-install baseline，Links Workplace 应 absent。当前 Codex shell 的 profile 是 `C:\Users\LinYu` 且此 HKCU 未枚举到该 NTU ARP；因此未将旧 `PREEXECUTE_PASS` 结果（它早于当前脚本，且 result 中 preflight ARP 为空）计为真实机器 preflight PASS。需在用户实际管理员 PowerShell 中运行下一次合并命令，实时确认 baseline 后才会执行四个安装/卸载场景。
+- 当前修订后验证：Windows PowerShell 5.1 与 PowerShell 7 parse PASS；两者 `-SelfTest` 均输出 `CANDIDATE_IDENTITY=PASS`、`LEGACY_BASELINE=PASS`、`IDENTITY_REGRESSION=PASS`；实际 MSI identity helper / metadata / manifest hash PASS。当前上下文无法读取用户管理员终端中的真实 HKCU baseline，故**真实 `PREEXECUTE_ONLY` 与四场景仍 PENDING_ADMIN_EXECUTION**。
+- 四场景尚未运行：MSI OFF / ON、NSIS OFF / ON fresh install→uninstall，均 **PENDING_ADMIN_EXECUTION**。原始结果均保留，没有覆盖或删除。
 - 工作区存在用户无关 untracked 脚本，保留且不提交。Phase 5.2 尚未关闭；Phase 5.3 NOT STARTED；NO PUSH / TAG / RELEASE。
 
 ### 独立 Windows synthetic bootstrap 验证
