@@ -1,16 +1,16 @@
 # 变更记录
 
-## [Unreleased] — Links Workplace 2.0.0
+## [Unreleased] — Links Workplace 2.0.0 clean-start release
 
 ### Changed
 
-- 将正式产品名、Windows 应用身份与版本迁移为 Links Workplace 2.0.0。
-- 首次启动支持从旧 NTU Course Assistant identity 安全复制并验证 SQLite 数据；支持 schema 5–8，遇到多源冲突时停止，不合并或覆盖。
+- 正式产品名、Windows 应用身份与版本为 Links Workplace 2.0.0；2.0 采用全新用户数据起点。
+- 安装前需由用户手动卸载 NTU Course Assistant 1.x；不提供 1.x→2.0 自动升级或旧数据库导入。
 
 ### Security
 
-- 迁移先对旧数据库只读校验并创建可验证备份，仅在 staging 副本上迁移；旧源保留。开发用 `dev-v2` 数据库不作为自动迁移来源。
-- 不迁移 WebView 临时状态、AI 授权或凭据；不执行安装、旧版卸载、Updater E2E 或正式发布。
+- 仅使用 `com.links.workplace.desktop` 应用数据目录。新数据库初始化为 schema 8；既有 schema 8 正常打开，其他已存在 schema 只读拒绝且保持不变。
+- 运行时不扫描、复制、备份、恢复或迁移旧 NTU identity 数据；真实 1.x 历史状态仅保存在独立冷归档中。
 
 ## Links Workplace v2.0 development — Phase 4.4 — 2026-09-26
 

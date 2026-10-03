@@ -1,5 +1,7 @@
 # Phase 5.1 — Links Workplace 身份与数据迁移
 
+> **SUPERSEDED：**2026-10-03 产品决策将 Links Workplace 2.0 定义为 clean-start release。本文记录的迁移实现与验收仅为历史证据，不是当前受支持能力或 Release Gate。当前 2.0 不扫描、复制、激活或迁移 NTU 1.x 数据；见 `docs/v2-phase-5-2-clean-start-verification.md`。
+
 ## 结果
 
 - Phase 5.0：**COMPLETE**；Migration Source Policy 3 已获 Ethan 批准。

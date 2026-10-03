@@ -84,10 +84,10 @@ Clean Minimal Desktop Workspace：清晰、安静、高信息密度、不拥挤�
 
 ## 16. Technical / Data / Network Constraints
 
-- 继续使用现有 Tauri 2 + React + TypeScript + Rust + SQLite 应用和同一用户数据，不创建第二个 Academic DB。
-- 正式 v2 身份为 Product `Links Workplace`、Version `2.0.0`、Tauri identifier `com.links.workplace.desktop`；旧 `com.ntu-course-assistant.desktop` 与 `courses.sqlite3` 是获准的数据迁移源，GitHub repo / updater endpoint 保持不变。品牌名与数据身份不得混为一谈。
-- 当前 SQLite schema 为 8。Phase 5.1 获批支持旧 identifier 根数据库 schema 5/6/7/8，按已有 migration chain 迁移到 schema 8；旧源先备份、再对副本迁移并校验后激活。新旧库同时存在且没有匹配完成标记时安全停止，不合并、不按时间或大小覆盖。`dev-v2` 永远不是迁移源。此身份迁移不新增 schema。
-- SQLite `app_settings` 随获选数据库整体保留；不复制 WebView `localStorage`、缓存、AI 权限授权、临时状态或任何 secret。Daily Brief / Weather 本地偏好不跨身份迁移，除非另有明确逐项用户同意。Keyring 凭据沿用原 service/account，不导出或复制密钥。UI 不直连 DB，Workspace 不绕过 Application API 访问 Academic 内部表。
+- 继续使用现有 Tauri 2 + React + TypeScript + Rust + SQLite 应用；不创建第二个 Academic DB。Links Workplace 2.0 是 clean-start release，不继承 NTU 1.x 用户数据库。
+- 正式 v2 身份为 Product `Links Workplace`、Version `2.0.0`、Tauri identifier `com.links.workplace.desktop`；DB 文件名为 `courses.sqlite3`，GitHub repo / updater endpoint 保持不变。旧 `com.ntu-course-assistant.desktop` 仅为历史身份，不得扫描、复制或恢复。
+- SQLite schema 为 8。新数据库创建为 schema 8，既有 schema 8 正常打开；任何已存在且 `user_version != 8` 的数据库只读拒绝且不得修改。2.0 不支持 schema 5/6/7 自动迁移或 1.x→2.0 自动升级。安装 2.0 前用户须自行卸载 1.x；旧数据不会自动恢复。未来 schema migration 必须单独审批。
+- 不复制 WebView `localStorage`、缓存、AI 权限授权、临时状态或任何 secret。Keyring 凭据不导出、不复制。UI 不直连 DB，Workspace 不绕过 Application API 访问 Academic 内部表。
 - Weather 可访问外部服务，但离线或服务故障不能破坏本地核心功能。AI 网络不可用不能妨碍 Academic、Planner、Tasks、Diary、Inbox、Timeline、Reminder 或本地 Search。
 - AI key 必须放系统安全凭据存储，不入 DB、不入 backup。
 
@@ -101,4 +101,4 @@ Clean Minimal Desktop Workspace：清晰、安静、高信息密度、不拥挤�
 - Academic 时间语义及历史稳定能力不得回退；应用核心在 AI、Weather 或网络不可用时仍可使用。
 - Dashboard 的视口目标、导航、数据边界和失败隔离必须由后续相应阶段的自动测试及 Windows 11 Pro 人工验收验证。
 - 自动化 PASS 不等同 Windows UI、安装器、Updater、通知、托盘或自启动人工验收 PASS。
-- 任何 identifier、AppData、安装升级或 updater 迁移须单独通过数据兼容方案和 Windows 11 Pro E2E。
+- 2.0 clean-start 安装、卸载、自启动与 updater 必须分别通过 Windows 11 Pro E2E；不得暗中引入 1.x 自动迁移或安装升级。

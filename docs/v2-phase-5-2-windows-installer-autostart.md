@@ -1,5 +1,7 @@
 # Phase 5.2 — Windows Integration & Installer Upgrade
 
+> **SCOPE SUPERSEDED：**2026-10-03 产品决策将 2.0 改为 clean-start release。下文 S04/S05、NTU baseline、legacy migration 和旧 cleanup matrix 只保留为不可变历史证据，不再是当前 Gate；统一状态为 **OBSOLETE / NOT APPLICABLE BY PRODUCT SCOPE CHANGE**，不是 PASS、FAIL 或 DEFERRED。不要继续运行或维护旧 matrix。当前仅执行 MSI/NSIS 2.0 fresh install/uninstall/autostart 检查，见 `docs/v2-phase-5-2-clean-start-verification.md`。
+
 ## 当前有效状态（2026-10-03）
 
 缺陷复现基线：`0185cd722c1c072730190a716a4376e4c22ecbcb`；Phase 5.2：**IN PROGRESS — c45953e 的 MSI_OFF uninstall 1603 已确认是产品 CA 缺陷；根因已在 `80ca1ef` 修复；自动门禁与新 production build PASS；替代候选四格管理员 cleanup matrix PENDING**。

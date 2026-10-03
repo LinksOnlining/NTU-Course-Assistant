@@ -42,15 +42,15 @@ Unified Timeline 是 Presentation/Application projection，不是数据库实体
 
 ## 7.9 Database Evolution
 
-当前 SQLite schema 为 8。Workspace 与 Academic 共用同一个 DB，不另建 Links Workplace DB。已有 5→6→7→8 migration chain；身份迁移只对副本运行并保留源库，不增加 schema。任何未来 schema bump 仍须定义并验证备份、事务迁移、迁后校验及失败恢复；这是 schema bump gate。UI 不直连 DB。
+Links Workplace 2.0 以 SQLite schema 8 clean start。缺少数据库时创建全新 schema 8；既有 schema 8 正常打开；任何已存在且 `user_version != 8` 的文件都必须在只读预检后拒绝，并保持文件字节不变。当前运行时不得扫描旧 identity、复制旧数据库、创建 legacy migration backup 或 marker。历史 schema 初始化步骤只用于构造新建的空数据库，不接受现有旧 schema 文件。未来 schema bump 须另行明确授权，并定义事务迁移、迁后校验及失败恢复；UI 不直连 DB。
 
 ## 7.10 Technical Identity
 
-**当前 v2 身份：**Product `Links Workplace`，version `2.0.0`，Tauri identifier `com.links.workplace.desktop`，DB 文件名 `courses.sqlite3`。v1 的 `com.ntu-course-assistant.desktop` 是受控 legacy 数据源，不再是 v2 目标身份。Ethan 已批准 Phase 5.1 的数据迁移实现；真实迁移激活、安装器升级/卸载、自启动与 updater E2E 仍须在相应阶段另行验收，当前不得宣称通过。
+**当前 v2 身份：**Product `Links Workplace`，version `2.0.0`，Tauri identifier `com.links.workplace.desktop`，DB 文件名 `courses.sqlite3`。NTU Course Assistant 1.x 是历史旧版，不是 v2 的数据来源；2.0 运行时不得发现或访问 `com.ntu-course-assistant.desktop`。本 clean-start 决策取代此前 Phase 5.1 身份迁移方案。
 
 ## 7.11 Brand Strategy
 
-用户可见品牌及 v2 Tauri/installer identity 均为 Links Workplace；仅迁移发现、历史 release 兼容与旧数据来源保留 NTU legacy 常量。ProductName、window title 与 executable 使用 Links Workplace 命名；GitHub repo 与 updater source 在当前阶段保持不变。旧安装与新安装是否 side-by-side 或升级由后续 Windows installer E2E 决定。
+用户可见品牌及 v2 Tauri/runtime identity 均为 Links Workplace；MSI UpgradeCode 按当前产品决策保持 `2f689303-b82c-571d-bcd4-3ddf71e745af`。本阶段验收仅覆盖 Links Workplace 2.0 fresh install/uninstall，不执行或声称 1.x installer upgrade / data migration 验收。NSIS/MSI 不打包主动清理 NTU shortcut 或旧 AppData 的脚本；GitHub repo 与 updater source 保持不变。
 
 Phase 1.5 起 React 主窗口使用 Links Workplace 品牌；Phase 5.1 实现 Tauri `productName`、系统窗口标题、Tray tooltip、安装身份和 identifier 向 Links Workplace 的统一。GitHub repo/updater source 保持原值。Weather slot 仍无数据时不展示天气占位或假数据。
 

@@ -1,8 +1,8 @@
 # Links Workplace
 
-面向 Windows 的本地个人工作台，包含课程表、Planner、Diary、Inbox、天气和可选 AI 能力。Links Workplace 2.0 在本仓库内从 NTU Course Assistant 渐进演进，不创建第二套课程数据库。
+面向 Windows 的本地个人工作台，包含课程表、Planner、Diary、Inbox、天气和可选 AI 能力。Links Workplace 2.0 沿用本仓库与应用技术栈，但采用独立身份和全新数据开始。
 
-> **版本说明：**Links Workplace 2.0.0 当前处于开发与迁移验收阶段，尚未发布。当前公开稳定版本仍为 **NTU Course Assistant v1.3.1**；下方安装链接仅适用于该旧版，不代表 Links Workplace 2.0 可安装或已完成升级验收。
+> **版本说明：**Links Workplace 2.0.0 当前仍在开发与安装验收，尚未发布。公开的 NTU Course Assistant v1.3.1 属于旧版产品线。Links Workplace 2.0 是 **clean-start release**，不支持从 NTU Course Assistant 1.x 自动升级或迁移数据。
 
 ## 主要功能
 
@@ -19,7 +19,8 @@
 ## 系统要求与安装
 
 - Windows 10 是当前主要实际运行与验收环境，Windows 11 作为兼容目标。
-- 当前公开版可从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 下载 `NTU.Course.Assistant_1.3.1_x64-setup.exe`。Links Workplace 2.0 安装包尚未发布；本阶段不执行安装、卸载或旧版升级。
+- 当前公开旧版可从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 下载 `NTU.Course.Assistant_1.3.1_x64-setup.exe`。Links Workplace 2.0 安装包尚未发布。
+- 安装 2.0 前，用户需要自行卸载 NTU Course Assistant 1.x。2.0 使用新的应用数据目录，只创建 schema 8 数据库；旧版课程数据不会自动迁移或恢复。如需保留旧数据，请在卸载前自行妥善保存。
 - 首次使用请在“设置”中确认作息时间、学期首周和提醒选项。
 
 ## 使用说明
@@ -46,10 +47,10 @@
 
 ## 已知限制
 
-- 学校作息与学期日期需要由用户确认后保存；旧版本中没有学期归属字段的 legacy 课程会作为当前学期兼容数据显示。
+- 学校作息与学期日期需要由用户确认后保存；已有数据库 schema 不是 8 时，2.0 会拒绝打开且不会修改该数据库。
 - 扫描 PDF 依赖本地 OCR，清晰度和版式会影响结果；未实现教务系统直接导入、云同步或日程管理。
 - 应用完全退出后不会继续发送提醒。
-- v1.1.2 及更早版本需手动安装 v1.2.0；从 v1.2.0 开始，后续版本支持应用内检查更新。
+- NTU Course Assistant 1.x 与 Links Workplace 2.0 属于不同的数据起点；不提供自动迁移工具。
 
 ## 本地开发
 
