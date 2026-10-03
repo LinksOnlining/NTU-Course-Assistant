@@ -35,13 +35,13 @@ Baseline：Links Workplace absent；NTU irrelevant；无关 Windows Run 项快�
 
 | Gate | 状态 | 要求 |
 |---|---|---|
-| MSI fresh install / schema 8 | PENDING | Fresh install 成功；新 DB schema 8；主程序、单实例、Tray exit 正常 |
-| MSI uninstall / Autostart OFF | PENDING | 卸载 exit 0；Links ARP、EXE、shortcut、目录不存在；无关 Run 项不变 |
-| MSI install / Autostart ON / uninstall | PENDING | 精确 Links Run value 存在且指向本产品 EXE；卸载后删除 |
-| NSIS fresh install / schema 8 | PENDING | Fresh install 成功；新 DB schema 8；主程序、单实例、Tray exit 正常 |
-| NSIS uninstall / Autostart OFF | PENDING | 卸载成功；Links ARP、EXE、shortcut、目录不存在；无关 Run 项不变 |
-| NSIS install / Autostart ON / uninstall | PENDING | 精确 Links Run value 存在且指向本产品 EXE；卸载后删除 |
-| Installer ownership / shortcuts / ARP | PENDING | 仅验证 Links Workplace；绝不要求 NTU 旧产品状态 |
+| MSI fresh install / schema 8 | BLOCKED / NOT RUN | 本机 Links app-local data root 已存在且来源未确认，不能在当前用户 profile 中启动安装验收 |
+| MSI uninstall / Autostart OFF | BLOCKED / NOT RUN | 未执行 installer 场景；未更改主机安装状态 |
+| MSI install / Autostart ON / uninstall | BLOCKED / NOT RUN | 未执行 installer 场景；未更改主机安装状态 |
+| NSIS fresh install / schema 8 | BLOCKED / NOT RUN | 本机 Links app-local data root 已存在且来源未确认，不能在当前用户 profile 中启动安装验收 |
+| NSIS uninstall / Autostart OFF | BLOCKED / NOT RUN | 未执行 installer 场景；未更改主机安装状态 |
+| NSIS install / Autostart ON / uninstall | BLOCKED / NOT RUN | 未执行 installer 场景；未更改主机安装状态 |
+| Installer ownership / shortcuts / ARP | NOT RUN | 需要上述隔离的 fresh install 基线后验证；只检查 Links Workplace，不检查 NTU |
 
 详细操作记录见 `docs/v2-phase-5-2-clean-start-verification.md`。
 
@@ -58,6 +58,6 @@ Baseline：Links Workplace absent；NTU irrelevant；无关 Windows Run 项快�
 ## 当前结论
 
 - Phase 5.1 的自动身份迁移方案被当前 clean-start 决策取代；旧迁移报告仅为历史证据。
-- Phase 5.2：**CLEAN-START IMPLEMENTATION IN PROGRESS**；不得提前标记 COMPLETE。
+- Phase 5.2 implementation / automated verification / production build：**COMPLETE / PASS**；installed matrix：**BLOCKED / NOT RUN**，Overall **PENDING**。本地 signed candidate artifacts 与完整哈希记录见 `docs/v2-phase-5-2-clean-start-verification.md`；未安装、未提交。app-local 数据归属未确认前不得安装或清理。
 - Phase 5.3：**NOT STARTED**。
 - **NO PUSH / NO TAG / NO GITHUB RELEASE**。所有门禁通过后只停在 `RELEASE_READY`，等待 Ethan 明确授权。

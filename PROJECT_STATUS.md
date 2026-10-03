@@ -3,14 +3,16 @@
 - 最后更新：2026-10-03
 
 ## Links Workplace v2.0
-- **当前状态：**Phase 1–4.9 与 Phase 5.0 已完成；原 Phase 5.1 identity/data migration implementation 已被 2026-10-03 产品决策取代。当前 Links Workplace 2.0 定义为 **CLEAN-START RELEASE**；Phase 5.2 clean-start implementation 正在进行，Phase 5.3 为 **NOT STARTED**。
+- **当前状态：**Phase 1–4.9 与 Phase 5.0 已完成；原 Phase 5.1 identity/data migration implementation 已被 2026-10-03 产品决策取代。当前 Links Workplace 2.0 定义为 **CLEAN-START RELEASE**。Phase 5.2 implementation、自动门禁与本地 production build 已完成/PASS；安装态矩阵因本机现存但来源未确认的 Links app-local 数据而 BLOCKED，Overall 仍 PENDING。Phase 5.3 为 **NOT STARTED**。
 - **产品数据规则：**唯一 v2 identifier `com.links.workplace.desktop`；缺库则新建 schema 8；既有 schema 8 正常打开；既有 `user_version != 8` 只读拒绝且字节不变。运行时不扫描、复制、迁移、备份、恢复 NTU 1.x identity 数据；用户须先手动卸载 1.x。
 - **历史安装测试范围：**S04/S05、NTU baseline、旧 migration/conflict/running-legacy matrix 均为 **OBSOLETE / NOT APPLICABLE BY PRODUCT SCOPE CHANGE**，不是 PASS、FAIL 或 DEFERRED；旧 cleanup harness 停止维护。`80ca1efe` MSI 自启动 Custom Action 修复保留，`c45953e` 失败证据保留。
 - **1.3 Final Archive：PASS。**42 个 payload 文件全部 SHA-256 匹配，8 个 SQLite metadata 检查记录通过，包含 manifest 在内 43 个文件为只读。REAL_HOLD / recovery evidence 继续保护。active legacy 本机状态尚未删除：精确删除请求被本机安全策略在执行前拒绝，没有改动数据，也没有尝试其他删除方式。
 - **本轮代码状态：**启动仅打开 Links app-local database；release migration module / NTU NSIS retirement hook / MSI NTU shortcut cleanup 已移除；MSI UpgradeCode 按产品决策保持 `2f689303-b82c-571d-bcd4-3ddf71e745af`；MSI Links autostart cleanup action 保留。既有非 schema-8 数据库拒绝测试覆盖 schema 0–7、9，并验证 `open` / `connect` 后文件字节不变。
-- **本轮 targeted validation：**Windows installer identity architecture tests 4/4 PASS；Rust lib 98 passed / 1 ignored，installer cleanup 7 passed。`npm run verify`、fmt/clippy、`npm run tauri build`、2.0-only MSI/NSIS installed matrix 尚待执行。
-- **当前 Git：**branch `v2/workspace-rebase`；起始 HEAD `ffef91e4a10c4a9e2a2dea307313481072f736c8`；clean-start 代码与文档改动尚未提交。
-- **发布边界：**不 push、不 tag、不创建 GitHub Release。Phase 5.2 fresh install/uninstall gate PASS 后才进入 Phase 5.3；最终只停在 `RELEASE_READY` 并等待用户授权。
+- **自动验证：**`npm run verify` PASS（Playwright 1,155 passed / 15 skipped）；Rust 98 passed / 1 ignored，installer cleanup tests 7 passed；fmt/clippy PASS；`npm run tauri build` PASS。MSI/NSIS updater `.sig` 均以当前公钥验签通过，篡改产物被拒绝。
+- **本地 candidate artifacts：**MSI `107801C924A002284E2538BA4B5C1D9BB2D6AF52D9D21403813F7B7380C10CF9`；NSIS `5CD25B3B6E9A901E49BD11FC66EF0086F61EEBDEAF7A59BB92D790D660A584B0`。具体路径、大小、签名哈希与 ProductCode/UpgradeCode 见 `docs/v2-phase-5-2-clean-start-verification.md`。未安装、未提交。
+- **Host 数据门禁：**NTU 与 Links 安装/ARP/进程/自启动当前均未发现，但两个 identity app-local data roots 仍存在；Links root 含 DB、sidecar、marker、backups，来源未证明为 synthetic。未读取/复制/修改/删除其数据。先前精确删除 NTU root 被本机安全策略阻止；未尝试替代方式。fresh install / uninstall、updater E2E、synthetic cleanup 尚未运行；需可确认隔离的干净 profile，或用户确认该精确 Links root 是可丢弃的测试数据。
+- **当前 Git：**branch `v2/workspace-rebase`；clean-start implementation commit `4d89200`，clean-start scope/doc baseline `93e7642`；本轮验证证据记录于 `docs/v2-phase-5-2-clean-start-verification.md`。
+- **发布边界：**不 push、不 tag、不创建 GitHub Release；不在当前未分类 AppData 状态下运行候选 installer。Phase 5.2 installed matrix PASS 后才进入 Phase 5.3；最终只停在 `RELEASE_READY` 并等待用户授权。
 - Phase 3 隐私事实源：`docs/v2-personal-context-privacy-contract.md`。Diary/Inbox/Search 本地化；Context 不含私人正文；Weather 是默认关闭的唯一外网能力：只有用户明确搜索或确认当前位置后才访问位置服务；地点解析走 Rust 侧高德主解析与可选百度回退，天气预报仍走 Open-Meteo；API 密钥保存在 Windows Credential Manager，选择后只保存地点，不保存搜索历史。当前位置需明确同意、系统授权和约百米级坐标模糊化；Routine 只建议并需用户确认。Phase 3.0 文档提交 `11fa394` 已保留。
 - Planner 冻结约束见 `docs/v2-planner-domain-contract.md`：Task deadline 不占 Timeline；Academic occurrence 在 Planner 只读；PersonalTask 1:N TimeBlock；Event 独立；buffer 不改事实时间；冲突 warn-but-allow。
 
