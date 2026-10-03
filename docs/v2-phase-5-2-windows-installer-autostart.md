@@ -2,7 +2,7 @@
 
 ## 当前有效状态（2026-10-03）
 
-缺陷复现基线：`0185cd722c1c072730190a716a4376e4c22ecbcb`；Phase 5.2：**IN PROGRESS — MSI cleanup defect confirmed; fixed candidate build PASS; admin cleanup validation PENDING**。
+缺陷复现基线：`0185cd722c1c072730190a716a4376e4c22ecbcb`；Phase 5.2：**IN PROGRESS — c45953e 的 MSI_OFF uninstall 1603 已确认是产品 CA 缺陷；根因已在 `80ca1ef` 修复；自动门禁与新 production build PASS；替代候选四格管理员 cleanup matrix PENDING**。
 
 ### 封板与用户接受的覆盖缺口
 
@@ -22,7 +22,7 @@
 - 自动验证：cleanup decision A–F 的 6 个 Rust 测试 PASS；相关 architecture tests 10/10 PASS；完整 `npm run verify`：1155 UI PASS / 15 skipped；Cargo：113 passed / 2 ignored + 6 cleanup tests PASS；fmt 与 clippy PASS。`0185` 的失败记录保持不可变，不改写成 PASS。
 - 当前实现提交、生产 build、新 MSI/NSIS 与安装态测试结果稍后补入。本次不会重装已卸载的旧 MSI；只对新候选执行 fresh MSI OFF/ON 与 NSIS OFF/ON uninstall 验证。Phase 5.2 仍未完成；NO PUSH / TAG / RELEASE。
 
-### 新 cleanup 候选与一次管理员验证（2026-10-03）
+### 历史候选 c45953e（首次真实卸载失败，已被新候选替代）
 
 - 源码候选：`c45953e44c635b8fe18b4878e52653977f99f9c8`；生产构建于 2026-10-01 00:12（Asia/Shanghai）完成，`npm run tauri build` PASS。后续文档提交不改变产物源码来源。
 - MSI ProductCode 从实际候选派生：`{7EC5FA8B-B416-497B-B8AB-484BA198DEA8}`；稳定 UpgradeCode 保持 `{2F689303-B82C-571D-BCD4-3DDF71E745AF}`。只读 MSI 表确认 deferred uninstall action 与嵌入 DLL 存在；WiX DLL SourceFile 使用 `$(sys.SOURCEFILEDIR)`，修正先前两次打包路径失败。
@@ -46,6 +46,24 @@
 - 四场景尚未运行：MSI OFF / ON、NSIS OFF / ON fresh install→uninstall，均 **PENDING_ADMIN_EXECUTION**。原始结果均保留，没有覆盖或删除。
 - 工作区存在用户无关 untracked 脚本，保留且不提交。Phase 5.2 尚未关闭；Phase 5.3 NOT STARTED；NO PUSH / TAG / RELEASE。
 
+### c45953e MSI_OFF uninstall 1603 根因与替代候选（2026-10-03）
+
+- 不可变失败记录：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-c45953e44c63\results\cleanup-matrix-result-20261003-073909-595.json`；失败后只读状态：`MSI_OFF_POST_FAILURE_STATE.json`。c45953e MSI fresh install exit=0，随后 MSI_OFF uninstall exit=1603；不是 harness false positive。分类为 **C — AUTOSTART CLEANUP LOGIC DEFECT**（CA 内部属性读取逻辑，发生在 HKCU 访问前）；DLL 加载 / entrypoint 成功，故排除 B。原 verbose log 记录 64-bit impersonated CA server，但没有输出具体 Windows identity；此次故障早于 HKCU 操作，因此不是 D。deferred `RemoveLinksWorkplaceAutostart`（CA type 9217 / 0x2401）真实返回 1603。
+- 根因证据：只读 `MsiOpenPackageEx(..., MSIOPENPACKAGEFLAGS_IGNOREMACHINESTATE)` 复现确认：旧 CA 对 `MsiGetPropertyW(ProductName, null buffer, size=0)` 的探测收到 `ERROR_SUCCESS=0`、required chars=15；同 API 使用有效的 1-NUL 输出缓冲区才返回 `ERROR_MORE_DATA=234`。旧实现错误要求 234，因此在访问 HKCU 前立即映射为 MSI 1603。Microsoft 文档明确禁止以 null 缓冲区探测大小，并说明应传有效空字符串缓冲区：[MsiGetPropertyW](https://learn.microsoft.com/en-us/windows/win32/api/msiquery/nf-msiquery-msigetpropertyw)。只读复现使用 `MsiOpenPackageEx` 的 `MSIOPENPACKAGEFLAGS_IGNOREMACHINESTATE`，该受限句柄不会改变机器状态：[MsiOpenPackageEx](https://learn.microsoft.com/en-us/windows/win32/api/msi/nf-msi-msiopenpackageexa)。
+- 最小修复提交：`80ca1efe78205240570c6a1483517407946a68a6`（`fix: read MSI deferred action data with valid buffer`）。改为有效空缓冲区探测；保留精确 Links Run value ownership 校验、HKCU 用户上下文及真实错误返回，并将 CA 内部阶段、Windows identity 与状态写入 MSI 日志。新增跨用户同名路径不删除的测试；cleanup tests 7/7 PASS。
+- 失败后现场未被脚本恢复/清理。只读快照位于 `MSI_OFF_POST_FAILURE_STATE.json`；它记录 c45953e ProductCode `{7EC5FA8B-B416-497B-B8AB-484BA198DEA8}` 仍安装、程序/安装目录/快捷方式仍在、Links Run value 不存在、相关进程不在。NTU ARP 在 Codex 当前 profile 与先前管理员预检 profile 间存在可见性差异；没有据此宣称 NTU 状态一致，也未访问/改动 NTU 文件、用户 DB、凭据或 REAL_HOLD。新管理员脚本会在写入前严格核验账户、旧测试包路径及 NTU 1.3.1 ARP 基线，不匹配即停止。
+- 替代候选：branch `v2/workspace-rebase`，source commit `80ca1efe78205240570c6a1483517407946a68a6`。MSI ProductCode `{6CB1D810-FDA9-4C09-A631-62236A264E82}`；UpgradeCode 保持 `{2F689303-B82C-571D-BCD4-3DDF71E745AF}`。MSI 只读元数据确认 MajorUpgrade UpgradeCode 连续；计划中的一次受保护管理员执行只会通过新 MSI major-upgrade 移除失败旧测试包，不重测 c45953e，不启动应用，不访问 DB。
+- 本候选 `npm run verify`：PASS（Playwright 1155 passed / 15 skipped）；`cargo test`：113 passed / 2 ignored；`cargo fmt --check` 与 `cargo clippy --all-targets -- -D warnings`：PASS；`npm run tauri build`：PASS。PowerShell 5.1 / 7 parse、matrix `-SelfTest`、候选 `-ValidateOnly`（两种 PowerShell 均通过）：PASS。`ValidateOnly` 结果为 `results\candidate-cleanup-orchestration-20261003-082624-194.json`；另一次早期 PS7 自测路径失败已修复，失败记录保留且未执行 installer/registry。最终 runner SHA-256：`AB077F2B1F29C41B8E249DF748FBDAA10FF0940C485A73DAA1A9494382B7D94E`；copied matrix SHA-256：`E212AB20D2B16EAE57E0BC1739F3323E908471D27707DF5549B48973DBCD475D`；manifest SHA-256：`B1F1542F618408C73DB70E4F3F619CF9CEB58276C1E1990D017C6919914A271C`。静态验证没有执行 installer 或改动注册表。
+
+| 新候选产物 | bytes | SHA-256 |
+| --- | ---: | --- |
+| `Links Workplace_2.0.0_x64_en-US.msi` | 54685696 | `696B3478CE478AB5354F3F0BD14A29893A5F1476383437E2147C67100D2C0610` |
+| `Links Workplace_2.0.0_x64_en-US.msi.sig` | 428 | `D48DD9B20675FBEA34509E8A93D6D7A3CC26CEA159AF9965AB91BBB368C8E914` |
+| `Links Workplace_2.0.0_x64-setup.exe` | 52468077 | `BA8D3BF475F85BCD9A5A1C8E73DEB525955D0E2A5509EDAB7A0D52CE3E3E49D1` |
+| `Links Workplace_2.0.0_x64-setup.exe.sig` | 428 | `20D913A0FFFF4307D6FD09AFFC4C80760E6DA444F3EA9C90CEBD223D616D7F47` |
+
+- 外部 staging：`D:\AI_Workspace\ReleaseTest\Phase-5-2\scenario-local\autostart-cleanup-80ca1ef7823b\`；产物构建时间为 2026-10-03 08:10–08:11（Asia/Shanghai），复制产物 SHA-256 与构建输出一致；`.sig` 是本次 Tauri build 生成的 sidecar，本阶段未单独做密码学验签。唯一管理员入口：`scripts\run-candidate-cleanup-matrix.ps1 -Execute`（SHA-256 `AB077F2B1F29C41B8E249DF748FBDAA10FF0940C485A73DAA1A9494382B7D94E`），先做只读 ownership / identity / hash / NTU ARP preflight；随后只对旧 c45953e 测试包做一次 major upgrade，再卸载新包，确认旧/新 Links 产品及 Links shortcuts/Run 项消失、NTU ARP 与其它 Run values 不变；之后自动执行 `PreExecuteOnly` 和 `MSI OFF/ON + NSIS OFF/ON` 四格 cleanup。每格验证 exit=0、ARP/EXE/shortcuts/Run 清理和 unrelated Run values 保留；MSI logs 还要确认 WindowsIdentity 为授权测试账户，以及 OFF 幂等/ON 精确删除消息。脚本不停止任何进程、不手删注册表、不启动 app、不读取 DB/credentials、不触碰 REAL_HOLD。
+- 状态：新候选实际安装态矩阵 **PENDING_ADMIN_EXECUTION**；仅自动构建与静态预检通过，不能宣称 installer cleanup PASS。当前 Codex PowerShell 为非提升上下文，仍可见失败的 c45953e Links MSI，且没有枚举到 legacy NTU ARP；该上下文未执行任何安装器，管理员脚本会在受保护 baseline 不匹配时停止。Phase 5.2 未关闭，Phase 5.3 NOT STARTED，NO PUSH / TAG / RELEASE。
 ### 独立 Windows synthetic bootstrap 验证
 
 场景根：`<ReleaseTest>/Phase-5-2/scenario-local/c7d3dfbf8fec4be9b274db5fc7b0f99a/`。每个场景有自己的 ownership、fixtures、baseline hashes、result/log，不引用 S04/S05/reinstall live-state。
@@ -65,9 +83,9 @@ Conflict installed-app launch、DB Lock installed-app UI recovery 与 Running Le
 
 - 官方 Tauri autostart 2.5.1 使用 auto-launch 0.5.0。外部 CLI 复用同一个已编译 Windows backend，临时唯一 `LinksRC-*` Run 名称：OFF→ON→OFF、真实 HKCU registry readback **PASS**；Run / StartupApproved 测试项已清理。证据：`autostart-result.json`。未借此宣称安装态 Settings UI / Login PASS。
 - 安装态 UI 与系统一致：**PENDING_MANUAL**；logout/login：**PENDING_MANUAL**。
-- 0185 MSI cleanup **FAIL（已确认产品缺陷）**；新 candidate build PASS；四条 fresh install/uninstall（MSI OFF/ON、NSIS OFF/ON）尚未执行。合并管理员脚本已准备并静态验证；MSI ProductCode 必须由候选 MSI 动态读取，不复用 0185 ProductCode。
+- 0185 基线的 autostart cleanup 缺陷已由下方 MSI custom action 修复；但其首个 cleanup 候选 `c45953e` 的 MSI_OFF fresh uninstall 真实返回 1603，见下方根因和替代候选记录。新候选四格 fresh install/uninstall（MSI OFF/ON、NSIS OFF/ON）仍待管理员执行。
 - 新验证只操作 scenario-owned 安装目录、installer 与唯一临时测试 Run 值；不启动业务 app，不读取 active AppData/用户数据库/REAL_HOLD，不安装旧包。脚本会在结束时恢复自己创建的测试 Run 项，并验证其它 sentinel Run values 未变。
-- 当前旧 MSI 哈希/ProductCode 只属于失败复现证据，不再作为候选。新 MSI、NSIS、签名 sidecars、文件大小/SHA-256、UpgradeCode 与 build time 待生产构建后补记。
+- `c45953e` MSI/ProductCode 只保留为失败复现证据，不再作为候选。当前候选为 `80ca1ef`，新 MSI/NSIS 与 sidecars 的大小、SHA-256、ProductCode、UpgradeCode、build time 已记录于下节；真实安装态 cleanup 仍待管理员矩阵。
 
 Phase 5.2 尚未完成；当前修复只有在新候选的自动门禁、production build、四条 fresh installer cleanup 与资产检查全部真实通过后才能关闭相关门禁。完成可执行门禁并明确记录剩余覆盖缺口后，才可记 **COMPLETE WITH ACCEPTED DEFERRED COVERAGE** 并继续已授权 Phase 5.3。当前 Phase 5.3 **NOT STARTED**。NO PUSH / TAG / RELEASE。未知 untracked 用户文件保留，不混入阶段提交。
 
@@ -159,11 +177,11 @@ Phase 5.2 尚未完成；当前修复只有在新候选的自动门禁、product
 ## 最终状态
 
 - Phase 5.1：COMPLETE。
-- Phase 5.2：IN PROGRESS；MSI uninstall 自启动 cleanup 缺陷已在 `0185cd7` 真实复现并确认，修复代码与自动验证 PASS；新 candidate production build 和管理员安装态 cleanup 矩阵待完成。
+- Phase 5.2：IN PROGRESS；`0185cd7` 原始自启动清理缺陷已修复；`c45953e` 的 MSI_OFF uninstall 1603 根因已在 `80ca1ef` 修复，full verify / Rust checks / production build PASS；当前替代候选四格管理员 cleanup matrix PENDING。
 - MSI-S04-R1（official 1.3.0 MSI → 2.0 MSI）：PASS，保持封板。
 - MSI-S05（official 1.3.1 MSI → 2.0 MSI）：DEFERRED / NOT TESTED — USER ACCEPTED。
 - MSI uninstall/reinstall 矩阵：DEFERRED / NOT TESTED — USER ACCEPTED；与本次独立 uninstall cleanup 缺陷分开记录。
-- 新 candidate MSI/NSIS fresh OFF/ON → uninstall cleanup：PENDING；需一次合并管理员验证，动态从 candidate MSI 派生 ProductCode。
+- `80ca1ef` 新候选 MSI/NSIS fresh OFF/ON → uninstall cleanup：PENDING_ADMIN_EXECUTION；先以新 MSI major-upgrade 仅替换失败的 `c45953e` 测试包并卸载新包，再运行 PreExecuteOnly 与四格矩阵；动态核对 ProductCode。
 - Conflict 与 DB Lock：production bootstrap synthetic tests PASS；installed-app E2E 按已接受边界未执行。
 - Autostart backend OFF→ON→OFF：PASS；Settings UI 与 logout/login：PENDING_MANUAL。
 - Synthetic Installer Migration E2E：逻辑/测试覆盖 PASS；未等同于完整安装态迁移验收。
