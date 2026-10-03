@@ -3,7 +3,6 @@ mod db;
 mod geocoding;
 mod models;
 mod notification;
-mod release_data_migration;
 mod scheduler;
 mod secure_credentials;
 
@@ -22,7 +21,6 @@ use models::{
     PeriodTime, PersonalTask, PlannerEvent, ReminderSettings, Routine, Semester, TermConfig,
     TimeBlock, WidgetSettings, WidgetSettingsPatch,
 };
-use release_data_migration::{InitializationOutcome, LINKS_PRODUCT_NAME};
 use serde::Serialize;
 use tauri::{
     image::Image,
@@ -232,7 +230,7 @@ impl scheduler::HandledStore for SqliteHandledStore {
 fn initialization_message(error: &db::StorageError) -> String {
     match error {
         db::StorageError::UnsupportedSchema(_) => {
-            "本地课程数据暂时无法加载：数据库来自较新版本，请升级应用后重试。".into()
+            "本地数据库格式不受支持（当前仅支持 schema 8）；数据库未被修改。请使用兼容版本处理该文件。".into()
         }
         _ => "本地课程数据暂时无法加载，请检查应用数据目录权限或文件状态后重启。".into(),
     }
@@ -1127,7 +1125,7 @@ fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let icon = Image::from_bytes(include_bytes!("../icons/tray/tray-icon.png"))?;
     TrayIconBuilder::with_id("main-tray")
         .icon(icon)
-        .tooltip(LINKS_PRODUCT_NAME)
+        .tooltip("Links Workplace")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -1172,64 +1170,22 @@ pub fn run() {
         .setup(|app| {
             let course_state = match app.path().app_local_data_dir() {
                 Ok(directory) => {
-                    let path = if cfg!(debug_assertions) {
-                        Ok(database_path_for_build(&directory))
-                    } else {
-                        app.path()
-                            .local_data_dir()
-                            .map_err(|_| "本地应用数据目录不可用。".to_string())
-                            .and_then(|local_data| {
-                                release_data_migration::prepare_release_database(
-                                    &directory,
-                                    &local_data,
-                                )
-                                .map(|outcome| {
-                                    match outcome {
-                                        InitializationOutcome::Fresh => eprintln!(
-                                            "[migration] source_class=NONE source_schema=none stage=discovery result=fresh"
-                                        ),
-                                        InitializationOutcome::Existing => eprintln!(
-                                            "[migration] source_class=NEW_IDENTIFIER_SCHEMA_8 source_schema=8 stage=discovery result=existing"
-                                        ),
-                                        InitializationOutcome::Migrated(report) => {
-                                            let backup_ok = report.backup_path.is_file();
-                                            eprintln!(
-                                                "[migration] source_class={} source_schema={} target_schema={} migration_count={} stage=activation result=success backup_verified={backup_ok}",
-                                                report.source_class.label(),
-                                                report.source_schema,
-                                                report.target_schema,
-                                                report.schema_migrations
-                                            );
-                                            #[cfg(not(test))]
-                                            let _ = report.rows;
-                                        }
-                                    }
-                                    database_path_for_build(&directory)
-                                })
-                                .map_err(|error| {
-                                    eprintln!("{}", error.log_line());
-                                    error.to_string()
-                                })
-                            })
-                    };
-                    match path {
-                        Ok(path) => match CourseDatabase::open(&path) {
-                            Ok(database) => {
-                                match database.schema_version() {
-                                    Ok(version) => eprintln!(
-                                        "Course database ready (schema {version})"
-                                    ),
-                                    Err(_) => eprintln!("Course database schema read failed"),
+                    let path = database_path_for_build(&directory);
+                    match CourseDatabase::open(&path) {
+                        Ok(database) => {
+                            match database.schema_version() {
+                                Ok(version) => {
+                                    eprintln!("Course database ready (schema {version})")
                                 }
-                                drop(database);
-                                CourseState::ready(path)
+                                Err(_) => eprintln!("Course database schema read failed"),
                             }
-                            Err(error) => {
-                                eprintln!("Course database initialization failed");
-                                CourseState::unavailable(initialization_message(&error))
-                            }
-                        },
-                        Err(message) => CourseState::unavailable(message),
+                            drop(database);
+                            CourseState::ready(path)
+                        }
+                        Err(error) => {
+                            eprintln!("Course database initialization failed");
+                            CourseState::unavailable(initialization_message(&error))
+                        }
                     }
                 }
                 Err(error) => {
@@ -1366,8 +1322,8 @@ mod tests {
     };
 
     #[test]
-    fn debug_database_is_isolated_while_release_path_stays_compatible() {
-        let root = Path::new("C:/Users/example/AppData/Local/com.ntu-course-assistant.desktop");
+    fn debug_database_is_isolated_under_the_links_product_identity() {
+        let root = Path::new("C:/Users/example/AppData/Local/com.links.workplace.desktop");
         assert_eq!(
             database_path_for_mode(root, true),
             root.join("dev-v2").join("courses.sqlite3")
