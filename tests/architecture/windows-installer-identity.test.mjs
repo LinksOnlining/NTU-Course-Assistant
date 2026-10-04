@@ -45,7 +45,8 @@ test("MSI fragment keeps Links autostart cleanup and removes legacy shortcut cle
   assert.match(wix, /Property="RemoveLinksWorkplaceAutostart"/);
   assert.match(wix, /Value="\[INSTALLDIR\]links-workplace\.exe"/);
   assert.match(wix, /DllEntry="RemoveLinksWorkplaceAutostart"/);
-  assert.match(wix, /Execute="deferred"\s+Impersonate="yes"\s+Return="check"/);
+  assert.match(wix, /Execute="deferred"\s+Impersonate="no"\s+Return="check"/);
+  assert.match(wix, /deferred action resolves MSI UserSID and opens HKEY_USERS explicitly/i);
   assert.match(wix, /REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE/);
   assert.match(wix, /Before="RemoveFiles"/);
   assert.doesNotMatch(
@@ -53,10 +54,20 @@ test("MSI fragment keeps Links autostart cleanup and removes legacy shortcut cle
     /NTU|ntu-course-assistant|courses\.sqlite3|<RemoveFile\b|<RemoveFolder\b/i,
   );
   assert.match(autostartCleanup, /Software\\Microsoft\\Windows\\CurrentVersion\\Run/);
-  assert.match(autostartCleanup, /const RUN_VALUE_NAME: &str = "Links Workplace"/);
+  assert.match(
+    autostartCleanup,
+    /const RUN_VALUE_NAMES: \[&str; 2\] = \["Links Workplace", "links-workplace"\]/,
+  );
   assert.match(autostartCleanup, /should_remove_owned_value/);
-  assert.match(autostartCleanup, /HKEY_CURRENT_USER/);
+  assert.match(autostartCleanup, /HKEY_USERS/);
+  assert.match(autostartCleanup, /msi_property\(install, "UserSID", "UserSID"\)/);
+  assert.match(autostartCleanup, /CommandLineToArgvW/);
+  assert.match(autostartCleanup, /GetFullPathNameW/);
+  assert.match(autostartCleanup, /CompareStringOrdinal/);
+  assert.doesNotMatch(autostartCleanup, /HKEY_CURRENT_USER/);
   assert.match(autostartCleanup, /KEY_WOW64_64KEY/);
+  assert.match(autostartCleanup, /let mut probe = \[0u16; 1\]/);
+  assert.match(autostartCleanup, /CustomActionData/);
   assert.match(
     autostartCleanup,
     /#\[no_mangle\][\s\S]*?pub extern "system" fn RemoveLinksWorkplaceAutostart/,

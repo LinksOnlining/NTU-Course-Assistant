@@ -3,6 +3,7 @@
   <Fragment>
     <Binary Id="LwAutoCleanupDll" SourceFile="$(sys.SOURCEFILEDIR)autostart-cleanup.dll" />
 
+    <!-- The deferred action resolves MSI UserSID and opens HKEY_USERS explicitly. -->
     <CustomAction
       Id="SetLinksWorkplaceAutostartCleanupData"
       Property="RemoveLinksWorkplaceAutostart"
@@ -13,7 +14,7 @@
       BinaryKey="LwAutoCleanupDll"
       DllEntry="RemoveLinksWorkplaceAutostart"
       Execute="deferred"
-      Impersonate="yes"
+      Impersonate="no"
       Return="check"
       HideTarget="yes"
     />
