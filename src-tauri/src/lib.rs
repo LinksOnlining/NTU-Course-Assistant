@@ -1,4 +1,5 @@
 mod ai;
+mod autostart;
 mod db;
 mod geocoding;
 mod models;
@@ -1214,6 +1215,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            autostart::get_autostart_enabled,
+            autostart::set_autostart_enabled,
             ai::set_deepseek_api_key,
             ai::get_deepseek_api_key_status,
             ai::delete_deepseek_api_key,

@@ -38,6 +38,7 @@ async function seedTasksRuntime(page: Page) {
         invoke: async (command: string, args?: Record<string, any>) => {
           if (command === "load_courses") return { courses: [], warnings: [] };
           if (command === "load_period_times") return [];
+          if (command === "get_autostart_enabled") return false;
           if (command === "load_reminder_configuration") {
             return {
               termConfig: null,

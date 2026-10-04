@@ -1,4 +1,4 @@
-import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { invoke } from "@tauri-apps/api/core";
 
 let developmentAutostartEnabled = false;
 
@@ -13,7 +13,7 @@ function asError(error: unknown, fallback: string): Error {
 export async function loadAutostartEnabled(): Promise<boolean> {
   if (usesDevelopmentMemory()) return developmentAutostartEnabled;
   try {
-    return await isEnabled();
+    return await invoke<boolean>("get_autostart_enabled");
   } catch (error) {
     throw asError(error, "无法读取 Windows 登录启动状态，请稍后重试。");
   }
@@ -25,8 +25,7 @@ export async function saveAutostartEnabled(enabled: boolean): Promise<boolean> {
     return developmentAutostartEnabled;
   }
   try {
-    if (enabled) await enable();
-    else await disable();
+    await invoke<boolean>("set_autostart_enabled", { enabled });
   } catch (error) {
     throw asError(
       error,

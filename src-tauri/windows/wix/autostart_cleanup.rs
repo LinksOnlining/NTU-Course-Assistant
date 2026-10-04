@@ -32,6 +32,14 @@ mod tests {
     }
 
     #[test]
+    fn removes_the_quoted_links_workplace_registration() {
+        assert!(should_remove_owned_value(
+            Some(r#""C:\Program Files\Links Workplace\links-workplace.exe""#),
+            EXPECTED
+        ));
+    }
+
+    #[test]
     fn an_absent_registration_is_idempotent() {
         assert!(!should_remove_owned_value(None, EXPECTED));
     }

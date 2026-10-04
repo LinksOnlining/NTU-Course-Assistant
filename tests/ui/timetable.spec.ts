@@ -176,7 +176,7 @@ async function seedPeriodCourseRuntime(
             courseUpdates += 1;
             return undefined;
           }
-          if (command === "plugin:autostart|is_enabled") return false;
+          if (command === "get_autostart_enabled") return false;
           if (command.startsWith("plugin:event|")) return undefined;
           throw new Error(`未预期的回归命令：${command}`);
         },
@@ -727,7 +727,7 @@ test("Windows 登录启动失败和系统状态不一致不会显示伪成功", 
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       configurable: true,
       value: {
-        invoke: async (command: string) => {
+        invoke: async (command: string, args?: { enabled?: boolean }) => {
           if (command === "load_routines") return [];
           if (command === "load_courses") return { courses: [], warnings: [] };
           if (command === "load_period_times") return null;
@@ -752,21 +752,18 @@ test("Windows 登录启动失败和系统状态不一致不会显示伪成功", 
           }
           if (command === "load_handled_reminder_keys") return [];
           if (command === "refresh_reminder_schedule") return undefined;
-          if (command === "plugin:autostart|is_enabled") return enabled;
-          if (command === "plugin:autostart|enable") {
-            enableAttempts += 1;
-            if (enableAttempts === 1) throw "开启失败";
-            if (enableAttempts === 2) {
-              enabled = true;
-              return undefined;
+          if (command === "get_autostart_enabled") return enabled;
+          if (command === "set_autostart_enabled") {
+            if (args?.enabled) {
+              enableAttempts += 1;
+              if (enableAttempts === 1) throw "开启失败";
+              if (enableAttempts === 2) enabled = true;
+            } else {
+              disableAttempts += 1;
+              if (disableAttempts === 1) throw "关闭失败";
+              enabled = false;
             }
-            return undefined;
-          }
-          if (command === "plugin:autostart|disable") {
-            disableAttempts += 1;
-            if (disableAttempts === 1) throw "关闭失败";
-            enabled = false;
-            return undefined;
+            return enabled;
           }
           throw "未预期的命令";
         },
@@ -844,7 +841,7 @@ test("failed schedule save keeps the old timeline", async ({ page }) => {
             };
           }
           if (command === "save_app_settings") throw "保存设置失败，请稍后重试。";
-          if (command === "plugin:autostart|is_enabled") return false;
+          if (command === "get_autostart_enabled") return false;
           throw "未预期的存储命令";
         },
       },
@@ -908,7 +905,7 @@ test("failed schedule save can be retried without a permanent saving state", asy
             };
           }
           if (command === "refresh_reminder_schedule") return undefined;
-          if (command === "plugin:autostart|is_enabled") return false;
+          if (command === "get_autostart_enabled") return false;
           throw "未预期的存储命令";
         },
       },
@@ -969,7 +966,7 @@ test("PDF dialog invocation stays responsive while settings writes are pending o
             });
           }
           if (command === "load_widget_settings") return Promise.resolve(widgetSettings);
-          if (command === "plugin:autostart|is_enabled") return Promise.resolve(false);
+          if (command === "get_autostart_enabled") return Promise.resolve(false);
           if (command === "patch_widget_settings") return defer("widget", widgetSettings);
           if (command === "save_app_settings") return defer("schedule");
           if (command === "plugin:dialog|open") {
@@ -1072,7 +1069,7 @@ test("PDF dialog errors release the cancel-path operation gate", async ({ page }
               height: null,
             });
           }
-          if (command === "plugin:autostart|is_enabled") return Promise.resolve(false);
+          if (command === "get_autostart_enabled") return Promise.resolve(false);
           if (command === "refresh_reminder_schedule") return Promise.resolve(undefined);
           if (command === "plugin:dialog|open") {
             dialogCalls += 1;
@@ -1130,7 +1127,7 @@ test("PDF dialog cancel result variants release the operation gate", async ({ pa
               height: null,
             });
           }
-          if (command === "plugin:autostart|is_enabled") return Promise.resolve(false);
+          if (command === "get_autostart_enabled") return Promise.resolve(false);
           if (command === "refresh_reminder_schedule") return Promise.resolve(undefined);
           if (command === "plugin:dialog|open") {
             return Promise.resolve(results[resultIndex++]);
@@ -1182,7 +1179,7 @@ test("canceling PDF picker returns to idle before subsequent settings saves", as
             });
           }
           if (command === "load_widget_settings") return Promise.resolve(widgetSettings);
-          if (command === "plugin:autostart|is_enabled") return Promise.resolve(false);
+          if (command === "get_autostart_enabled") return Promise.resolve(false);
           if (command === "patch_widget_settings") return Promise.resolve(widgetSettings);
           if (command === "save_app_settings") {
             return Promise.resolve({

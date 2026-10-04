@@ -2181,6 +2181,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tokio",
+ "winreg 0.10.1",
 ]
 
 [[package]]
