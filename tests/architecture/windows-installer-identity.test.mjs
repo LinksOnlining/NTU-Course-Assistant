@@ -36,12 +36,16 @@ test("runtime opens only the Links app-local database and has no NTU migration p
 
 test("MSI fragment keeps Links autostart cleanup and removes legacy shortcut cleanup", () => {
   assert.deepEqual(config.bundle.windows.wix.fragmentPaths, ["windows/wix/autostart-cleanup.wxs"]);
-  assert.equal("componentRefs" in config.bundle.windows.wix, false);
+  assert.deepEqual(config.bundle.windows.wix.componentRefs, [
+    "LinksWorkplaceAutostartCleanupAnchor",
+  ]);
   assert.equal(
     existsSync(path.join(root, "src-tauri/windows/wix/legacy-shortcut-cleanup.wxs")),
     false,
   );
   assert.match(wix, /SourceFile="\$\(sys\.SOURCEFILEDIR\)autostart-cleanup\.dll"/);
+  assert.match(wix, /Component Id="LinksWorkplaceAutostartCleanupAnchor"/);
+  assert.match(wix, /<CreateFolder\s*\/>/);
   assert.match(wix, /Property="RemoveLinksWorkplaceAutostart"/);
   assert.match(wix, /Value="\[INSTALLDIR\]links-workplace\.exe"/);
   assert.match(wix, /DllEntry="RemoveLinksWorkplaceAutostart"/);

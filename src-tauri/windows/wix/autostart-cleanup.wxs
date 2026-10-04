@@ -3,6 +3,11 @@
   <Fragment>
     <Binary Id="LwAutoCleanupDll" SourceFile="$(sys.SOURCEFILEDIR)autostart-cleanup.dll" />
 
+    <!-- Tauri links fragments through componentRefs; this anchor adds no registry payload. -->
+    <Component Id="LinksWorkplaceAutostartCleanupAnchor" Guid="{A87F1261-2AB9-4D01-A14A-F3B6B1C15DF2}" Directory="INSTALLDIR" Win64="yes">
+      <CreateFolder />
+    </Component>
+
     <!-- The deferred action resolves MSI UserSID and opens HKEY_USERS explicitly. -->
     <CustomAction
       Id="SetLinksWorkplaceAutostartCleanupData"

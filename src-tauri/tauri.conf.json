@@ -32,7 +32,8 @@
     "windows": {
       "wix": {
         "upgradeCode": "2f689303-b82c-571d-bcd4-3ddf71e745af",
-        "fragmentPaths": ["windows/wix/autostart-cleanup.wxs"]
+        "fragmentPaths": ["windows/wix/autostart-cleanup.wxs"],
+        "componentRefs": ["LinksWorkplaceAutostartCleanupAnchor"]
       }
     },
     "icon": [
