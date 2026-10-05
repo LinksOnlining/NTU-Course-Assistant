@@ -11,6 +11,8 @@
     "core:window:allow-start-dragging",
     "dialog:default",
     "fs:default",
-    "notification:default"
+    "notification:default",
+    "updater:allow-check",
+    "updater:allow-download-and-install"
   ]
 }
