@@ -1073,6 +1073,8 @@ fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
         .map_err(|_| "无法恢复课程表窗口。".to_string())?;
     main.show()
         .map_err(|_| "无法显示课程表窗口。".to_string())?;
+    main.maximize()
+        .map_err(|_| "无法最大化课程表窗口。".to_string())?;
     main.set_focus()
         .map_err(|_| "无法聚焦课程表窗口。".to_string())
 }
@@ -1212,6 +1214,15 @@ pub fn run() {
                     show_widget(&app.handle().clone(), &settings)?;
                 }
             }
+            let app_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+
+                let main_thread_handle = app_handle.clone();
+                let _ = app_handle.run_on_main_thread(move || {
+                    let _ = show_main_window(&main_thread_handle);
+                });
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
