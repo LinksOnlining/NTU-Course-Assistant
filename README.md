@@ -2,7 +2,7 @@
 
 面向 Windows 的本地个人工作台，包含课程表、Planner、Diary、Inbox、天气和可选 AI 能力。Links Workplace 2.0 沿用本仓库与应用技术栈，但采用独立身份和全新数据开始。
 
-> **版本说明：**Links Workplace 2.0.0 当前仍在开发与安装验收，尚未发布。公开的 NTU Course Assistant v1.3.1 属于旧版产品线。Links Workplace 2.0 是 **clean-start release**，不支持从 NTU Course Assistant 1.x 自动升级或迁移数据。
+> **版本说明：**当前版本为 Links Workplace 2.0.1（桌面小组件窗口恢复 Hotfix）。Links Workplace 2.0 是 **clean-start release**；NTU Course Assistant 1.x 属于旧版产品线，不支持自动升级到 Links Workplace 2.x 或迁移数据。
 
 ## 主要功能
 
@@ -10,7 +10,7 @@
 - 修改已确认作息后，按节次安排的已有课程会立即按新时间显示，无需重新导入 PDF 或重启；固定钟点课程不受影响。
 - 本地添加、编辑、删除课程；数据保存在本机 SQLite 数据库。
 - 导入当前支持结构的南通大学课表 PDF，预览、修正后再确认写入。
-- 上课前 Windows 通知；主窗口关闭到系统托盘后提醒继续运行。
+- 上课前 Windows 通知；桌面小组件开启时关闭主窗口会保留进程与提醒，小组件关闭时关闭主窗口将退出。
 - 可选桌面小组件，支持今日/本周、锁定、位置与尺寸恢复。
 - Academic Hub：查看今日学习安排、停课/调课/补课变化、Deadline、考试与学期归档。
 - Widget 2.0：支持下一节课和 Deadline 模式，并与课表变化保持一致。
@@ -19,7 +19,7 @@
 ## 系统要求与安装
 
 - Windows 10 是当前主要实际运行与验收环境，Windows 11 作为兼容目标。
-- 当前公开旧版可从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 下载 `NTU.Course.Assistant_1.3.1_x64-setup.exe`。Links Workplace 2.0 安装包尚未发布。
+- 从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 获取最新 Links Workplace Windows 安装包；旧版 NTU Course Assistant 1.x 仅供历史参考。
 - 安装 2.0 前，用户需要自行卸载 NTU Course Assistant 1.x。2.0 使用新的应用数据目录，只创建 schema 8 数据库；旧版课程数据不会自动迁移或恢复。如需保留旧数据，请在卸载前自行妥善保存。
 - 首次使用请在“设置”中确认作息时间、学期首周和提醒选项。
 

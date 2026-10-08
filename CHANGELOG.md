@@ -1,6 +1,20 @@
 # 变更记录
 
-## [Unreleased] — Links Workplace 2.0.0 clean-start release
+## 2.0.1 — 2026-10-08 — Windows widget lifecycle hotfix
+
+### Fixed
+
+- 桌面课程小组件已启用时，关闭主窗口改为隐藏并保留现有 Main WebView；从 Widget 打开课程表时复用窗口，避免销毁重建后白屏。
+- 桌面小组件已启用但暂时隐藏时，仍保留可恢复的主窗口；小组件禁用且没有可见主窗口时可完全退出，避免后台孤留进程。
+- 保持托盘主动退出的原有行为；不修改 schema 8、用户课程和数据库兼容策略。
+
+### Verification
+
+- 隔离 Windows QA NSIS 安装后，Widget OFF 退出、Widget ON 十次主窗口恢复、Widget 隐藏后通过第二次启动恢复均通过；QA NSIS 卸载通过。
+- Rust / Clippy / 前端与架构回归通过，隔离 QA MSI 和 NSIS 打包通过；真实生产版本升级、MSI 机器级安装和生产 Updater 验证由正式发布流水线及后续独立门禁处理。
+- Windows 安装包没有 Authenticode 商业签名，SmartScreen 可能提示未知发布者。
+
+## 2.0.0 — Links Workplace clean-start release
 
 ### Changed
 

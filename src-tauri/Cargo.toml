@@ -1,6 +1,6 @@
 [package]
 name = "links-workplace"
-version = "2.0.0"
+version = "2.0.1"
 description = "Links Workplace"
 edition = "2021"
 
