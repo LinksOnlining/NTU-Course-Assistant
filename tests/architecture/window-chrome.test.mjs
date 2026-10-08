@@ -16,7 +16,7 @@ test("main Tauri window is frameless and starts maximized, not fullscreen", () =
   assert.notEqual(main.fullscreen, true);
 });
 
-test("only the widget close request is intercepted; standard main close passes through", () => {
+test("main close is hidden only while a visible widget keeps the process alive", () => {
   const source = readFileSync(path.join(root, "src-tauri/src/lib.rs"), "utf8");
   const start = source.indexOf(".on_window_event(|window, event|");
   const end = source.indexOf(".run(tauri::generate_context!())", start);
@@ -25,11 +25,13 @@ test("only the widget close request is intercepted; standard main close passes t
   assert.notEqual(end, -1, "window close handler should end before app run");
   const handler = source.slice(start, end);
   assert.match(handler, /window\.label\(\) == "widget"/u);
-  assert.match(handler, /api\.prevent_close\(\)/u);
-  assert.doesNotMatch(handler, /window\.label\(\) == "main"/u);
+  assert.match(handler, /window\.label\(\) == "main"/u);
+  assert.match(handler, /get_webview_window\("widget"\)/u);
+  assert.match(handler, /is_visible\(\)/u);
+  assert.match(handler, /if widget_is_visible \{[\s\S]*?api\.prevent_close\(\)[\s\S]*?window\.hide\(\)/u);
 });
 
-test("closing main can be followed by recreating it from the configured window", () => {
+test("a missing main window still has a configured recreation fallback", () => {
   const source = readFileSync(path.join(root, "src-tauri/src/lib.rs"), "utf8");
   const start = source.indexOf("fn show_main_window(");
   const end = source.indexOf("#[tauri::command]", start);

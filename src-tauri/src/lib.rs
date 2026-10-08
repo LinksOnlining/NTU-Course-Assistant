@@ -1316,6 +1316,18 @@ pub fn run() {
                 if window.label() == "widget" {
                     api.prevent_close();
                     let _ = window.hide();
+                } else if window.label() == "main" {
+                    let widget_is_visible = window
+                        .app_handle()
+                        .get_webview_window("widget")
+                        .and_then(|widget| widget.is_visible().ok())
+                        .unwrap_or(false);
+                    if widget_is_visible {
+                        // Keep the already-loaded main WebView alive while the visible widget owns
+                        // the process lifecycle. Rebuilding a destroyed main WebView can reopen blank.
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
                 }
             }
         })
