@@ -1,16 +1,20 @@
 import { check, type Update } from "@tauri-apps/plugin-updater";
+import { isTransientUpdaterError } from "./updater-diagnostics.ts";
 export type { Update } from "@tauri-apps/plugin-updater";
 
-const CHECK_TIMEOUT_MS = 10_000;
+// The native updater owns its network timeout: no detached Promise.race request or timer.
+const CHECK_TIMEOUT_MS = 25_000;
+const RETRY_DELAY_MS = 750;
 
 export async function checkForApplicationUpdate(): Promise<Update | null> {
   if (!("__TAURI_INTERNALS__" in window)) return null;
-  return Promise.race([
-    check(),
-    new Promise<never>((_, reject) =>
-      window.setTimeout(() => reject(new Error("检查更新超时。")), CHECK_TIMEOUT_MS),
-    ),
-  ]);
+  try {
+    return await check({ timeout: CHECK_TIMEOUT_MS });
+  } catch (error) {
+    if (!isTransientUpdaterError(error)) throw error;
+    await new Promise<void>((resolve) => window.setTimeout(resolve, RETRY_DELAY_MS));
+    return check({ timeout: CHECK_TIMEOUT_MS });
+  }
 }
 
 export async function installApplicationUpdate(

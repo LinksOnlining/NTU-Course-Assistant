@@ -50,6 +50,7 @@ import {
 import { DEFAULT_WIDGET_SETTINGS } from "./services/widget-data.ts";
 import { recordStartupStage } from "./startup-diagnostics.ts";
 import { checkForApplicationUpdate, installApplicationUpdate } from "./services/updater.ts";
+import { describeUpdaterError } from "./services/updater-diagnostics.ts";
 import {
   buildReminderPlans,
   DEFAULT_REMINDER_SETTINGS,
@@ -562,9 +563,9 @@ export function App() {
       }
       setAvailableUpdate(update);
       setUpdateState("available");
-    } catch {
+    } catch (error) {
       setUpdateState(manual ? "error" : "idle");
-      if (manual) setUpdateMessage("检查更新失败，你仍可以继续使用当前版本。");
+      if (manual) setUpdateMessage(describeUpdaterError(error));
     }
   }
 
@@ -578,9 +579,9 @@ export function App() {
         setDownloadProgress({ downloaded, total }),
       );
       setUpdateState("installing");
-    } catch {
+    } catch (error) {
       setUpdateState("error");
-      setUpdateMessage("更新失败，你仍可以继续使用当前版本。");
+      setUpdateMessage(describeUpdaterError(error));
     }
   }
 

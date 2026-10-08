@@ -1845,6 +1845,7 @@ test("manual updater failures can be retried and dismissed without blocking the 
   await settings.getByRole("button", { name: "检查更新" }).click();
   const updateError = page.getByRole("dialog", { name: "检查更新失败" });
   await expect(updateError).toBeVisible();
+  await expect(updateError).toContainText("模拟更新服务不可用");
   await updateError.getByRole("button", { name: "重试" }).click();
   await expect(updateError).toBeVisible();
   await updateError.getByLabel("关闭", { exact: true }).click();

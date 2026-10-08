@@ -61,3 +61,21 @@ jobs:
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
           updaterJsonPreferNsis: true
+
+      - name: Normalize signed updater download URLs
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'release-updater'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          gh release download $env:GITHUB_REF_NAME --pattern 'latest.json' --dir $dir
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download updater manifest' }
+          $assetsFile = Join-Path $dir 'release-assets.json'
+          gh release view $env:GITHUB_REF_NAME --json assets | Out-File -FilePath $assetsFile -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read release assets' }
+          $manifestFile = Join-Path $dir 'latest.json'
+          node scripts/normalize-updater-manifest.mjs $manifestFile $assetsFile $env:GITHUB_REPOSITORY $env:GITHUB_REF_NAME
+          if ($LASTEXITCODE -ne 0) { throw 'Invalid updater manifest' }
+          gh release upload $env:GITHUB_REF_NAME $manifestFile --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Could not upload normalized updater manifest' }

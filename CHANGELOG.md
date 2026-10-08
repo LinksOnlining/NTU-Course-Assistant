@@ -1,5 +1,18 @@
 # 变更记录
 
+## [Unreleased] — 应用内更新稳定性修复
+
+### Fixed
+
+- 更新检测改用 Tauri 原生 25 秒请求超时，短时网络错误可有界重试一次；不再使用悬挂后台请求的 `Promise.race` 计时器。
+- 手动检查与安装更新失败时展示可操作的 HTTP 403、404、网络超时及签名错误原因。
+- 发布工作流对 `latest.json` 进行严格版本、平台、资产及对应 `.sig` 检查，将不稳定的 GitHub API 资产地址替换为公开 Release 下载安装链接，并保留原始签名。
+
+### Verification
+
+- 2026-10-08 已在公开的 v2.0.1 Release 热修复 `latest.json`（仅更新下载 URL，签名与安装包未变），并从受影响电脑确认 HTTP 200、实际完成 2.0.0→2.0.1 安装。
+- 只读复核生产 SQLite schema 8、20 条课程记录且 `quick_check(1)=ok`；新客户端诊断逻辑尚待后续版本发布。
+
 ## 2.0.1 — 2026-10-08 — Windows widget lifecycle hotfix
 
 ### Fixed
