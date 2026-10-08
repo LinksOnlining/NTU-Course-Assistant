@@ -89,9 +89,12 @@ test("tray lifecycle has one native boundary and reuses main and widget helpers"
   assert.match(rust, /WebviewWindowBuilder::from_config\(app, config\)/);
   assert.match(rust, /window\.label\(\) == "widget"/);
   assert.match(rust, /window\.label\(\) == "main"/);
-  assert.match(rust, /get_webview_window\("widget"\)/);
-  assert.match(rust, /is_visible\(\)/);
-  assert.match(rust, /if widget_is_visible \{[\s\S]{0,300}api\.prevent_close\(\)/);
+  assert.match(rust, /get_webview_window\("widget"\)\.is_some\(\)/);
+  assert.match(rust, /WidgetLifecycleState/);
+  assert.match(
+    rust,
+    /if should_preserve_main_window\(widget_enabled, widget_exists\) \{[\s\S]{0,300}api\.prevent_close\(\)/,
+  );
   assert.doesNotMatch(rust, /always_on_top|SELECT\s+.*tray|INSERT\s+.*tray/i);
 });
 

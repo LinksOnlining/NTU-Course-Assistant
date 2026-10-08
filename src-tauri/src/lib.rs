@@ -10,7 +10,7 @@ mod secure_credentials;
 use std::{
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
     time::Instant,
@@ -135,7 +135,30 @@ struct CourseState {
 
 struct SchedulerState(scheduler::ReminderScheduler);
 
+#[derive(Default)]
+struct WidgetLifecycleState {
+    enabled: AtomicBool,
+}
+
+impl WidgetLifecycleState {
+    fn is_enabled(&self) -> bool {
+        self.enabled.load(Ordering::SeqCst)
+    }
+
+    fn set_enabled(&self, enabled: bool) {
+        self.enabled.store(enabled, Ordering::SeqCst);
+    }
+}
+
 struct SqliteHandledStore(CourseState);
+
+fn should_preserve_main_window(widget_enabled: bool, widget_exists: bool) -> bool {
+    widget_enabled && widget_exists
+}
+
+fn should_exit_after_hiding_widget(widget_enabled: bool, main_visible: bool) -> bool {
+    !widget_enabled && !main_visible
+}
 
 impl CourseState {
     fn ready(path: PathBuf) -> Self {
@@ -923,12 +946,17 @@ async fn patch_widget_settings(
 ) -> Result<WidgetSettings, String> {
     debug_widget("settings patch requested");
     let updates_lock_state = patch.locked.is_some();
+    let updates_enabled_state = patch.enabled.is_some();
     let settings = state
         .run_in_background("保存小组件设置", move |database| {
             database.patch_widget_settings(&patch)
         })
         .await?;
     debug_widget("settings patch completed");
+    if updates_enabled_state {
+        app.state::<WidgetLifecycleState>()
+            .set_enabled(settings.enabled);
+    }
     if updates_lock_state {
         let app = app.clone();
         let locked = settings.locked;
@@ -1050,6 +1078,14 @@ fn hide_widget(app: tauri::AppHandle) -> Result<(), String> {
             .hide()
             .map_err(|_| "无法关闭桌面课程小组件。".to_string())?;
     }
+    let widget_enabled = app.state::<WidgetLifecycleState>().is_enabled();
+    let main_visible = app
+        .get_webview_window("main")
+        .and_then(|main| main.is_visible().ok())
+        .unwrap_or(false);
+    if should_exit_after_hiding_widget(widget_enabled, main_visible) {
+        app.exit(0);
+    }
     Ok(())
 }
 
@@ -1100,6 +1136,7 @@ fn toggle_widget_from_tray(app: &tauri::AppHandle) -> Result<(), String> {
             })
         })?;
         show_widget(app, &next)?;
+        app.state::<WidgetLifecycleState>().set_enabled(true);
         let _ = app.emit("widget-settings-changed", ());
         return Ok(());
     }
@@ -1199,6 +1236,7 @@ pub fn run() {
                 }
             };
             app.manage(course_state.clone());
+            app.manage(WidgetLifecycleState::default());
             app.manage(SchedulerState(scheduler::ReminderScheduler::new(
                 Arc::new(notification::WindowsNotificationAdapter::new(
                     app.handle().clone(),
@@ -1213,6 +1251,8 @@ pub fn run() {
                 if settings.enabled {
                     show_widget(&app.handle().clone(), &settings)?;
                 }
+                app.state::<WidgetLifecycleState>()
+                    .set_enabled(settings.enabled);
             }
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
@@ -1317,16 +1357,18 @@ pub fn run() {
                     api.prevent_close();
                     let _ = window.hide();
                 } else if window.label() == "main" {
-                    let widget_is_visible = window
-                        .app_handle()
-                        .get_webview_window("widget")
-                        .and_then(|widget| widget.is_visible().ok())
-                        .unwrap_or(false);
-                    if widget_is_visible {
-                        // Keep the already-loaded main WebView alive while the visible widget owns
-                        // the process lifecycle. Rebuilding a destroyed main WebView can reopen blank.
+                    let app = window.app_handle();
+                    let widget_enabled = app.state::<WidgetLifecycleState>().is_enabled();
+                    let widget_exists = app.get_webview_window("widget").is_some();
+                    if should_preserve_main_window(widget_enabled, widget_exists) {
+                        // Keep the original main WebView loaded even when the enabled widget is
+                        // temporarily hidden through the tray; recreating main can render blank.
                         api.prevent_close();
                         let _ = window.hide();
+                    } else {
+                        // A disabled widget can still own a hidden native window. Explicitly
+                        // terminate instead of leaving a tray-only process running.
+                        app.exit(0);
                     }
                 }
             }
@@ -1337,7 +1379,10 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{database_path_for_mode, restored_widget_position, ScreenRect};
+    use super::{
+        database_path_for_mode, restored_widget_position, should_exit_after_hiding_widget,
+        should_preserve_main_window, ScreenRect, WidgetLifecycleState,
+    };
     use std::path::Path;
 
     const PRIMARY: ScreenRect = ScreenRect {
@@ -1346,6 +1391,32 @@ mod tests {
         width: 1920,
         height: 1080,
     };
+
+    #[test]
+    fn main_survives_only_when_widget_is_enabled_and_exists() {
+        assert!(should_preserve_main_window(true, true));
+        assert!(!should_preserve_main_window(true, false));
+        assert!(!should_preserve_main_window(false, true));
+        assert!(!should_preserve_main_window(false, false));
+    }
+
+    #[test]
+    fn disabling_the_last_visible_widget_exits_but_tray_hiding_does_not() {
+        assert!(should_exit_after_hiding_widget(false, false));
+        assert!(!should_exit_after_hiding_widget(false, true));
+        assert!(!should_exit_after_hiding_widget(true, false));
+        assert!(!should_exit_after_hiding_widget(true, true));
+    }
+
+    #[test]
+    fn widget_lifecycle_tracks_enable_and_disable() {
+        let state = WidgetLifecycleState::default();
+        assert!(!state.is_enabled());
+        state.set_enabled(true);
+        assert!(state.is_enabled());
+        state.set_enabled(false);
+        assert!(!state.is_enabled());
+    }
 
     #[test]
     fn debug_database_is_isolated_under_the_links_product_identity() {
