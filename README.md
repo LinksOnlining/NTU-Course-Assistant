@@ -2,11 +2,11 @@
 
 面向 Windows 的本地个人工作台，包含课程表、Planner、Diary、Inbox、天气和可选 AI 能力。Links Workplace 2.0 沿用本仓库与应用技术栈，但采用独立身份和全新数据开始。
 
-> **版本说明：**当前版本为 Links Workplace 2.0.2（教学周、标题、每日寄语与窗口生命周期修复）。Links Workplace 2.0 是 **clean-start release**；NTU Course Assistant 1.x 属于旧版产品线，不支持自动升级到 Links Workplace 2.x 或迁移数据。
+> **版本说明：**当前版本为 Links Workplace 2.0.3（窄窗口布局与回归稳定性修复，包含 2.0.2 的教学周、标题、每日寄语及小组件生命周期改进）。Links Workplace 2.0 是 **clean-start release**；NTU Course Assistant 1.x 属于旧版产品线，不支持自动升级到 Links Workplace 2.x 或迁移数据。
 
 ## 主要功能
 
-- 5 天或 7 天课程表按真实开始、结束时间显示，保留课间、午休和空闲时段；可切换教学周并标记当前时间。
+- 5 天或 7 天课程表按真实开始、结束时间显示，保留课间、午休和空闲时段；进入课表默认定位到当前学期的实际教学周，也可手动切换。
 - 修改已确认作息后，按节次安排的已有课程会立即按新时间显示，无需重新导入 PDF 或重启；固定钟点课程不受影响。
 - 本地添加、编辑、删除课程；数据保存在本机 SQLite 数据库。
 - 导入当前支持结构的南通大学课表 PDF，预览、修正后再确认写入。
@@ -15,10 +15,11 @@
 - Academic Hub：查看今日学习安排、停课/调课/补课变化、Deadline、考试与学期归档。
 - Widget 2.0：支持下一节课和 Deadline 模式，并与课表变化保持一致。
 - 可选登录后自动启动，以及单实例保护。
+- 工作台顶部名称可自定义；每日寄语默认来自离线已核验文案，可选择主动通过已配置的 DeepSeek 生成当日寄语。
 
 ## 系统要求与安装
 
-- Windows 10 是当前主要实际运行与验收环境，Windows 11 作为兼容目标。
+- 支持 Windows 10 / 11 x64；当前主要开发与窗口生命周期验证环境为 Windows 11，其他 Windows 版本仍建议验证安装与显示兼容性。
 - 从 [GitHub Releases](https://github.com/LinksOnlining/NTU-Course-Assistant/releases/latest) 获取最新 Links Workplace Windows 安装包；旧版 NTU Course Assistant 1.x 仅供历史参考。
 - 安装 2.0 前，用户需要自行卸载 NTU Course Assistant 1.x。2.0 使用新的应用数据目录，只创建 schema 8 数据库；旧版课程数据不会自动迁移或恢复。如需保留旧数据，请在卸载前自行妥善保存。
 - 首次使用请在“设置”中确认作息时间、学期首周和提醒选项。
@@ -31,7 +32,7 @@
 
 ### 提醒、托盘与小组件
 
-课程提醒只在应用进程存活时工作。关闭主窗口会隐藏到系统托盘，提醒、小组件和已启用的应用功能会继续运行；在托盘菜单选择“退出程序”才会完全退出。小组件是一个始终位于普通窗口下方的桌面式窗口，并非嵌入 Windows 壁纸。
+课程提醒只在应用进程存活时工作。**已启用桌面小组件**时，关闭主窗口仅隐藏主窗口，后台、小组件与提醒继续运行，可从小组件或系统托盘恢复主窗口；即使小组件窗口暂时隐藏或尚在创建，也不应误退出。**未启用小组件**时，关闭主窗口会结束整个应用进程，不会留在托盘后台运行。无论哪种状态，在托盘菜单明确选择“退出程序”都会结束应用。小组件位于普通窗口下方，并非嵌入 Windows 壁纸。
 
 ### Academic Hub
 
@@ -48,7 +49,7 @@
 ## 已知限制
 
 - 学校作息与学期日期需要由用户确认后保存；已有数据库 schema 不是 8 时，2.0 会拒绝打开且不会修改该数据库。
-- 扫描 PDF 依赖本地 OCR，清晰度和版式会影响结果；未实现教务系统直接导入、云同步或日程管理。
+- 扫描 PDF 依赖本地 OCR，清晰度和版式会影响结果；未实现教务系统直接导入或云同步。
 - 应用完全退出后不会继续发送提醒。
 - NTU Course Assistant 1.x 与 Links Workplace 2.0 属于不同的数据起点；不提供自动迁移工具。
 
@@ -59,7 +60,7 @@ npm install
 npm run tauri dev
 ```
 
-完整验证使用 `npm run verify`，Rust 检查在 `src-tauri` 目录执行。
+完整验证使用 `npm run verify`（包含 Edge/Playwright 多分辨率 UI 检查），Rust 检查在 `src-tauri` 目录执行。发布由 GitHub Actions 对版本标签构建 Windows MSI/NSIS，并生成 Tauri Updater 签名及 `latest.json`；只有测试与资产检查通过后才能公开正式 Release。
 
 ## 项目资料
 

@@ -295,9 +295,14 @@ test("错误分类、不可用已存模型、高级设置及小窗口可用性",
   expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
     true,
   );
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
-  ).toBe(true);
+  // Layout can briefly change while the async model refresh settles.
+  // Keep the no-horizontal-overflow contract, but wait for the final layout.
+  await expect
+    .poll(
+      () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+      { message: "AI settings must not overflow the narrow application viewport", timeout: 3000 },
+    )
+    .toBe(true);
 
   const nav = settings.getByRole("navigation", { name: "设置分类" });
   await nav.getByRole("button", { name: "外观" }).click();
