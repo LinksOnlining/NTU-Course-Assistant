@@ -127,7 +127,7 @@ test("设置可从两个产品模式打开和关闭，且保留当前页面与�
   ).toHaveAttribute("aria-current", "page");
   await expect(settings.getByText("工作台首页采用当前默认布局。")).toBeVisible();
   await expect(
-    settings.getByText(/日记与收件箱尚未开放；今日助手仅在工作台由你主动触发/u),
+    settings.getByText(/Obsidian 与收件箱：从工作台进入；今日助手由你主动触发/u),
   ).toBeVisible();
   await expect(settings.locator(".settings-home-summary input")).toHaveCount(0);
   await settings

@@ -1,0 +1,91 @@
+.workspace-obsidian-page {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: min(100%, 1120px);
+  flex-direction: column;
+  align-self: center;
+  gap: var(--space-4);
+  overflow: auto;
+  padding: var(--space-4) var(--space-2) var(--space-6);
+}
+.workspace-obsidian-heading h2,
+.workspace-obsidian-heading p,
+.workspace-obsidian-vault h3,
+.workspace-obsidian-vault p {
+  margin: 0;
+}
+.workspace-obsidian-heading h2 {
+  color: var(--text-heading);
+  margin-top: var(--space-2);
+}
+.workspace-obsidian-heading p,
+.workspace-obsidian-vault p,
+.workspace-obsidian-note {
+  color: var(--text-secondary);
+}
+.workspace-obsidian-heading p {
+  margin-top: var(--space-1);
+}
+.workspace-obsidian-back {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+.workspace-obsidian-panel {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--surface-primary);
+  padding: var(--space-4);
+}
+.workspace-obsidian-vault {
+  display: grid;
+  gap: var(--space-1);
+}
+.workspace-obsidian-vault h3 {
+  color: var(--text-heading);
+  font-size: var(--font-size-module);
+}
+.workspace-obsidian-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.workspace-obsidian-actions button {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  color: var(--text-button);
+  font: inherit;
+  cursor: pointer;
+}
+.workspace-obsidian-actions button:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--surface-hover);
+}
+.workspace-obsidian-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.workspace-obsidian-actions button:focus-visible,
+.workspace-obsidian-back:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.workspace-obsidian-note {
+  margin: 0;
+  font-size: var(--font-size-secondary);
+}
+.workspace-obsidian-error {
+  color: var(--danger);
+  margin: 0;
+}

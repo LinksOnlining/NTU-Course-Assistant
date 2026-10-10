@@ -434,7 +434,7 @@ export function PeriodSettings({
                   <li>今日日程：按 24 小时查看已有课程。</li>
                   <li>时间情境：查看当前状态与下一节课。</li>
                   <li>学业任务：显示已有本地学业事项。</li>
-                  <li>日记与收件箱尚未开放；今日助手仅在工作台由你主动触发。</li>
+                  <li>Obsidian 与收件箱：从工作台进入；今日助手由你主动触发。</li>
                 </ul>
                 <p className="settings-domain-note">
                   课程和学业任务来自已有本地数据；更多首页布局选项将在后续阶段开放。

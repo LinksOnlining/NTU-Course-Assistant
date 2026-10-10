@@ -86,6 +86,8 @@ async function seedDashboardRuntime(
       let loadCoursesCount = 0;
       let searchDiaryReadCount = 0;
       const geocodingCalls: { command: string; args?: Record<string, unknown> }[] = [];
+      const obsidianActions: string[] = [];
+      let failObsidianLaunch = false;
       Object.defineProperty(window, "__TAURI_INTERNALS__", {
         configurable: true,
         value: {
@@ -307,6 +309,12 @@ async function seedDashboardRuntime(
               personalTasks = [...personalTasks, task];
               return task;
             }
+            if (command === "get_obsidian_vault") return "First";
+            if (command === "open_obsidian") {
+              if (failObsidianLaunch) throw new Error("Obsidian 启动失败");
+              obsidianActions.push(String(args?.action));
+              return null;
+            }
             if (command === "load_diary_entry") return diaryEntries.get(String(args?.date)) ?? null;
             if (command === "load_diary_entries_for_search") {
               searchDiaryReadCount += 1;
@@ -444,6 +452,10 @@ async function seedDashboardRuntime(
           getLoadCoursesCount: () => loadCoursesCount,
           getGeocodingCalls: () => geocodingCalls,
           getSearchDiaryReadCount: () => searchDiaryReadCount,
+          getObsidianActions: () => [...obsidianActions],
+          setObsidianLaunchFailure: (value: boolean) => {
+            failObsidianLaunch = value;
+          },
           getPersonalTaskCount: () => personalTasks.length,
           getDiaryBody: (date: string) => diaryEntries.get(date)?.body ?? null,
           getRoutineScheduledDate: (id: string) =>
@@ -576,7 +588,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
   await expect(
     page.getByTestId("timeline-item").getByText("数学基础", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Obsidian，打开现有知识库/u })).toBeVisible();
   await expect(page.getByRole("button", { name: /收件箱，暂无待整理/u })).toBeVisible();
   await expect(page.getByTestId("today-assistant-panel")).toBeVisible();
   await expect(page.getByTestId("daily-summary-panel")).toHaveCount(0);
@@ -676,7 +688,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
       await expect(page.getByRole("button", { name: /课表/u })).toBeVisible();
       await expect(page.getByRole("button", { name: "设置" })).toBeVisible();
       await expect(page.getByRole("button", { name: /任务/u })).toBeVisible();
-      await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
+      await expect(page.getByRole("button", { name: /Obsidian，打开现有知识库/u })).toBeVisible();
       await expect(page.getByRole("button", { name: /收件箱，暂无待整理/u })).toBeVisible();
       const assistant = page.getByTestId("today-assistant-panel");
       await expect(assistant).toBeVisible();
@@ -695,91 +707,84 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
   }
 });
 
-test("Diary dashboard status is private and the Diary route saves plain text", async ({ page }) => {
+test("Obsidian replaces the Diary card, launches only registered actions, and keeps legacy data untouched", async ({
+  page,
+}) => {
   await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, { hasEntry: true });
-  const diaryCard = page.getByRole("button", { name: /日记，今天已记录/u });
-  await expect(diaryCard).toBeVisible();
+  await page.evaluate(() =>
+    Object.defineProperty(window, "isTauri", { value: true, configurable: true }),
+  );
+  const card = page.getByRole("button", { name: "Obsidian，打开现有知识库" });
+  await expect(card).toBeVisible();
   await expect(page.getByText("private diary fixture body", { exact: true })).toHaveCount(0);
-  await diaryCard.click();
-  const editor = page.getByRole("textbox", { name: /日记正文/u });
-  await expect(editor).toBeVisible();
-  await expect(editor).toHaveValue("private diary fixture body");
-  expect(await editor.evaluate((element) => getComputedStyle(element).userSelect)).toBe("text");
-  const surface = page.locator(".workspace-diary-editor");
-  const lightSurface = await surface.evaluate(
-    (element) => getComputedStyle(element).backgroundColor,
+  await card.click();
+  await expect(page.getByRole("heading", { name: "Obsidian" })).toBeVisible();
+  await expect(page.getByText("First", { exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /日记正文/u })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "打开 Obsidian" }).click();
+  await page.getByRole("button", { name: "打开每日笔记" }).click();
+  await page.getByRole("button", { name: "查找 00 收集箱" }).click();
+  const actions = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __workspaceDashboardTest: { getObsidianActions: () => string[] };
+      }
+    ).__workspaceDashboardTest.getObsidianActions(),
   );
-  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
-  const darkSurface = await surface.evaluate(
-    (element) => getComputedStyle(element).backgroundColor,
-  );
-  expect(darkSurface).not.toBe(lightSurface);
-  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
-  await editor.fill("本地日记自动保存内容");
-  await page.getByRole("button", { name: /工作台.*日记/u }).click();
-  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
-  await expect(page.getByRole("button", { name: /日记，今天已记录/u })).toBeVisible();
-  await expect(page.getByText("本地日记自动保存内容", { exact: true })).toHaveCount(0);
-  const savedBody = await page.evaluate(() =>
+  expect(actions).toEqual(["vault", "daily", "inbox"]);
+  const preserved = await page.evaluate(() =>
     (
       window as unknown as {
         __workspaceDashboardTest: { getDiaryBody: (date: string) => string | null };
       }
     ).__workspaceDashboardTest.getDiaryBody("2026-09-23"),
   );
-  expect(savedBody).toBe("本地日记自动保存内容");
+  expect(preserved).toBe("private diary fixture body");
+  await page.locator(".workspace-obsidian-back").click();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
 });
 
-test("Diary save failure keeps the draft visible and can be retried", async ({ page }) => {
-  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, { failSave: true });
-  await page.getByRole("button", { name: /日记，今天还没有记录/u }).click();
-  const editor = page.getByRole("textbox", { name: /日记正文/u });
-  await editor.fill("保留在编辑器中的草稿");
-  await page.getByRole("button", { name: /工作台.*日记/u }).click();
-  await expect(page.getByRole("alert")).toContainText("保存失败");
-  await expect(editor).toHaveValue("保留在编辑器中的草稿");
-  const diaryStatus = page.locator(".workspace-diary-status");
-  await expect(diaryStatus).toHaveAttribute("data-save-state", "failed");
-  const failedStatusStyle = await diaryStatus.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { color: style.color, backgroundColor: style.backgroundColor };
-  });
-  expect(failedStatusStyle.color).not.toBe(failedStatusStyle.backgroundColor);
-  expect(failedStatusStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+test("Obsidian launch failure shows error and never modifies old Diary contents", async ({
+  page,
+}) => {
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, { hasEntry: true });
+  await page.evaluate(() =>
+    Object.defineProperty(window, "isTauri", { value: true, configurable: true }),
+  );
+  await page.getByRole("button", { name: "Obsidian，打开现有知识库" }).click();
   await page.evaluate(() =>
     (
       window as unknown as {
-        __workspaceDashboardTest: { setDiarySaveFailure: (value: boolean) => void };
+        __workspaceDashboardTest: { setObsidianLaunchFailure: (value: boolean) => void };
       }
-    ).__workspaceDashboardTest.setDiarySaveFailure(false),
+    ).__workspaceDashboardTest.setObsidianLaunchFailure(true),
   );
-  await page.getByRole("button", { name: "重试保存" }).click();
-  await expect(page.getByRole("status")).toContainText("已保存");
-  await expect(page.locator(".workspace-diary-status")).toHaveAttribute("data-save-state", "saved");
-  await page.getByRole("button", { name: /工作台.*日记/u }).click();
-  await expect(page.getByRole("button", { name: /日记，今天已记录/u })).toBeVisible();
-});
-
-test("Diary date switch flushes pending text and remains usable at compact height", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 720, height: 520 });
-  await seedDashboardRuntime(page);
-  await page.getByRole("button", { name: /日记，今天还没有记录/u }).click();
-  const editor = page.getByRole("textbox", { name: /日记正文/u });
-  await expect(editor).toBeVisible();
-  await editor.fill("前一天切换前保存");
-  await page.getByRole("button", { name: "前一天" }).click();
-  await expect(page.getByRole("textbox", { name: /2026-09-22 日记正文/u })).toBeVisible();
-  const savedBody = await page.evaluate(() =>
+  await page.getByRole("button", { name: "打开 Obsidian" }).click();
+  await expect(page.getByRole("alert")).toContainText("Obsidian 启动失败");
+  const preserved = await page.evaluate(() =>
     (
       window as unknown as {
         __workspaceDashboardTest: { getDiaryBody: (date: string) => string | null };
       }
     ).__workspaceDashboardTest.getDiaryBody("2026-09-23"),
   );
-  expect(savedBody).toBe("前一天切换前保存");
-  await expect(page.getByRole("heading", { name: "日记" })).toBeVisible();
+  expect(preserved).toBe("private diary fixture body");
+});
+
+test("Obsidian shortcut fits compact 720 by 520 windows", async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 520 });
+  await seedDashboardRuntime(page);
+  await page.evaluate(() =>
+    Object.defineProperty(window, "isTauri", { value: true, configurable: true }),
+  );
+  await page.getByRole("button", { name: "Obsidian，打开现有知识库" }).click();
+  await expect(page.getByRole("heading", { name: "Obsidian" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "打开每日笔记" })).toBeVisible();
+  const fit = await page.evaluate(
+    () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+  );
+  expect(fit).toBe(true);
 });
 
 test("00:00 and 24:00 labels stay inside the timeline without shifting minute geometry", async ({
@@ -880,7 +885,7 @@ test("crossing local midnight reloads the current day's Academic data once", asy
   await expect(page.getByText("今天暂无日程", { exact: true }).last()).toBeVisible();
 });
 
-test("Diary, Inbox and schedule routes remain explicit, and returning to Workspace reloads Academic data", async ({
+test("Obsidian, Inbox and schedule routes remain explicit, and returning to Workspace reloads Academic data", async ({
   page,
 }) => {
   await seedDashboardRuntime(page);
@@ -929,7 +934,7 @@ test("Dashboard cards remain visible in both light and dark themes", async ({ pa
   const visibleModules = async () => {
     await expect(page.getByRole("heading", { name: "今日日程" })).toBeVisible();
     await expect(page.getByRole("button", { name: /任务/u })).toBeVisible();
-    await expect(page.getByRole("button", { name: /日记，今天还没有记录/u })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Obsidian，打开现有知识库/u })).toBeVisible();
     await expect(page.getByRole("button", { name: /收件箱，暂无待整理/u })).toBeVisible();
     await expect(page.getByTestId("today-assistant-panel")).toBeVisible();
   };
@@ -1664,9 +1669,9 @@ test("failed Weather requests never block offline core routes", async ({ page })
     .getByRole("navigation", { name: "产品模式" })
     .getByRole("button", { name: "工作台" })
     .click();
-  await page.getByRole("button", { name: /日记，今天还没有记录/u }).click();
-  await expect(page.getByRole("region", { name: "日记", exact: true })).toBeVisible();
-  await page.locator(".workspace-diary-breadcrumb").click();
+  await page.getByRole("button", { name: /Obsidian，打开现有知识库/u }).click();
+  await expect(page.getByRole("heading", { name: "Obsidian", exact: true })).toBeVisible();
+  await page.locator(".workspace-obsidian-back").click();
   await page.getByRole("button", { name: /收件箱，暂无待整理/u }).click();
   await expect(page.getByTestId("workspace-inbox")).toBeVisible();
   await page.locator(".workspace-inbox-breadcrumb").click();

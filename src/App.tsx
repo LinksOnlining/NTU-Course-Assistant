@@ -96,6 +96,7 @@ import { WorkspaceDashboard } from "./workspace/dashboard/WorkspaceDashboard.tsx
 import { WorkspaceTasksPage } from "./workspace/tasks/WorkspaceTasksPage.tsx";
 import { WorkspaceSchedulePage } from "./workspace/schedule/WorkspaceSchedulePage.tsx";
 import { WorkspaceDiaryPage } from "./workspace/diary/WorkspaceDiaryPage.tsx";
+import { WorkspaceObsidianPage } from "./workspace/obsidian/WorkspaceObsidianPage.tsx";
 import { WorkspaceInboxPage } from "./workspace/inbox/WorkspaceInboxPage.tsx";
 import { WorkspaceSearchPage } from "./workspace/search/WorkspaceSearchPage.tsx";
 import { WeatherHeader } from "./workspace/weather/WeatherHeader.tsx";
@@ -1076,13 +1077,15 @@ export function App() {
           }}
         />
       ) : isWorkspaceDiary && storageStatus === "ready" ? (
-        <WorkspaceDiaryPage
-          onNavigate={navigateToRoute}
-          registerFlush={registerDiaryFlush}
-          initialDate={
-            navigationTarget?.object?.type === "diaryEntry" ? navigationTarget.date : undefined
-          }
-        />
+        navigationTarget?.object?.type === "diaryEntry" ? (
+          <WorkspaceDiaryPage
+            onNavigate={navigateToRoute}
+            registerFlush={registerDiaryFlush}
+            initialDate={navigationTarget.date}
+          />
+        ) : (
+          <WorkspaceObsidianPage onNavigate={navigateToRoute} />
+        )
       ) : isWorkspaceInbox && storageStatus === "ready" ? (
         <WorkspaceInboxPage
           onNavigate={navigateToRoute}

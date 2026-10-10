@@ -329,24 +329,17 @@ function TaskCard({
   );
 }
 
-function DiaryCard({
-  hasEntry,
-  onNavigate,
-}: {
-  readonly hasEntry: boolean;
-  readonly onNavigate: (route: AppRoute) => void;
-}) {
-  const status = hasEntry ? "今天已记录" : "今天还没有记录";
+function ObsidianCard({ onNavigate }: { readonly onNavigate: (route: AppRoute) => void }) {
   return (
     <button
       type="button"
       className="workspace-dashboard-card workspace-module-card"
       onClick={() => onNavigate({ area: "workspace", page: "diary" })}
-      aria-label={`日记，${status}`}
+      aria-label="Obsidian，打开现有知识库"
     >
-      <span className="workspace-module-title">日记</span>
-      <span className="workspace-module-status">{status}</span>
-      <span className="workspace-module-description">打开今天的本地日记</span>
+      <span className="workspace-module-title">Obsidian</span>
+      <span className="workspace-module-status">我的知识库</span>
+      <span className="workspace-module-description">在 Obsidian 中记录与同步</span>
     </button>
   );
 }
@@ -545,7 +538,7 @@ export function WorkspaceDashboard({
         <aside className="workspace-dashboard-rail" aria-label="工作台摘要">
           <TaskCard model={model} onNavigate={onNavigate} />
           <div className="workspace-module-pair">
-            <DiaryCard hasEntry={model.context.hasDiaryToday} onNavigate={onNavigate} />
+            <ObsidianCard onNavigate={onNavigate} />
             <InboxCard pendingCount={model.context.pendingInboxCount} onNavigate={onNavigate} />
           </div>
           <TodayAssistantPanel

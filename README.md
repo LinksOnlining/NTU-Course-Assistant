@@ -1,6 +1,6 @@
 # Links Workplace
 
-面向 Windows 的本地个人工作台，包含课程表、Planner、Diary、Inbox、天气和可选 AI 能力。Links Workplace 2.0 沿用本仓库与应用技术栈，但采用独立身份和全新数据开始。
+面向 Windows 的本地个人工作台，包含课程表、Planner、Obsidian 快捷入口、Inbox、天气和可选 AI 能力。Links Workplace 2.0 沿用本仓库与应用技术栈，但采用独立身份和全新数据开始。
 
 > **版本说明：**当前版本为 Links Workplace 2.0.3（窄窗口布局与回归稳定性修复，包含 2.0.2 的教学周、标题、每日寄语及小组件生命周期改进）。Links Workplace 2.0 是 **clean-start release**；NTU Course Assistant 1.x 属于旧版产品线，不支持自动升级到 Links Workplace 2.x 或迁移数据。
 
@@ -16,6 +16,12 @@
 - Widget 2.0：支持下一节课和 Deadline 模式，并与课表变化保持一致。
 - 可选登录后自动启动，以及单实例保护。
 - 工作台顶部名称可自定义；每日寄语默认来自离线已核验文案，可选择主动通过已配置的 DeepSeek 生成当日寄语。
+
+## Obsidian 笔记入口
+
+工作台中的原「日记」卡片现改为 Obsidian 快捷入口。应用读取 Obsidian 已注册的当前知识库信息，可启动 Obsidian、打开每日笔记、搜索「00 收集箱」；这些操作通过 `obsidian://` 协议交给 Obsidian 执行。需要预先安装 Obsidian 并在其中打开知识库。Links 不会读写或修改 Vault 内的 Markdown 文件，也不会改变既有 Obsidian 同步设置。
+
+为保护历史数据，旧 Links 日记仍保留在原本的 SQLite 数据库中；历史日记搜索结果仍可进入旧版条目查看。既有 AI 今日分析与 Planner 工作流不变，此次没有增加自动读取 Obsidian 笔记正文的能力。
 
 ## 系统要求与安装
 

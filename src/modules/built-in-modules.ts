@@ -650,7 +650,7 @@ export const BUILT_IN_MODULES = [
   },
   {
     id: "diary",
-    metadata: { name: "日记", description: "本地优先的每日个人记录。" },
+    metadata: { name: "Obsidian", description: "打开现有 Obsidian 知识库。" },
     order: 40,
     available: true,
     enabledByDefault: true,
@@ -659,7 +659,7 @@ export const BUILT_IN_MODULES = [
         id: "diary.page",
         moduleId: "diary",
         route: { area: "workspace", page: "diary" },
-        label: "日记",
+        label: "Obsidian",
         order: 10,
         shellView: "workspace-diary",
         available: true,

@@ -4,6 +4,7 @@ mod db;
 mod geocoding;
 mod models;
 mod notification;
+mod obsidian;
 mod scheduler;
 mod secure_credentials;
 
@@ -1361,6 +1362,8 @@ pub fn run() {
             save_diary_entry,
             load_diary_content_dates,
             has_diary_entry,
+            obsidian::get_obsidian_vault,
+            obsidian::open_obsidian,
             create_inbox_item,
             load_inbox_items,
             count_pending_inbox_items,
