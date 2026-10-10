@@ -60,6 +60,7 @@ import {
   getShanghaiDate,
   getShanghaiTime,
   getShanghaiWeekday,
+  getTeachingWeek,
 } from "./core/reminder.ts";
 import { timeToMinutes } from "./core/time.ts";
 import type { Course } from "./types/course.ts";
@@ -214,7 +215,7 @@ export function App() {
     setNavigationTarget(target);
     const completeNavigation = () => {
       if (getShellRouteView(route) === "academic-schedule" && !isScheduleView) {
-        setSelectedWeek(currentTeachingWeek);
+        setSelectedWeek(currentTeachingWeek ?? 1);
       }
       if (route.area === "academic") setLastAcademicRoute(route);
       setCurrentRoute(route);
@@ -284,8 +285,10 @@ export function App() {
   const axis = useMemo(() => getTimelineBounds(TEST_TIMETABLE.axis, periods), [periods]);
   const currentTeachingWeek = useMemo(() => {
     const config = activeSemester ?? reminderConfiguration.termConfig;
-    return initialTeachingWeek(getShanghaiDate(now.getTime()), config, previewFixtureWeek);
-  }, [activeSemester, now, reminderConfiguration.termConfig]);
+    if (config) return getTeachingWeek(getShanghaiDate(now.getTime()), config);
+    // The week-three preview is only for development / Playwright fixtures, never production.
+    return previewFixtureWeek === TEST_TIMETABLE.currentWeek ? previewFixtureWeek : null;
+  }, [activeSemester, now, previewFixtureWeek, reminderConfiguration.termConfig]);
   const activeSemesterWeekKey = activeSemester
     ? `${activeSemester.id}:${activeSemester.firstWeekMonday}:${activeSemester.totalWeeks}`
     : null;
@@ -296,7 +299,7 @@ export function App() {
   }, [activeSemesterWeekKey, storageStatus]);
   const maxTeachingWeek =
     activeSemester?.totalWeeks ?? reminderConfiguration.termConfig?.totalWeeks ?? 30;
-  const isViewingCurrentWeek = selectedWeek === currentTeachingWeek;
+  const isViewingCurrentWeek = currentTeachingWeek !== null && selectedWeek === currentTeachingWeek;
   const todayWeekday = getShanghaiWeekday(getShanghaiDate(now.getTime()));
   const nowTime = getShanghaiTime(now.getTime());
   const visibleWeekdays =
@@ -788,6 +791,13 @@ export function App() {
           ‹
         </button>
         <strong>第 {selectedWeek} 周</strong>
+        {currentTeachingWeek === null && (
+          <span className="week-status-note" role="status">
+            {activeSemester || reminderConfiguration.termConfig
+              ? "当前为非教学期，浏览历史教学周"
+              : "尚未设置学期，当前没有真实教学周"}
+          </span>
+        )}
         <button
           type="button"
           className="secondary-button"
@@ -801,9 +811,10 @@ export function App() {
           type="button"
           className="secondary-button"
           aria-label="回到本周"
-          title="回到现在"
+          title={currentTeachingWeek === null ? "当前没有可定位的教学周" : "回到现在"}
+          disabled={currentTeachingWeek === null}
           onClick={() => {
-            setSelectedWeek(currentTeachingWeek);
+            setSelectedWeek(currentTeachingWeek ?? 1);
             setScrollRequest((value) => value + 1);
           }}
         >

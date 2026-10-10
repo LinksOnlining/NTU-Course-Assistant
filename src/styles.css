@@ -115,6 +115,16 @@ h1 {
   text-align: center;
 }
 
+.week-status-note {
+  display: inline-block;
+  max-width: 160px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .week-controls .secondary-button,
 .day-count-controls button,
 .weekend-notice {

@@ -7,8 +7,8 @@ import {
   formatHeaderDate,
   localDateKey,
   millisecondsUntilNextLocalMidnight,
-  quoteForLocalDate,
 } from "./daily-quote.ts";
+import { displayQuoteForLocalDate, DAILY_QUOTE_UPDATED_EVENT } from "./daily-quote-override.ts";
 import "./shell.css";
 
 interface AppShellProps {
@@ -49,7 +49,17 @@ function ShellHeader({
   weatherSlot,
 }: Omit<AppShellProps, "children" | "contextTitle" | "contextActions">) {
   const [today, setToday] = useState(() => new Date());
-  const quote = quoteForLocalDate(today);
+  const [, refreshQuote] = useState(0);
+  const quote = displayQuoteForLocalDate(today);
+  useEffect(() => {
+    const refresh = () => refreshQuote((value) => value + 1);
+    window.addEventListener(DAILY_QUOTE_UPDATED_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(DAILY_QUOTE_UPDATED_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
   const activeMode: ProductMode | null =
     route.area === "workspace" ? "workspace" : route.area === "academic" ? "academic" : null;
 

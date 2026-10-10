@@ -15,3 +15,11 @@ test("current week is derived from the real term instead of fixed week three", (
   assert.equal(initialTeachingWeek("2026-09-27", term), 3);
   assert.equal(initialTeachingWeek("2026-09-06", term), 1);
 });
+
+test("academic week calculation crosses calendar years and never silently chooses week three", () => {
+  const acrossNewYear = { firstWeekMonday: "2026-12-28", totalWeeks: 5, timezone: "Asia/Shanghai" };
+  assert.equal(initialTeachingWeek("2026-12-31", acrossNewYear), 1);
+  assert.equal(initialTeachingWeek("2027-01-04", acrossNewYear), 2);
+  assert.equal(initialTeachingWeek("2027-01-18", acrossNewYear), 4);
+  assert.equal(initialTeachingWeek("2027-02-10", acrossNewYear), 1);
+});

@@ -17,7 +17,12 @@ import type { SaveOperationState } from "../types/save-operation.ts";
 import type { PeriodTime } from "../types/time.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
 import type { ThemePreference } from "../theme/types.ts";
-import { DEFAULT_WORKPLACE_TITLE, MAX_WORKPLACE_TITLE_LENGTH } from "../shell/brand-title.ts";
+import {
+  DEFAULT_WORKPLACE_TITLE,
+  MAX_WORKPLACE_TITLE_LENGTH,
+  workplaceTitleLength,
+} from "../shell/brand-title.ts";
+import { DailyQuoteSettingsPanel } from "../shell/DailyQuoteSettingsPanel.tsx";
 import { ChineseDateInput } from "./ChineseDateInput.tsx";
 import { workplaceModuleRegistry } from "../modules/registry.ts";
 import type { WorkspaceWeatherController } from "../workspace/weather/use-workspace-weather.ts";
@@ -441,9 +446,7 @@ export function PeriodSettings({
                 今日日程按 24 小时展示；目前暂无可调整的时间轴选项。
               </p>
             )}
-            {page === "每日寄语" && (
-              <p className="settings-domain-note">每日寄语随日期更新；目前暂无可调整的选项。</p>
-            )}
+            {page === "每日寄语" && <DailyQuoteSettingsPanel />}
             {page === "AI" && <AISettingsPanel />}
             {page === "天气" && <WeatherSettingsPanel weather={weather} />}
             {page === "日常习惯" && <RoutineSettingsPanel />}
@@ -785,13 +788,14 @@ export function PeriodSettings({
                       <input
                         type="text"
                         aria-label="左上角显示名称"
-                        maxLength={MAX_WORKPLACE_TITLE_LENGTH}
+                        maxLength={MAX_WORKPLACE_TITLE_LENGTH * 4}
                         value={workplaceTitle}
                         onChange={(event) => onWorkplaceTitleChange(event.target.value)}
                       />
                     </label>
                   </div>
-                  <p className="settings-domain-note">
+                  <p className="settings-domain-note" aria-live="polite">
+                    当前 {workplaceTitleLength(workplaceTitle)}/{MAX_WORKPLACE_TITLE_LENGTH} 字。
                     修改后立即生效并保存在本机；名称过长时会省略显示，鼠标悬停可看全文。
                   </p>
                   <button

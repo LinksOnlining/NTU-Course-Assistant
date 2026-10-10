@@ -42,7 +42,7 @@ test("自定义左上角名称在设置中即时生效并在刷新后保留", as
     .getByRole("button", { name: "外观" })
     .click();
   const nameInput = page.getByRole("textbox", { name: "左上角显示名称" });
-  await expect(nameInput).toHaveAttribute("maxlength", "48");
+  await expect(nameInput).toHaveAttribute("maxlength", "240");
   await nameInput.fill("我自己的学习工作台");
   await expect(page.locator(".shell-brand h1")).toHaveText("我自己的学习工作台");
   await page.reload();
@@ -209,4 +209,71 @@ test("Shell 在浅色和深色下可见，并在桌面及最小窗口保持主�
       subnavVisible: true,
     });
   }
+});
+
+test("课表导航重新进入定位到本周，手动切换期间不自动跳回", async ({ page }) => {
+  await openApp(page);
+  const mode = page.getByRole("navigation", { name: "产品模式" });
+  await mode.getByRole("button", { name: "课表" }).click();
+  const controls = page.locator(".week-controls");
+  await expect(page.locator(".week-controls strong")).toHaveText("第 3 周");
+  await page.getByRole("button", { name: "下一教学周" }).click();
+  await expect(page.locator(".week-controls strong")).toHaveText("第 4 周");
+  await page.waitForTimeout(50);
+  await expect(page.locator(".week-controls strong")).toHaveText("第 4 周");
+  await mode.getByRole("button", { name: "工作台" }).click();
+  await mode.getByRole("button", { name: "课表" }).click();
+  await expect(page.locator(".week-controls strong")).toHaveText("第 3 周");
+  await expect(controls).toBeVisible();
+});
+
+test("顶部标题支持 60 个完整 emoji 并保持导航可点击", async ({ page }) => {
+  await openApp(page);
+  await page.getByRole("button", { name: "设置" }).click();
+  await page
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "外观" })
+    .click();
+  const input = page.getByRole("textbox", { name: "左上角显示名称" });
+  const title = "🌻".repeat(60);
+  await input.fill("🌻".repeat(67));
+  await expect(page.locator(".shell-brand h1")).toHaveText(title);
+  await expect(page.getByText("当前 60/60 字。", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "课表" })
+    .click();
+  await expect(page.getByRole("heading", { name: "课表", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".shell-brand h1")).toHaveText(title);
+});
+
+test("每日寄语离线可用，按日期缓存的 AI 短句可恢复本地库", async ({ page }) => {
+  await openApp(page);
+  const generated = "窗边有风，今天适合去看云。";
+  await page.evaluate((text) => {
+    const date = new Date();
+    const key = [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0"),
+    ].join("-");
+    localStorage.setItem("links-workplace.daily-ai-quote", JSON.stringify({ date: key, text }));
+    window.dispatchEvent(new Event("links-workplace:daily-quote-updated"));
+  }, generated);
+  await expect(page.locator(".shell-daily-quote")).toContainText(generated);
+  await expect(page.locator(".shell-daily-quote")).toContainText("AI 生成");
+  await page.reload();
+  await expect(page.locator(".shell-daily-quote")).toContainText(generated);
+  await page.getByRole("button", { name: "设置" }).click();
+  await page
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "每日寄语" })
+    .click();
+  await expect(page.getByRole("button", { name: "使用 DeepSeek 生成今日短句" })).toBeVisible();
+  await page.getByRole("button", { name: "恢复本地寄语" }).click();
+  await expect(page.locator(".shell-daily-quote")).not.toContainText(generated);
+  await page.reload();
+  await expect(page.locator(".shell-daily-quote")).not.toContainText(generated);
 });

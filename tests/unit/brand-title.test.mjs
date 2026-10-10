@@ -7,6 +7,7 @@ import {
   getWorkplaceTitle,
   normalizeWorkplaceTitle,
   saveWorkplaceTitle,
+  workplaceTitleLength,
 } from "../../src/shell/brand-title.ts";
 
 test("title defaults, normalizes whitespace and limits characters", () => {
@@ -37,4 +38,14 @@ test("disabled local storage does not prevent rendering", () => {
   };
   assert.equal(getWorkplaceTitle(storage), DEFAULT_WORKPLACE_TITLE);
   assert.equal(saveWorkplaceTitle("喜欢的名字", storage), "喜欢的名字");
+});
+
+test("60 visible graphemes do not cut emojis, combining marks, or long Unicode names", () => {
+  const emoji = "👩‍💻";
+  assert.equal(workplaceTitleLength(emoji), 1);
+  assert.equal(workplaceTitleLength("e\u0301"), 1);
+  const title = normalizeWorkplaceTitle(emoji.repeat(80));
+  assert.equal(workplaceTitleLength(title), MAX_WORKPLACE_TITLE_LENGTH);
+  assert.equal(title, emoji.repeat(60));
+  assert.equal(normalizeWorkplaceTitle("e\u0301".repeat(65)), "e\u0301".repeat(60));
 });

@@ -1,5 +1,5 @@
 export const DEFAULT_WORKPLACE_TITLE = "Links Workplace";
-export const MAX_WORKPLACE_TITLE_LENGTH = 48;
+export const MAX_WORKPLACE_TITLE_LENGTH = 60;
 export const WORKPLACE_TITLE_STORAGE_KEY = "links-workplace.header-title";
 
 interface TitleStorage {
@@ -15,9 +15,18 @@ function browserStorage(): TitleStorage | null {
   }
 }
 
+/** Grapheme clusters keep composed characters and emoji sequences intact. */
+export function workplaceTitleLength(text: string): number {
+  return Array.from(new Intl.Segmenter("zh-CN", { granularity: "grapheme" }).segment(text)).length;
+}
+
 export function normalizeWorkplaceTitle(input: string | null): string {
   const normalized = (input ?? "").replace(/\s+/gu, " ").trim();
-  return normalized.slice(0, MAX_WORKPLACE_TITLE_LENGTH) || DEFAULT_WORKPLACE_TITLE;
+  const characters = Array.from(
+    new Intl.Segmenter("zh-CN", { granularity: "grapheme" }).segment(normalized),
+    (part) => part.segment,
+  );
+  return characters.slice(0, MAX_WORKPLACE_TITLE_LENGTH).join("") || DEFAULT_WORKPLACE_TITLE;
 }
 
 export function getWorkplaceTitle(storage = browserStorage()): string {
