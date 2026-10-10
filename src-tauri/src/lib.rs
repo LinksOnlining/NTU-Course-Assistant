@@ -138,6 +138,7 @@ struct SchedulerState(scheduler::ReminderScheduler);
 #[derive(Default)]
 struct WidgetLifecycleState {
     enabled: AtomicBool,
+    main_close_requested: AtomicBool,
 }
 
 impl WidgetLifecycleState {
@@ -148,12 +149,37 @@ impl WidgetLifecycleState {
     fn set_enabled(&self, enabled: bool) {
         self.enabled.store(enabled, Ordering::SeqCst);
     }
+
+    /// The settings write may finish after the user closes the main window.
+    /// Mark enable intent before awaiting the database write.
+    fn begin_settings_patch(&self, requested_enabled: Option<bool>) -> bool {
+        let previous = self.is_enabled();
+        if requested_enabled == Some(true) {
+            self.set_enabled(true);
+        }
+        previous
+    }
+
+    fn record_main_close(&self) {
+        self.main_close_requested.store(true, Ordering::SeqCst);
+    }
+
+    fn record_main_open(&self) {
+        self.main_close_requested.store(false, Ordering::SeqCst);
+    }
+
+    fn main_close_requested(&self) -> bool {
+        self.main_close_requested.load(Ordering::SeqCst)
+    }
 }
 
 struct SqliteHandledStore(CourseState);
 
-fn should_preserve_main_window(widget_enabled: bool, widget_exists: bool) -> bool {
-    widget_enabled && widget_exists
+/// A widget may be enabled before its native window finishes being created.
+/// Do not exit the application during that gap: the widget can still be restored
+/// from the tray, even if the WebView is temporarily unavailable.
+fn should_preserve_main_window(widget_enabled: bool) -> bool {
+    widget_enabled
 }
 
 fn should_exit_after_hiding_widget(widget_enabled: bool, main_visible: bool) -> bool {
@@ -947,15 +973,39 @@ async fn patch_widget_settings(
     debug_widget("settings patch requested");
     let updates_lock_state = patch.locked.is_some();
     let updates_enabled_state = patch.enabled.is_some();
-    let settings = state
+    let lifecycle = app.state::<WidgetLifecycleState>();
+    // A fast main-window close must not quit while the enable write is pending.
+    // The actual WebView is created only after the frontend receives this result.
+    let enabling = patch.enabled == Some(true);
+    let was_enabled = lifecycle.begin_settings_patch(patch.enabled);
+    let result = state
         .run_in_background("保存小组件设置", move |database| {
             database.patch_widget_settings(&patch)
         })
-        .await?;
+        .await;
+    let settings = match result {
+        Ok(settings) => settings,
+        Err(error) => {
+            if enabling {
+                lifecycle.set_enabled(was_enabled);
+                // If main was hidden during the failed save, restore the visible UI
+                // rather than strand a tray-only process with a disabled widget.
+                if !was_enabled {
+                    let main_is_visible = app
+                        .get_webview_window("main")
+                        .and_then(|main| main.is_visible().ok())
+                        .unwrap_or(false);
+                    if !main_is_visible && show_main_window(&app).is_err() {
+                        eprintln!("Main restore after widget enable failure failed");
+                    }
+                }
+            }
+            return Err(error);
+        }
+    };
     debug_widget("settings patch completed");
     if updates_enabled_state {
-        app.state::<WidgetLifecycleState>()
-            .set_enabled(settings.enabled);
+        lifecycle.set_enabled(settings.enabled);
     }
     if updates_lock_state {
         let app = app.clone();
@@ -1112,7 +1162,9 @@ fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
     main.maximize()
         .map_err(|_| "无法最大化课程表窗口。".to_string())?;
     main.set_focus()
-        .map_err(|_| "无法聚焦课程表窗口。".to_string())
+        .map_err(|_| "无法聚焦课程表窗口。".to_string())?;
+    app.state::<WidgetLifecycleState>().record_main_open();
+    Ok(())
 }
 
 #[tauri::command]
@@ -1248,11 +1300,13 @@ pub fn run() {
                 .state::<CourseState>()
                 .run("读取小组件设置", CourseDatabase::load_widget_settings)
             {
+                // Publish the persisted preference before window creation. A user
+                // closing main during widget startup must not terminate the process.
+                app.state::<WidgetLifecycleState>()
+                    .set_enabled(settings.enabled);
                 if settings.enabled {
                     show_widget(&app.handle().clone(), &settings)?;
                 }
-                app.state::<WidgetLifecycleState>()
-                    .set_enabled(settings.enabled);
             }
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
@@ -1260,7 +1314,14 @@ pub fn run() {
 
                 let main_thread_handle = app_handle.clone();
                 let _ = app_handle.run_on_main_thread(move || {
-                    let _ = show_main_window(&main_thread_handle);
+                    // The user may have closed main while the delayed startup task
+                    // was pending. Do not undo an intentional close.
+                    if !main_thread_handle
+                        .state::<WidgetLifecycleState>()
+                        .main_close_requested()
+                    {
+                        let _ = show_main_window(&main_thread_handle);
+                    }
                 });
             });
             Ok(())
@@ -1359,12 +1420,14 @@ pub fn run() {
                 } else if window.label() == "main" {
                     let app = window.app_handle();
                     let widget_enabled = app.state::<WidgetLifecycleState>().is_enabled();
-                    let widget_exists = app.get_webview_window("widget").is_some();
-                    if should_preserve_main_window(widget_enabled, widget_exists) {
+                    if should_preserve_main_window(widget_enabled) {
                         // Keep the original main WebView loaded even when the enabled widget is
-                        // temporarily hidden through the tray; recreating main can render blank.
+                        // hidden, destroyed, or still being created. Recreating main can render blank.
                         api.prevent_close();
-                        let _ = window.hide();
+                        app.state::<WidgetLifecycleState>().record_main_close();
+                        if window.hide().is_err() {
+                            eprintln!("Hiding main window failed; process kept alive");
+                        }
                     } else {
                         // A disabled widget can still own a hidden native window. Explicitly
                         // terminate instead of leaving a tray-only process running.
@@ -1393,11 +1456,16 @@ mod tests {
     };
 
     #[test]
-    fn main_survives_only_when_widget_is_enabled_and_exists() {
-        assert!(should_preserve_main_window(true, true));
-        assert!(!should_preserve_main_window(true, false));
-        assert!(!should_preserve_main_window(false, true));
-        assert!(!should_preserve_main_window(false, false));
+    fn main_close_keeps_process_alive_when_widget_enabled_even_before_window_exists() {
+        let state = WidgetLifecycleState::default();
+        // Closing main with no widget is an intentional full quit.
+        assert!(!should_preserve_main_window(state.is_enabled()));
+        state.set_enabled(true);
+        // Both an existing widget and a still-creating/temporarily missing widget
+        // must preserve the background process.
+        assert!(should_preserve_main_window(state.is_enabled()));
+        state.set_enabled(false);
+        assert!(!should_preserve_main_window(state.is_enabled()));
     }
 
     #[test]
@@ -1412,10 +1480,33 @@ mod tests {
     fn widget_lifecycle_tracks_enable_and_disable() {
         let state = WidgetLifecycleState::default();
         assert!(!state.is_enabled());
-        state.set_enabled(true);
+        // Pending enable must keep the process alive before the DB commit,
+        // even if the widget has not yet been created.
+        let previous = state.begin_settings_patch(Some(true));
+        assert!(!previous);
+        assert!(should_preserve_main_window(state.is_enabled()));
+        state.set_enabled(previous); // simulated write failure rollback
+        assert!(!should_preserve_main_window(state.is_enabled()));
+
+        state.set_enabled(true); // successful persist
+        assert!(state.begin_settings_patch(None)); // unrelated settings cannot disable
+        assert!(should_preserve_main_window(state.is_enabled()));
+        assert!(state.begin_settings_patch(Some(false))); // disable only after commit
         assert!(state.is_enabled());
         state.set_enabled(false);
-        assert!(!state.is_enabled());
+        assert!(!should_preserve_main_window(state.is_enabled()));
+    }
+
+    #[test]
+    fn late_startup_show_does_not_reopen_an_intentionally_closed_main() {
+        let state = WidgetLifecycleState::default();
+        assert!(!state.main_close_requested()); // normal startup shows the window
+        state.set_enabled(true);
+        state.record_main_close();
+        assert!(state.main_close_requested()); // late startup callback must skip show
+        assert!(state.is_enabled()); // closing main leaves widget-enabled background alive
+        state.record_main_open(); // explicit tray / single-instance restore is still allowed
+        assert!(!state.main_close_requested());
     }
 
     #[test]
