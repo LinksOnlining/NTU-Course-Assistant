@@ -12,6 +12,8 @@
 
 .shell-brand {
   min-width: 0;
+  flex: 0 1 auto;
+  max-width: min(48vw, 680px);
 }
 
 .shell-drag-region {
@@ -27,6 +29,9 @@
   font-size: clamp(21px, 2.2vw, 30px);
   font-weight: 700;
   letter-spacing: -0.025em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .shell-daily-quote {

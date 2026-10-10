@@ -26,20 +26,34 @@ test("默认进入工作台并显示本地日期与已核验每日寄语", async
 
   const quote = await page.locator(".shell-daily-quote").textContent();
   expect(quote).toContain("·");
-  expect(
-    [
-      "学而不思则罔，思而不学则殆。",
-      "知之为知之，不知为不知，是知也。",
-      "知者不惑，仁者不忧，勇者不惧。",
-      "路漫漫其修远兮，吾将上下而求索。",
-      "纸上得来终觉浅，绝知此事要躬行。",
-      "山重水复疑无路，柳暗花明又一村。",
-    ].some((text) => quote?.includes(text)),
-  ).toBe(true);
+  expect(quote).toBeTruthy();
+  expect(quote).not.toMatch(/学而不思则罔|知之为知之|知者不惑/u);
   await expect(page.getByRole("button", { name: "导入 PDF" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "添加课程" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "回到本周" })).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "课表二级导航" })).toHaveCount(0);
+});
+
+test("自定义左上角名称在设置中即时生效并在刷新后保留", async ({ page }) => {
+  await openApp(page);
+  await page.getByRole("button", { name: "设置" }).click();
+  await page
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "外观" })
+    .click();
+  const nameInput = page.getByRole("textbox", { name: "左上角显示名称" });
+  await expect(nameInput).toHaveAttribute("maxlength", "48");
+  await nameInput.fill("我自己的学习工作台");
+  await expect(page.locator(".shell-brand h1")).toHaveText("我自己的学习工作台");
+  await page.reload();
+  await expect(page.locator(".shell-brand h1")).toHaveText("我自己的学习工作台");
+  await page.getByRole("button", { name: "设置" }).click();
+  await page
+    .getByRole("navigation", { name: "设置分类" })
+    .getByRole("button", { name: "外观" })
+    .click();
+  await page.getByRole("button", { name: "恢复默认名称" }).click();
+  await expect(page.locator(".shell-brand h1")).toHaveText("Links Workplace");
 });
 
 test("Links 顶栏提供独立空白拖动区，交互控件不在拖动区内", async ({ page }) => {

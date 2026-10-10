@@ -5,6 +5,8 @@ import { PdfImportPreview } from "./components/PdfImportPreview.tsx";
 import { PeriodSettings } from "./components/PeriodSettings.tsx";
 import { Timetable } from "./components/Timetable.tsx";
 import { TEST_TIMETABLE } from "./config/timetable.ts";
+import { initialTeachingWeek } from "./core/initial-teaching-week.ts";
+import { getWorkplaceTitle, saveWorkplaceTitle } from "./shell/brand-title.ts";
 import {
   applyImportCandidateEdit,
   evaluateImportCandidates,
@@ -58,7 +60,6 @@ import {
   getShanghaiDate,
   getShanghaiTime,
   getShanghaiWeekday,
-  getTeachingWeek,
 } from "./core/reminder.ts";
 import { timeToMinutes } from "./core/time.ts";
 import type { Course } from "./types/course.ts";
@@ -123,6 +124,10 @@ type PdfImportState =
 
 export function App() {
   const showDevelopmentFixtures = import.meta.env.DEV && !("__TAURI_INTERNALS__" in window);
+  const previewFixtureWeek =
+    showDevelopmentFixtures || import.meta.env.MODE === "playwright"
+      ? TEST_TIMETABLE.currentWeek
+      : 1;
   const weather = useWorkspaceWeather();
   const [userCourses, setUserCourses] = useState<readonly Course[]>([]);
   const [isAdding, setIsAdding] = useState(false);
@@ -157,6 +162,7 @@ export function App() {
   const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
     getThemePreference(),
   );
+  const [workplaceTitle, setWorkplaceTitle] = useState(() => getWorkplaceTitle());
 
   const openSettings = useCallback((initialPage?: string) => {
     setSettingsInitialPage(initialPage);
@@ -183,7 +189,7 @@ export function App() {
   const isWorkspaceSearch = routeView === "workspace-search";
   const isUnsupportedRoute = routeView === "unsupported";
   const RegisteredRouteRenderer = getRouteRenderer(currentRoute);
-  const [selectedWeek, setSelectedWeek] = useState(TEST_TIMETABLE.currentWeek);
+  const [selectedWeek, setSelectedWeek] = useState(() => previewFixtureWeek);
   const [dayCount, setDayCount] = useState<5 | 7>(7);
   const [scrollRequest, setScrollRequest] = useState(0);
   const [updateState, setUpdateState] = useState<
@@ -207,6 +213,9 @@ export function App() {
   function navigateToRoute(route: AppRoute, target: NavigationTarget | null = null) {
     setNavigationTarget(target);
     const completeNavigation = () => {
+      if (getShellRouteView(route) === "academic-schedule" && !isScheduleView) {
+        setSelectedWeek(currentTeachingWeek);
+      }
       if (route.area === "academic") setLastAcademicRoute(route);
       setCurrentRoute(route);
     };
@@ -237,6 +246,10 @@ export function App() {
     updateTheme(resolveTheme(themePreference, systemTheme.matches ? "dark" : "light"));
     return subscribeToSystemTheme(themePreference, systemTheme, updateTheme);
   }, [themePreference]);
+
+  function handleWorkplaceTitleChange(value: string) {
+    setWorkplaceTitle(saveWorkplaceTitle(value));
+  }
 
   function handleThemePreferenceChange(preference: ThemePreference) {
     saveThemePreference(preference);
@@ -270,12 +283,19 @@ export function App() {
   );
   const axis = useMemo(() => getTimelineBounds(TEST_TIMETABLE.axis, periods), [periods]);
   const currentTeachingWeek = useMemo(() => {
-    const config = reminderConfiguration.termConfig;
-    return config
-      ? (getTeachingWeek(getShanghaiDate(now.getTime()), config) ?? 1)
-      : TEST_TIMETABLE.currentWeek;
-  }, [now, reminderConfiguration.termConfig]);
-  const maxTeachingWeek = reminderConfiguration.termConfig?.totalWeeks ?? 30;
+    const config = activeSemester ?? reminderConfiguration.termConfig;
+    return initialTeachingWeek(getShanghaiDate(now.getTime()), config, previewFixtureWeek);
+  }, [activeSemester, now, reminderConfiguration.termConfig]);
+  const activeSemesterWeekKey = activeSemester
+    ? `${activeSemester.id}:${activeSemester.firstWeekMonday}:${activeSemester.totalWeeks}`
+    : null;
+  useEffect(() => {
+    if (activeSemester && storageStatus === "ready") {
+      setSelectedWeek(initialTeachingWeek(getShanghaiDate(Date.now()), activeSemester));
+    }
+  }, [activeSemesterWeekKey, storageStatus]);
+  const maxTeachingWeek =
+    activeSemester?.totalWeeks ?? reminderConfiguration.termConfig?.totalWeeks ?? 30;
   const isViewingCurrentWeek = selectedWeek === currentTeachingWeek;
   const todayWeekday = getShanghaiWeekday(getShanghaiDate(now.getTime()));
   const nowTime = getShanghaiTime(now.getTime());
@@ -463,6 +483,13 @@ export function App() {
           termConfig: storedReminderConfiguration.termConfig,
           reminderSettings: storedReminderConfiguration.reminderSettings,
         });
+        setSelectedWeek(
+          initialTeachingWeek(
+            getShanghaiDate(Date.now()),
+            storedReminderConfiguration.termConfig,
+            previewFixtureWeek,
+          ),
+        );
         setWidgetSettings(storedWidgetSettings);
         setDayCount(storedDayCount);
         const renderableCourses = scheduleData.courses.filter((course) => {
@@ -810,6 +837,7 @@ export function App() {
 
   return (
     <AppShell
+      workplaceTitle={workplaceTitle}
       route={currentRoute}
       lastAcademicRoute={lastAcademicRoute}
       onNavigate={navigateToRoute}
@@ -1185,6 +1213,8 @@ export function App() {
           widgetSettings={widgetSettings}
           themePreference={themePreference}
           onThemePreferenceChange={handleThemePreferenceChange}
+          workplaceTitle={workplaceTitle}
+          onWorkplaceTitleChange={handleWorkplaceTitleChange}
           onSave={async (nextPeriods, termConfig, reminderSettings) => {
             const trace = beginRuntimeTrace("period-save", courseMutationGeneration.current);
             const saved = await saveStoredAppSettings(nextPeriods, termConfig, reminderSettings);
@@ -1192,6 +1222,13 @@ export function App() {
             setPeriods([...saved.periods]);
             setIsUsingTestSchedule(false);
             setReminderConfiguration(saved.configuration);
+            setSelectedWeek(
+              initialTeachingWeek(
+                getShanghaiDate(Date.now()),
+                saved.configuration.termConfig,
+                previewFixtureWeek,
+              ),
+            );
             notifyWidgetDataChanged();
             trace("widget-notified");
             setPeriodMessage("");

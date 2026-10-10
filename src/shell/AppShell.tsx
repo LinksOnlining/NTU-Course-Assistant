@@ -13,6 +13,7 @@ import "./shell.css";
 
 interface AppShellProps {
   readonly route: AppRoute;
+  readonly workplaceTitle: string;
   readonly lastAcademicRoute: AcademicRoute | null;
   readonly onNavigate: (route: AppRoute) => void;
   readonly onOpenSettings: () => void;
@@ -40,6 +41,7 @@ function isNavigationAvailable(entry: (typeof workplaceModuleRegistry.navigation
 
 function ShellHeader({
   route,
+  workplaceTitle,
   lastAcademicRoute,
   onNavigate,
   onOpenSettings,
@@ -67,7 +69,7 @@ function ShellHeader({
   return (
     <header className="shell-header">
       <div className="shell-brand">
-        <h1>Links Workplace</h1>
+        <h1 title={workplaceTitle}>{workplaceTitle}</h1>
         <p className="shell-daily-quote" title={`${quote.author} · ${quote.source}`}>
           <span aria-hidden="true">“</span>
           {quote.text}
@@ -119,6 +121,7 @@ function ShellHeader({
 
 export function AppShell({
   route,
+  workplaceTitle,
   lastAcademicRoute,
   onNavigate,
   onOpenSettings,
@@ -133,6 +136,7 @@ export function AppShell({
     <div className="app-shell">
       <ShellHeader
         route={route}
+        workplaceTitle={workplaceTitle}
         lastAcademicRoute={lastAcademicRoute}
         onNavigate={onNavigate}
         onOpenSettings={onOpenSettings}

@@ -17,6 +17,7 @@ import type { SaveOperationState } from "../types/save-operation.ts";
 import type { PeriodTime } from "../types/time.ts";
 import type { WidgetDisplayMode, WidgetSettings } from "../types/widget-settings.ts";
 import type { ThemePreference } from "../theme/types.ts";
+import { DEFAULT_WORKPLACE_TITLE, MAX_WORKPLACE_TITLE_LENGTH } from "../shell/brand-title.ts";
 import { ChineseDateInput } from "./ChineseDateInput.tsx";
 import { workplaceModuleRegistry } from "../modules/registry.ts";
 import type { WorkspaceWeatherController } from "../workspace/weather/use-workspace-weather.ts";
@@ -33,6 +34,8 @@ interface PeriodSettingsProps {
   readonly widgetSettings: WidgetSettings;
   readonly themePreference: ThemePreference;
   readonly onThemePreferenceChange: (preference: ThemePreference) => void;
+  readonly workplaceTitle: string;
+  readonly onWorkplaceTitleChange: (value: string) => void;
   readonly courseCount: number;
   readonly onSave: (
     periods: readonly PeriodTime[],
@@ -82,6 +85,8 @@ export function PeriodSettings({
   widgetSettings,
   themePreference,
   onThemePreferenceChange,
+  workplaceTitle,
+  onWorkplaceTitleChange,
   courseCount,
   onSave,
   onSaveWidgetSettings,
@@ -775,7 +780,27 @@ export function PeriodSettings({
                         <option value="system">跟随系统</option>
                       </select>
                     </label>
+                    <label>
+                      <span>左上角显示名称（最多 {MAX_WORKPLACE_TITLE_LENGTH} 字符）</span>
+                      <input
+                        type="text"
+                        aria-label="左上角显示名称"
+                        maxLength={MAX_WORKPLACE_TITLE_LENGTH}
+                        value={workplaceTitle}
+                        onChange={(event) => onWorkplaceTitleChange(event.target.value)}
+                      />
+                    </label>
                   </div>
+                  <p className="settings-domain-note">
+                    修改后立即生效并保存在本机；名称过长时会省略显示，鼠标悬停可看全文。
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => onWorkplaceTitleChange(DEFAULT_WORKPLACE_TITLE)}
+                  >
+                    恢复默认名称
+                  </button>
                 </section>
               </>
             )}
