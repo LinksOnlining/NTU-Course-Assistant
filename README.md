@@ -2,7 +2,7 @@
 
 面向 Windows 的本地个人工作台，包含课程表、Planner、Diary、Inbox、天气和可选 AI 能力。Links Workplace 2.0 沿用本仓库与应用技术栈，但采用独立身份和全新数据开始。
 
-> **版本说明：**当前版本为 Links Workplace 2.0.1（桌面小组件窗口恢复 Hotfix）。Links Workplace 2.0 是 **clean-start release**；NTU Course Assistant 1.x 属于旧版产品线，不支持自动升级到 Links Workplace 2.x 或迁移数据。
+> **版本说明：**当前版本为 Links Workplace 2.0.2（教学周、标题、每日寄语与窗口生命周期修复）。Links Workplace 2.0 是 **clean-start release**；NTU Course Assistant 1.x 属于旧版产品线，不支持自动升级到 Links Workplace 2.x 或迁移数据。
 
 ## 主要功能
 

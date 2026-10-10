@@ -16,7 +16,7 @@ test("main Tauri window is frameless and starts maximized, not fullscreen", () =
   assert.notEqual(main.fullscreen, true);
 });
 
-test("main close preserves its WebView when the widget is enabled and exists", () => {
+test("main close preserves its WebView while the widget is enabled, including during startup", () => {
   const source = readFileSync(path.join(root, "src-tauri/src/lib.rs"), "utf8");
   const start = source.indexOf(".on_window_event(|window, event|");
   const end = source.indexOf(".run(tauri::generate_context!())", start);
@@ -27,13 +27,18 @@ test("main close preserves its WebView when the widget is enabled and exists", (
   assert.match(handler, /window\.label\(\) == "widget"/u);
   assert.match(handler, /window\.label\(\) == "main"/u);
   assert.match(handler, /state::<WidgetLifecycleState>\(\)\.is_enabled\(\)/u);
-  assert.match(handler, /get_webview_window\("widget"\)\.is_some\(\)/u);
+  assert.doesNotMatch(handler, /get_webview_window\("widget"\)\.is_some\(\)/u);
   assert.match(
     handler,
-    /if should_preserve_main_window\(widget_enabled, widget_exists\) \{[\s\S]*?api\.prevent_close\(\)[\s\S]*?window\.hide\(\)/u,
+    /if should_preserve_main_window\(widget_enabled\) \{[\s\S]*?api\.prevent_close\(\)[\s\S]*?record_main_close\(\)[\s\S]*?window\.hide\(\)/u,
   );
   assert.match(handler, /else \{[\s\S]*?app\.exit\(0\)/u);
-  assert.match(source, /widget_enabled && widget_exists/u);
+  assert.match(
+    source,
+    /fn should_preserve_main_window\(widget_enabled: bool\) -> bool \{\s*widget_enabled\s*\}/u,
+  );
+  assert.match(source, /begin_settings_patch\(patch\.enabled\)/u);
+  assert.match(source, /main_close_requested\(\)/u);
 });
 
 test("disabling the last visible widget ends the otherwise hidden process", () => {
