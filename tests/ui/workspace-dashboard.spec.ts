@@ -627,13 +627,23 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
     await expect(page.getByTestId("timeline-item")).toBeVisible();
     const measurements = await page.evaluate(() => {
       const timelineElement = document.querySelector<HTMLElement>(".workspace-timeline-viewport");
+      const overview = document.querySelector<HTMLElement>(".workspace-today-overview");
       const nowLine = document.querySelector<HTMLElement>(".workspace-current-time-line");
       const dashboard = document.querySelector<HTMLElement>(".workspace-dashboard");
       const rail = document.querySelector<HTMLElement>(".workspace-dashboard-rail");
       const context = document.querySelector<HTMLElement>(".workspace-time-context");
       const canvas = document.querySelector<HTMLElement>(".workspace-timeline-canvas");
       const item = document.querySelector<HTMLElement>(".workspace-timeline-item");
-      if (!timelineElement || !nowLine || !dashboard || !rail || !context || !canvas || !item)
+      if (
+        !timelineElement ||
+        !overview ||
+        !nowLine ||
+        !dashboard ||
+        !rail ||
+        !context ||
+        !canvas ||
+        !item
+      )
         return null;
       const timelineBox = timelineElement.getBoundingClientRect();
       const nowBox = nowLine.getBoundingClientRect();
@@ -646,6 +656,19 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
         threeColumnOrder:
           timelineElement.getBoundingClientRect().right < context.getBoundingClientRect().left &&
           context.getBoundingClientRect().right < rail.getBoundingClientRect().left,
+        overviewToDashboardGap:
+          dashboard.getBoundingClientRect().top - overview.getBoundingClientRect().bottom,
+        alignedColumnTops:
+          Math.max(
+            item.closest(".workspace-timeline-card")!.getBoundingClientRect().top,
+            context.getBoundingClientRect().top,
+            rail.getBoundingClientRect().top,
+          ) -
+          Math.min(
+            item.closest(".workspace-timeline-card")!.getBoundingClientRect().top,
+            context.getBoundingClientRect().top,
+            rail.getBoundingClientRect().top,
+          ),
         timelineHasInternalScroll: timelineElement.scrollHeight > timelineElement.clientHeight,
         nowLineViewportRatio: (nowBox.top - timelineBox.top) / timelineBox.height,
         dashboardHeight: dashboard.clientHeight,
@@ -659,6 +682,8 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
     expect(measurements?.mainVerticalScroll).toBe(false);
     expect(measurements?.rightRailVerticalScroll).toBe(false);
     expect(measurements?.threeColumnOrder).toBe(true);
+    expect(measurements?.overviewToDashboardGap).toBeGreaterThanOrEqual(9);
+    expect(measurements?.alignedColumnTops).toBeLessThanOrEqual(1);
     expect(measurements?.timelineHasInternalScroll).toBe(true);
     expect(measurements?.canvasHeight).toBe(1440);
     expect(measurements?.itemTop).toBeCloseTo(690, 0);

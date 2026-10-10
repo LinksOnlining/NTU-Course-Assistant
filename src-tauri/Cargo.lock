@@ -2163,7 +2163,7 @@ dependencies = [
 
 [[package]]
 name = "links-workplace"
-version = "2.0.3"
+version = "2.0.4"
 dependencies = [
  "keyring",
  "reqwest",

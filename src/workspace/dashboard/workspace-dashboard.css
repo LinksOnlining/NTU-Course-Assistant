@@ -10,7 +10,7 @@
 .workspace-dashboard-page {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 22px;
   overflow: hidden;
 }
 
@@ -163,6 +163,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(212px, 15vw, 248px) minmax(255px, 0.53fr);
   gap: var(--space-4);
+  align-items: stretch;
   overflow: hidden;
 }
 
@@ -715,7 +716,7 @@
 
 @media (max-height: 850px) {
   .workspace-dashboard-page {
-    gap: 5px;
+    gap: 16px;
   }
   .workspace-today-overview {
     min-height: 42px;
@@ -739,7 +740,7 @@
 
 @media (max-height: 650px) {
   .workspace-dashboard-page {
-    gap: 2px;
+    gap: 10px;
   }
   .workspace-today-overview {
     min-height: 30px;

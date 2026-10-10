@@ -2,7 +2,7 @@
 
 面向 Windows 的本地个人工作台，包含课程表、Planner、Obsidian 快捷入口、Inbox、天气和可选 AI 能力。Links Workplace 2.0 沿用本仓库与应用技术栈，但采用独立身份和全新数据开始。
 
-> **版本说明：**当前版本为 Links Workplace 2.0.3（窄窗口布局与回归稳定性修复，包含 2.0.2 的教学周、标题、每日寄语及小组件生命周期改进）。Links Workplace 2.0 是 **clean-start release**；NTU Course Assistant 1.x 属于旧版产品线，不支持自动升级到 Links Workplace 2.x 或迁移数据。
+> **版本说明：**当前版本为 Links Workplace 2.0.4（窄窗口布局与回归稳定性修复，包含 2.0.2 的教学周、标题、每日寄语及小组件生命周期改进）。Links Workplace 2.0 是 **clean-start release**；NTU Course Assistant 1.x 属于旧版产品线，不支持自动升级到 Links Workplace 2.x 或迁移数据。
 
 ## 主要功能
 
