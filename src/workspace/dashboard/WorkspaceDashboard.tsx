@@ -20,6 +20,7 @@ import { todayAssistantService } from "../ai/today-assistant-service.ts";
 import { TodayAssistantPanel } from "../ai/TodayAssistantPanel.tsx";
 import { DailyBriefPanel } from "../ai/DailyBriefPanel.tsx";
 import { toggleDashboardTaskState } from "../tasks/dashboard-task-actions.ts";
+import { openObsidian } from "../../services/obsidian.ts";
 import type { WorkspaceTaskListItem } from "../../application/workspace/types.ts";
 import "./workspace-dashboard.css";
 
@@ -355,17 +356,31 @@ function TaskCard({
   );
 }
 
-function ObsidianCard({ onNavigate }: { readonly onNavigate: (route: AppRoute) => void }) {
+function ObsidianCard({
+  onOpen,
+  busy,
+  error,
+}: {
+  readonly onOpen: () => void;
+  readonly busy: boolean;
+  readonly error: string;
+}) {
   return (
     <button
       type="button"
       className="workspace-dashboard-card workspace-module-card"
-      onClick={() => onNavigate({ area: "workspace", page: "diary" })}
+      onClick={onOpen}
+      disabled={busy}
       aria-label="Obsidian，打开现有知识库"
     >
       <span className="workspace-module-title">Obsidian</span>
-      <span className="workspace-module-status">我的知识库</span>
+      <span className="workspace-module-status">{busy ? "正在打开…" : "我的知识库"}</span>
       <span className="workspace-module-description">在 Obsidian 中记录与同步</span>
+      {error && (
+        <span className="workspace-obsidian-launch-error" role="alert">
+          {error}
+        </span>
+      )}
     </button>
   );
 }
@@ -407,6 +422,8 @@ export function WorkspaceDashboard({
   const [retry, setRetry] = useState(0);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [taskError, setTaskError] = useState("");
+  const [obsidianBusy, setObsidianBusy] = useState(false);
+  const [obsidianError, setObsidianError] = useState("");
   const [showTodayDetails, setShowTodayDetails] = useState(false);
   const todayOverviewRef = useRef<HTMLElement>(null);
   const todayTriggerRef = useRef<HTMLButtonElement>(null);
@@ -431,6 +448,19 @@ export function WorkspaceDashboard({
       setTaskError(cause instanceof Error ? cause.message : "任务完成状态保存失败，请重试。");
     } finally {
       setBusyTaskId(null);
+    }
+  }
+
+  async function openVaultFromDashboard() {
+    if (obsidianBusy) return;
+    setObsidianBusy(true);
+    setObsidianError("");
+    try {
+      await openObsidian("vault");
+    } catch (cause) {
+      setObsidianError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setObsidianBusy(false);
     }
   }
 
@@ -586,7 +616,11 @@ export function WorkspaceDashboard({
             taskError={taskError}
           />
           <div className="workspace-module-pair">
-            <ObsidianCard onNavigate={onNavigate} />
+            <ObsidianCard
+              onOpen={() => void openVaultFromDashboard()}
+              busy={obsidianBusy}
+              error={obsidianError}
+            />
             <InboxCard pendingCount={model.context.pendingInboxCount} onNavigate={onNavigate} />
           </div>
           <TodayAssistantPanel

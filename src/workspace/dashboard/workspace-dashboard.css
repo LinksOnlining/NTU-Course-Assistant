@@ -522,9 +522,10 @@
   background: var(--surface-flat);
 }
 .workspace-task-card {
-  /* Keep the original unframed task area while reserving its scrollable height. */
+  /* No border or dashed frame around the task area. */
   border: 0;
   border-radius: 0;
+  outline: none;
   background: transparent;
 }
 
@@ -727,6 +728,13 @@
   transform: translateY(-1px);
   border-color: var(--accent-border);
   background: var(--surface-hover);
+}
+
+.workspace-obsidian-launch-error {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--danger);
+  font-size: var(--font-size-caption);
 }
 
 .workspace-module-title {

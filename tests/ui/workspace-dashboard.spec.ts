@@ -717,6 +717,14 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
     expect(measurements?.rightRailVerticalScroll).toBe(false);
     expect(measurements?.threeColumnOrder).toBe(true);
     expect(measurements?.overviewToDashboardGap).toBeGreaterThanOrEqual(9);
+    const headerSpacing = await page.evaluate(() => {
+      const header = document.querySelector<HTMLElement>(".shell-header");
+      const overview = document.querySelector<HTMLElement>(".workspace-today-overview");
+      return header && overview
+        ? overview.getBoundingClientRect().top - header.getBoundingClientRect().bottom
+        : 0;
+    });
+    expect(headerSpacing).toBeGreaterThanOrEqual(viewport.height <= 650 ? 8 : 12);
     expect(measurements?.alignedColumnTops).toBeLessThanOrEqual(1);
     expect(measurements?.timelineHasInternalScroll).toBe(true);
     expect(measurements?.canvasHeight).toBe(1440);
@@ -766,7 +774,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
   }
 });
 
-test("Obsidian replaces the Diary card, launches only registered actions, and keeps legacy data untouched", async ({
+test("Obsidian dashboard card directly launches the vault without navigation or modifying Diary", async ({
   page,
 }) => {
   await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {}, { hasEntry: true });
@@ -777,13 +785,9 @@ test("Obsidian replaces the Diary card, launches only registered actions, and ke
   await expect(card).toBeVisible();
   await expect(page.getByText("private diary fixture body", { exact: true })).toHaveCount(0);
   await card.click();
-  await expect(page.getByRole("heading", { name: "Obsidian" })).toBeVisible();
-  await expect(page.getByText("First", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Obsidian", exact: true })).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: /日记正文/u })).toHaveCount(0);
-
-  await page.getByRole("button", { name: "打开 Obsidian" }).click();
-  await page.getByRole("button", { name: "打开每日笔记" }).click();
-  await page.getByRole("button", { name: "查找 00 收集箱" }).click();
   const actions = await page.evaluate(() =>
     (
       window as unknown as {
@@ -791,7 +795,7 @@ test("Obsidian replaces the Diary card, launches only registered actions, and ke
       }
     ).__workspaceDashboardTest.getObsidianActions(),
   );
-  expect(actions).toEqual(["vault", "daily", "inbox"]);
+  expect(actions).toEqual(["vault"]);
   const preserved = await page.evaluate(() =>
     (
       window as unknown as {
@@ -800,7 +804,6 @@ test("Obsidian replaces the Diary card, launches only registered actions, and ke
     ).__workspaceDashboardTest.getDiaryBody("2026-09-23"),
   );
   expect(preserved).toBe("private diary fixture body");
-  await page.locator(".workspace-obsidian-back").click();
   await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
 });
 
@@ -811,7 +814,6 @@ test("Obsidian launch failure shows error and never modifies old Diary contents"
   await page.evaluate(() =>
     Object.defineProperty(window, "isTauri", { value: true, configurable: true }),
   );
-  await page.getByRole("button", { name: "Obsidian，打开现有知识库" }).click();
   await page.evaluate(() =>
     (
       window as unknown as {
@@ -819,7 +821,8 @@ test("Obsidian launch failure shows error and never modifies old Diary contents"
       }
     ).__workspaceDashboardTest.setObsidianLaunchFailure(true),
   );
-  await page.getByRole("button", { name: "打开 Obsidian" }).click();
+  await page.getByRole("button", { name: "Obsidian，打开现有知识库" }).click();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("Obsidian 启动失败");
   const preserved = await page.evaluate(() =>
     (
@@ -838,8 +841,8 @@ test("Obsidian shortcut fits compact 720 by 520 windows", async ({ page }) => {
     Object.defineProperty(window, "isTauri", { value: true, configurable: true }),
   );
   await page.getByRole("button", { name: "Obsidian，打开现有知识库" }).click();
-  await expect(page.getByRole("heading", { name: "Obsidian" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "打开每日笔记" })).toBeVisible();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Obsidian" })).toHaveCount(0);
   const fit = await page.evaluate(
     () => document.documentElement.scrollWidth <= window.innerWidth + 1,
   );
@@ -1906,8 +1909,8 @@ test("failed Weather requests never block offline core routes", async ({ page })
     .getByRole("button", { name: "工作台" })
     .click();
   await page.getByRole("button", { name: /Obsidian，打开现有知识库/u }).click();
-  await expect(page.getByRole("heading", { name: "Obsidian", exact: true })).toBeVisible();
-  await page.locator(".workspace-obsidian-back").click();
+  await expect(page.getByTestId("workspace-dashboard")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Obsidian", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /收件箱，暂无待整理/u }).click();
   await expect(page.getByTestId("workspace-inbox")).toBeVisible();
   await page.locator(".workspace-inbox-breadcrumb").click();

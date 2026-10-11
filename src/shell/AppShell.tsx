@@ -143,7 +143,13 @@ export function AppShell({
 }: AppShellProps) {
   const routeView = getShellRouteView(route);
   return (
-    <div className="app-shell">
+    <div
+      className={
+        route.area === "workspace" && route.page === "home"
+          ? "app-shell app-shell--workspace-home"
+          : "app-shell"
+      }
+    >
       <ShellHeader
         route={route}
         workplaceTitle={workplaceTitle}

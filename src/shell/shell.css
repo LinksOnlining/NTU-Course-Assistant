@@ -34,6 +34,10 @@
   text-overflow: ellipsis;
 }
 
+.app-shell--workspace-home > .shell-header {
+  margin-bottom: 24px;
+}
+
 .shell-daily-quote {
   max-width: min(48vw, 620px);
   overflow: hidden;
@@ -223,23 +227,24 @@
 }
 
 @media (max-height: 850px) {
-  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) {
+  .app-shell--workspace-home > .shell-header {
     min-height: 54px;
-    margin-bottom: 0;
+    margin-bottom: 16px;
   }
-  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) .shell-brand h1 {
+  .app-shell--workspace-home > .shell-header .shell-brand h1 {
     font-size: 26px;
   }
-  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) .shell-daily-quote {
+  .app-shell--workspace-home > .shell-header .shell-daily-quote {
     margin-top: 0;
   }
 }
 
 @media (max-height: 650px) {
-  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) {
+  .app-shell--workspace-home > .shell-header {
     min-height: 44px;
+    margin-bottom: 10px;
   }
-  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) .shell-daily-quote {
+  .app-shell--workspace-home > .shell-header .shell-daily-quote {
     display: none;
   }
 }
@@ -300,7 +305,8 @@
 }
 
 @media (max-height: 650px) {
-  .shell-header:has(+ .app-shell-content .workspace-dashboard-page) {
+  .app-shell--workspace-home > .shell-header {
     min-height: 44px;
+    margin-bottom: 10px;
   }
 }
