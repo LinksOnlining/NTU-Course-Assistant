@@ -21,6 +21,7 @@ import { TodayAssistantPanel } from "../ai/TodayAssistantPanel.tsx";
 import { DailyBriefPanel } from "../ai/DailyBriefPanel.tsx";
 import { toggleDashboardTaskState } from "../tasks/dashboard-task-actions.ts";
 import { openObsidian } from "../../services/obsidian.ts";
+import { subscribeCompletedTaskCleanup } from "../../services/task-cleanup-notifications.ts";
 import type { WorkspaceTaskListItem } from "../../application/workspace/types.ts";
 import "./workspace-dashboard.css";
 
@@ -428,6 +429,22 @@ export function WorkspaceDashboard({
   const todayOverviewRef = useRef<HTMLElement>(null);
   const todayTriggerRef = useRef<HTMLButtonElement>(null);
   const todayPopoverRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    void subscribeCompletedTaskCleanup(() => {
+      if (active) setRetry((value) => value + 1);
+    }).then((cleanup) => {
+      if (active) unlisten = cleanup;
+      else cleanup();
+    });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, []);
+
   const { sources, error } = useDashboardSources(ready, date, termConfig, retry);
   const model = useMemo(
     () =>

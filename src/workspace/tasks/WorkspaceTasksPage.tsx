@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { subscribeCompletedTaskCleanup } from "../../services/task-cleanup-notifications.ts";
 import { loadAcademicHubData } from "../../application/academic/index.ts";
 import { ChineseDateInput } from "../../components/ChineseDateInput.tsx";
 import {
@@ -217,6 +218,21 @@ export function WorkspaceTasksPage({
   const [deleteTarget, setDeleteTarget] = useState<PersonalTask | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let active = true;
+    let unlisten: (() => void) | undefined;
+    void subscribeCompletedTaskCleanup(() => {
+      if (active) setRefresh((value) => value + 1);
+    }).then((cleanup) => {
+      if (active) unlisten = cleanup;
+      else cleanup();
+    });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, []);
   const today =
     String(now.getFullYear()) +
     "-" +

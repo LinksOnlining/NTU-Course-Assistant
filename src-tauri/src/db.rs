@@ -1410,6 +1410,47 @@ impl CourseDatabase {
         Ok(())
     }
 
+    /// Remove completed tasks once their completion time is at least 24 hours old.
+    /// NULL/invalid timestamps and unfinished tasks are never eligible.
+    /// Any personal task with a future scheduled time block is retained so
+    /// that automatic cleanup cannot silently erase a future calendar booking.
+    pub fn purge_expired_completed_tasks(&self) -> Result<(usize, usize), StorageError> {
+        self.purge_completed_tasks_at(None)
+    }
+
+    fn purge_completed_tasks_at(
+        &self,
+        reference_now: Option<&str>,
+    ) -> Result<(usize, usize), StorageError> {
+        let transaction =
+            rusqlite::Transaction::new_unchecked(&self.connection, TransactionBehavior::Immediate)?;
+        let academic = transaction.execute(
+            "DELETE FROM academic_tasks
+             WHERE status='COMPLETED'
+               AND completed_at IS NOT NULL
+               AND julianday(completed_at) IS NOT NULL
+               AND julianday(completed_at) <= julianday(COALESCE(?1, 'now'), '-24 hours')",
+            params![reference_now],
+        )?;
+        let personal = transaction.execute(
+            "DELETE FROM personal_tasks
+             WHERE status='COMPLETED'
+               AND completed_at IS NOT NULL
+               AND julianday(completed_at) IS NOT NULL
+               AND julianday(completed_at) <= julianday(COALESCE(?1, 'now'), '-24 hours')
+               AND NOT EXISTS (
+                 SELECT 1 FROM time_blocks AS block
+                 WHERE block.personal_task_id=personal_tasks.id
+                   AND (block.date > date(COALESCE(?1, 'now'), 'localtime')
+                        OR (block.date = date(COALESCE(?1, 'now'), 'localtime')
+                            AND block.end_time > time(COALESCE(?1, 'now'), 'localtime')))
+               )",
+            params![reference_now],
+        )?;
+        transaction.commit()?;
+        Ok((academic, personal))
+    }
+
     pub fn load_personal_tasks(&self) -> Result<Vec<PersonalTask>, StorageError> {
         let mut statement = self.connection.prepare(
             "SELECT id, title, description, status, priority, deadline_date, deadline_time,
@@ -2830,6 +2871,105 @@ mod tests {
         ));
         fs::create_dir_all(&root).expect("create isolated test directory");
         root
+    }
+
+    #[test]
+    fn completed_task_cleanup_obeys_24_hour_boundary_and_reopen_reset() {
+        let db = database();
+        let now = "2026-10-11T12:00:00.000Z";
+        for (id, completed) in [
+            ("expired", "2026-10-10T11:59:59.000Z"),
+            ("boundary", "2026-10-10T12:00:00.000Z"),
+            ("recent", "2026-10-10T12:00:00.001Z"),
+            ("future", "2026-10-12T12:00:00.000Z"),
+            ("reopened", "2026-10-09T12:00:00.000Z"),
+            ("invalid-date", "not-a-date"),
+        ] {
+            db.create_personal_task(&personal_task(id)).unwrap();
+            db.set_personal_task_completed(id, true, completed).unwrap();
+        }
+        db.create_personal_task(&personal_task("open")).unwrap();
+        db.set_personal_task_completed("reopened", false, now)
+            .unwrap();
+        let (academic, personal) = db.purge_completed_tasks_at(Some(now)).unwrap();
+        assert_eq!((academic, personal), (0, 2));
+        let remaining = db.load_personal_tasks().unwrap();
+        let ids: Vec<&str> = remaining.iter().map(|task| task.id.as_str()).collect();
+        for id in ["recent", "future", "reopened", "open", "invalid-date"] {
+            assert!(ids.contains(&id), "{id} should remain");
+        }
+        for id in ["expired", "boundary"] {
+            assert!(!ids.contains(&id), "{id} should be purged");
+        }
+        // Idempotent and a new completion starts a fresh 24-hour interval.
+        assert_eq!(db.purge_completed_tasks_at(Some(now)).unwrap(), (0, 0));
+        db.set_personal_task_completed("reopened", true, "2026-10-11T11:59:00.000Z")
+            .unwrap();
+        assert_eq!(db.purge_completed_tasks_at(Some(now)).unwrap(), (0, 0));
+        assert_eq!(
+            db.purge_completed_tasks_at(Some("2026-10-12T11:59:00.000Z"))
+                .unwrap(),
+            (0, 2)
+        );
+    }
+
+    #[test]
+    fn cleanup_covers_academic_tasks_across_semesters_and_preserves_other_records() {
+        let db = database();
+        db.connection.execute_batch(
+            "INSERT INTO semesters
+             (id, name, first_week_monday, total_weeks, timezone, status, created_at, updated_at)
+             VALUES ('cleanup-semester', 'Test', '2026-09-07', 16, 'Asia/Shanghai',
+                     'ARCHIVED', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z');
+             INSERT INTO academic_tasks
+             (id, semester_id, type, title, due_at, priority, status, completed_at, created_at, updated_at)
+             VALUES
+             ('academic-old', 'cleanup-semester', 'CUSTOM', 'Old', '2026-10-12', 0, 'COMPLETED',
+              '2026-10-10T10:00:00Z', '2026-09-01T00:00:00Z', '2026-10-10T10:00:00Z'),
+             ('academic-new', 'cleanup-semester', 'CUSTOM', 'New', '2026-10-12', 0, 'COMPLETED',
+              '2026-10-11T11:00:00Z', '2026-09-01T00:00:00Z', '2026-10-11T11:00:00Z'),
+             ('academic-todo', 'cleanup-semester', 'CUSTOM', 'Todo', '2026-10-12', 0, 'TODO',
+              NULL, '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z');"
+        ).unwrap();
+        let (academic, personal) = db
+            .purge_completed_tasks_at(Some("2026-10-11T12:00:00Z"))
+            .unwrap();
+        assert_eq!((academic, personal), (1, 0));
+        let tasks = db.load_academic_tasks("cleanup-semester").unwrap();
+        assert_eq!(tasks.len(), 2);
+        assert!(tasks.iter().all(|item| item.id != "academic-old"));
+        let retained_semesters: i64 = db
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM semesters WHERE id='cleanup-semester'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(retained_semesters, 1);
+    }
+
+    #[test]
+    fn cleanup_preserves_future_time_blocks_even_if_parent_task_is_expired() {
+        let db = database();
+        db.create_personal_task(&personal_task("scheduled"))
+            .unwrap();
+        db.set_personal_task_completed("scheduled", true, "2026-10-09T00:00:00Z")
+            .unwrap();
+        db.create_time_block(&time_block("future-block", "scheduled", "2026-11-01"))
+            .unwrap();
+        assert_eq!(
+            db.purge_completed_tasks_at(Some("2026-10-11T12:00:00Z"))
+                .unwrap(),
+            (0, 0)
+        );
+        assert_eq!(db.load_time_blocks_for_task("scheduled").unwrap().len(), 1);
+        assert_eq!(
+            db.purge_completed_tasks_at(Some("2026-11-02T12:00:00Z"))
+                .unwrap(),
+            (0, 1)
+        );
+        assert!(db.load_personal_tasks().unwrap().is_empty());
     }
 
     #[test]

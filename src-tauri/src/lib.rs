@@ -1288,6 +1288,28 @@ pub fn run() {
                     )
                 }
             };
+            // Cleanup runs in the native process, independent of the visible route.
+            // A startup pass handles tasks that expired while the app was closed.
+            if course_state.database_path.is_some() {
+                let cleanup_state = course_state.clone();
+                let cleanup_app = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        if let Ok((academic, personal)) = cleanup_state
+                            .run_in_background(
+                                "清理已完成任务",
+                                CourseDatabase::purge_expired_completed_tasks,
+                            )
+                            .await
+                        {
+                            if academic + personal > 0 {
+                                let _ = cleanup_app.emit("completed-tasks-pruned", ());
+                            }
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                    }
+                });
+            }
             app.manage(course_state.clone());
             app.manage(WidgetLifecycleState::default());
             app.manage(SchedulerState(scheduler::ReminderScheduler::new(

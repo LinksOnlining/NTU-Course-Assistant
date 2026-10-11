@@ -1202,7 +1202,8 @@ test("empty Academic data still renders the complete axis and truthful empty/una
   await expect(timeline.getByText("00:00")).toBeVisible();
   await expect(timeline.getByText("24:00")).toBeVisible();
   await expect(page.getByText("暂无未完成任务")).toBeVisible();
-  await expect(page.getByTestId("today-assistant-panel")).toContainText("有需要时再问我");
+  await expect(page.getByTestId("today-assistant-panel")).toContainText("想让我帮你看看什么？");
+  await expect(page.getByTestId("today-assistant-dialog")).toHaveCount(0);
   await expect(page.getByText(/^0$/u)).toHaveCount(0);
   await page.getByRole("button", { name: /今天暂无安排/u }).click();
   const details = page.getByRole("dialog", { name: "今日详情" });
