@@ -522,8 +522,10 @@
   background: var(--surface-flat);
 }
 .workspace-task-card {
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-flat);
+  /* Keep the original unframed task area while reserving its scrollable height. */
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .workspace-task-card {
@@ -685,11 +687,23 @@
 }
 
 .workspace-module-pair {
+  position: relative;
   display: grid;
   min-width: 0;
   min-height: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
+}
+
+/* Divider only between the task area and the Obsidian / Inbox row. */
+.workspace-module-pair::before {
+  position: absolute;
+  top: calc(var(--space-3) * -0.5);
+  right: 0;
+  left: 0;
+  border-top: 1px solid var(--border-subtle);
+  content: "";
+  pointer-events: none;
 }
 
 .workspace-module-card {
@@ -813,6 +827,10 @@
   .workspace-module-pair {
     gap: var(--space-2);
   }
+
+  .workspace-module-pair::before {
+    top: calc(var(--space-2) * -0.5);
+  }
 }
 
 @media (max-width: 760px) {
@@ -824,6 +842,10 @@
   .workspace-dashboard-rail {
     grid-template-rows: minmax(118px, 38%) max-content minmax(0, 1fr);
     gap: var(--space-1);
+  }
+
+  .workspace-module-pair::before {
+    top: calc(var(--space-1) * -0.5);
   }
 
   .workspace-timeline-card,

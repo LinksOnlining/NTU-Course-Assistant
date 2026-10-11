@@ -857,11 +857,29 @@ test("Task panel reserves height when empty and keeps the assistant below the up
   await expect(taskPanel.getByText("暂无未完成任务")).toBeVisible();
   const measurements = await page.evaluate(() => {
     const rail = document.querySelector(".workspace-dashboard-rail")!.getBoundingClientRect();
-    const task = document.querySelector(".workspace-task-card")!.getBoundingClientRect();
+    const taskElement = document.querySelector<HTMLElement>(".workspace-task-card")!;
+    const task = taskElement.getBoundingClientRect();
+    const pairElement = document.querySelector<HTMLElement>(".workspace-module-pair")!;
+    const pair = pairElement.getBoundingClientRect();
+    const divider = getComputedStyle(pairElement, "::before");
     const assistant = document.querySelector(".today-assistant")!.getBoundingClientRect();
-    return { taskHeight: task.height, aiStartRatio: (assistant.top - rail.top) / rail.height };
+    return {
+      taskHeight: task.height,
+      taskBorderWidth: getComputedStyle(taskElement).borderTopWidth,
+      taskBackground: getComputedStyle(taskElement).backgroundColor,
+      dividerWidth: divider.borderTopWidth,
+      dividerTop: pair.top + parseFloat(divider.top),
+      taskBottom: task.bottom,
+      pairTop: pair.top,
+      aiStartRatio: (assistant.top - rail.top) / rail.height,
+    };
   });
   expect(measurements.taskHeight).toBeGreaterThanOrEqual(145);
+  expect(measurements.taskBorderWidth).toBe("0px");
+  expect(measurements.taskBackground).toBe("rgba(0, 0, 0, 0)");
+  expect(measurements.dividerWidth).toBe("1px");
+  expect(measurements.dividerTop).toBeGreaterThan(measurements.taskBottom);
+  expect(measurements.dividerTop).toBeLessThan(measurements.pairTop);
   expect(measurements.aiStartRatio).toBeGreaterThan(0.4);
 });
 
