@@ -511,8 +511,8 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: max-content max-content minmax(0, 1fr);
-  align-content: start;
+  grid-template-rows: minmax(152px, 43%) max-content minmax(0, 1fr);
+  align-content: stretch;
   gap: var(--space-3);
   overflow: hidden;
 }
@@ -522,8 +522,8 @@
   background: var(--surface-flat);
 }
 .workspace-task-card {
-  border: 0;
-  background: transparent;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-flat);
 }
 
 .workspace-task-card {
@@ -556,17 +556,43 @@
   gap: var(--space-1);
   margin: var(--space-2) 0 0;
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 3px;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
   list-style: none;
 }
 
+.workspace-task-list:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .workspace-task-list li {
+  display: flex;
   min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.workspace-task-completed .workspace-task-open strong {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.workspace-task-completed .workspace-task-deadline {
+  color: var(--text-muted);
+}
+
+.workspace-task-completed .workspace-task-open {
+  opacity: 0.78;
 }
 
 .workspace-task-list button {
   display: grid;
-  width: 100%;
+  flex: 1;
   min-width: 0;
   gap: var(--space-1);
   padding: var(--space-1) var(--space-2);
@@ -584,6 +610,38 @@
 
 .workspace-task-list button * {
   user-select: text;
+}
+
+.workspace-task-checkbox {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.workspace-task-checkbox:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.workspace-task-checkbox:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.workspace-task-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace-task-error {
+  margin: var(--space-1) 0 0;
+  color: var(--danger);
+  font-size: var(--font-size-caption);
 }
 
 .workspace-task-list button:hover {
@@ -696,21 +754,10 @@
 }
 
 @media (max-height: 820px) and (min-width: 761px) {
-  .workspace-dashboard-rail {
-    grid-template-rows: max-content max-content minmax(0, 1fr);
-  }
-
   .workspace-timeline-card,
   .workspace-task-card,
   .workspace-module-card {
     padding: var(--space-2);
-  }
-
-  .workspace-task-list li:nth-child(n + 4) {
-    display: none;
-  }
-  .workspace-task-more {
-    display: none;
   }
 }
 
@@ -775,7 +822,7 @@
   }
 
   .workspace-dashboard-rail {
-    grid-template-rows: max-content max-content minmax(0, 1fr);
+    grid-template-rows: minmax(118px, 38%) max-content minmax(0, 1fr);
     gap: var(--space-1);
   }
 
@@ -803,16 +850,15 @@
     font-size: var(--font-size-body);
   }
 
-  .workspace-card-empty,
   .workspace-module-description {
     display: none;
   }
-
-  .workspace-task-list li:nth-child(n + 2) {
-    display: none;
+  .workspace-task-list li {
+    gap: 4px;
   }
-  .workspace-task-more {
-    display: none;
+  .workspace-task-checkbox {
+    width: 14px;
+    height: 14px;
   }
   .workspace-task-deadline {
     overflow: hidden;

@@ -11,6 +11,7 @@ async function seedDashboardRuntime(
     readonly events?: readonly unknown[];
     readonly timeBlocks?: readonly unknown[];
     readonly personalTasks?: readonly unknown[];
+    readonly academicTasks?: readonly unknown[];
   } = {},
   diaryFixture: { readonly hasEntry?: boolean; readonly failSave?: boolean } = {},
   inboxFixture: { readonly pendingCount?: number; readonly items?: readonly unknown[] } = {},
@@ -42,7 +43,7 @@ async function seedDashboardRuntime(
         updatedAt: "",
       };
       const dueAt = (hour: number) => new Date(2026, 8, 23, hour, 0, 0).toISOString();
-      const tasks = [
+      let tasks = [
         { id: "task-overdue", title: "逾期事项", dueAt: dueAt(10), priority: 0, status: "TODO" },
         { id: "task-today", title: "今天事项", dueAt: dueAt(13), priority: 0, status: "TODO" },
         { id: "task-future", title: "未来事项", dueAt: dueAt(15), priority: 0, status: "TODO" },
@@ -64,6 +65,7 @@ async function seedDashboardRuntime(
         updatedAt: "",
         ...task,
       }));
+      if (plannerFixture.academicTasks) tasks = plannerFixture.academicTasks as typeof tasks;
       let personalTasks = [...(plannerFixture.personalTasks ?? [])];
       let dashboardEvents = [...(plannerFixture.events ?? [])] as Record<string, any>[];
       let routines = [...routineFixture] as Record<string, any>[];
@@ -88,6 +90,7 @@ async function seedDashboardRuntime(
       const geocodingCalls: { command: string; args?: Record<string, unknown> }[] = [];
       const obsidianActions: string[] = [];
       let failObsidianLaunch = false;
+      let failTaskCompletion = false;
       Object.defineProperty(window, "__TAURI_INTERNALS__", {
         configurable: true,
         value: {
@@ -304,6 +307,27 @@ async function seedDashboardRuntime(
             if (command === "load_course_overrides" || command === "load_exams") return [];
             if (command === "load_academic_tasks") return tasks;
             if (command === "load_personal_tasks") return [...personalTasks];
+            if (command === "save_academic_task") {
+              if (failTaskCompletion) throw new Error("模拟学业任务写入失败");
+              const task = args?.task as (typeof tasks)[number];
+              tasks = tasks.map((item) => (item.id === task.id ? task : item));
+              return task;
+            }
+            if (command === "set_personal_task_completed") {
+              if (failTaskCompletion) throw new Error("模拟个人任务写入失败");
+              const task = personalTasks.find(
+                (item) => (item as Record<string, unknown>).id === args?.id,
+              ) as Record<string, unknown> | undefined;
+              if (!task) throw new Error("个人任务不存在");
+              const saved = {
+                ...task,
+                status: args?.completed ? "completed" : "open",
+                completedAt: args?.completed ? args?.updatedAt : null,
+                updatedAt: args?.updatedAt,
+              };
+              personalTasks = personalTasks.map((item) => (item === task ? saved : item));
+              return saved;
+            }
             if (command === "create_personal_task" && args?.task) {
               const task = args.task as Record<string, unknown>;
               personalTasks = [...personalTasks, task];
@@ -457,6 +481,16 @@ async function seedDashboardRuntime(
             failObsidianLaunch = value;
           },
           getPersonalTaskCount: () => personalTasks.length,
+          getAcademicTaskStatus: (id: string) =>
+            tasks.find((item) => item.id === id)?.status ?? null,
+          getPersonalTaskStatus: (id: string) =>
+            (
+              personalTasks.find((item) => (item as Record<string, unknown>).id === id) as
+                Record<string, unknown> | undefined
+            )?.status ?? null,
+          setTaskCompletionFailure: (value: boolean) => {
+            failTaskCompletion = value;
+          },
           getDiaryBody: (date: string) => diaryEntries.get(date)?.body ?? null,
           getRoutineScheduledDate: (id: string) =>
             routines.find((item) => item.id === id)?.lastScheduledDate ?? null,
@@ -705,7 +739,7 @@ test("Workspace dashboard fits target windows, keeps only Timeline internally sc
       ).toBeVisible();
       await expect(
         page.locator(".workspace-task-list li").filter({ hasText: "无截止事项" }),
-      ).not.toBeVisible();
+      ).toHaveCount(1);
     }
     if (viewport.width === 720) {
       await expect(page.locator(".workspace-task-list li").first()).toBeVisible();
@@ -810,6 +844,165 @@ test("Obsidian shortcut fits compact 720 by 520 windows", async ({ page }) => {
     () => document.documentElement.scrollWidth <= window.innerWidth + 1,
   );
   expect(fit).toBe(true);
+});
+
+test("Task panel reserves height when empty and keeps the assistant below the upper portion of the rail", async ({
+  page,
+}) => {
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {
+    academicTasks: [],
+    personalTasks: [],
+  });
+  const taskPanel = page.getByRole("region", { name: "任务快捷管理" });
+  await expect(taskPanel.getByText("暂无未完成任务")).toBeVisible();
+  const measurements = await page.evaluate(() => {
+    const rail = document.querySelector(".workspace-dashboard-rail")!.getBoundingClientRect();
+    const task = document.querySelector(".workspace-task-card")!.getBoundingClientRect();
+    const assistant = document.querySelector(".today-assistant")!.getBoundingClientRect();
+    return { taskHeight: task.height, aiStartRatio: (assistant.top - rail.top) / rail.height };
+  });
+  expect(measurements.taskHeight).toBeGreaterThanOrEqual(145);
+  expect(measurements.aiStartRatio).toBeGreaterThan(0.4);
+});
+
+test("Long task lists scroll inside the right rail even at 720 by 520", async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 520 });
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {
+    academicTasks: [],
+    personalTasks: Array.from({ length: 16 }, (_, index) => ({
+      id: `scroll-task-${index}`,
+      title: `待办任务 ${index + 1}`,
+      description: null,
+      status: "open",
+      priority: "none",
+      deadlineDate: null,
+      deadlineTime: null,
+      createdAt: "",
+      updatedAt: "",
+      completedAt: null,
+    })),
+  });
+  const list = page.getByRole("list", { name: "任务列表" });
+  await expect(list.locator("li")).toHaveCount(16);
+  const initial = await list.evaluate((element) => ({
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+  }));
+  expect(initial.scrollHeight).toBeGreaterThan(initial.clientHeight);
+  await list.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(list.getByRole("checkbox", { name: "完成个人任务：待办任务 16" })).toBeVisible();
+  await expect(page.locator(".today-assistant")).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+  ).toBe(true);
+});
+
+test("Dashboard task checkboxes persist both personal and academic completion", async ({
+  page,
+}) => {
+  await seedDashboardRuntime(page, FIXED_NOW, "数学基础", {
+    personalTasks: [
+      {
+        id: "personal-check",
+        title: "个人任务勾选测试",
+        description: null,
+        status: "open",
+        priority: "high",
+        deadlineDate: "2026-09-23",
+        deadlineTime: "13:00",
+        createdAt: "",
+        updatedAt: "",
+        completedAt: null,
+      },
+    ],
+  });
+  const list = page.getByRole("list", { name: "任务列表" });
+  await page.getByRole("checkbox", { name: "完成个人任务：个人任务勾选测试" }).click();
+  await expect(
+    page.getByRole("checkbox", { name: "取消完成个人任务：个人任务勾选测试" }),
+  ).toBeChecked();
+  await expect(list.locator("li").filter({ hasText: "个人任务勾选测试" })).toHaveClass(
+    /workspace-task-completed/,
+  );
+  await page.getByRole("checkbox", { name: "完成学业任务：逾期事项" }).click();
+  await expect(page.getByRole("checkbox", { name: "取消完成学业任务：逾期事项" })).toBeChecked();
+  const groups = await list
+    .locator("li")
+    .evaluateAll((rows) => rows.map((row) => row.classList.contains("workspace-task-completed")));
+  const firstCompleted = groups.indexOf(true);
+  expect(firstCompleted).toBeGreaterThan(0);
+  expect(groups.slice(firstCompleted).every(Boolean)).toBe(true);
+  const statuses = await page.evaluate(() => {
+    const fixture = (
+      window as unknown as {
+        __workspaceDashboardTest: {
+          getAcademicTaskStatus: (id: string) => string | null;
+          getPersonalTaskStatus: (id: string) => string | null;
+        };
+      }
+    ).__workspaceDashboardTest;
+    return {
+      academic: fixture.getAcademicTaskStatus("task-overdue"),
+      personal: fixture.getPersonalTaskStatus("personal-check"),
+    };
+  });
+  expect(statuses.academic).toBe("COMPLETED");
+  expect(statuses.personal).toBe("completed");
+
+  // Restore from the bottom of the same list and verify the original persistence.
+  await page.getByRole("checkbox", { name: "取消完成个人任务：个人任务勾选测试" }).click();
+  await expect(
+    page.getByRole("checkbox", { name: "完成个人任务：个人任务勾选测试" }),
+  ).not.toBeChecked();
+  await expect(list.locator("li").filter({ hasText: "个人任务勾选测试" })).not.toHaveClass(
+    /workspace-task-completed/,
+  );
+  const recovered = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __workspaceDashboardTest: { getPersonalTaskStatus: (id: string) => string | null };
+      }
+    ).__workspaceDashboardTest.getPersonalTaskStatus("personal-check"),
+  );
+  expect(recovered).toBe("open");
+  // Reopen the home page without recreating the test's in-memory storage fixture.
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "课表" })
+    .click();
+  await page
+    .getByRole("navigation", { name: "产品模式" })
+    .getByRole("button", { name: "工作台" })
+    .click();
+  await expect(
+    page.getByRole("checkbox", { name: "完成个人任务：个人任务勾选测试" }),
+  ).not.toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "取消完成学业任务：逾期事项" })).toBeChecked();
+});
+
+test("Failed task completion leaves checkbox available and task unfinished", async ({ page }) => {
+  await seedDashboardRuntime(page);
+  await page.evaluate(() =>
+    (
+      window as unknown as {
+        __workspaceDashboardTest: { setTaskCompletionFailure: (value: boolean) => void };
+      }
+    ).__workspaceDashboardTest.setTaskCompletionFailure(true),
+  );
+  const checkbox = page.getByRole("checkbox", { name: "完成学业任务：逾期事项" });
+  await checkbox.click();
+  await expect(page.getByRole("alert")).toContainText("保存学习事项失败，请稍后重试");
+  await expect(checkbox).not.toBeChecked();
+  const status = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __workspaceDashboardTest: { getAcademicTaskStatus: (id: string) => string | null };
+      }
+    ).__workspaceDashboardTest.getAcademicTaskStatus("task-overdue"),
+  );
+  expect(status).toBe("TODO");
 });
 
 test("00:00 and 24:00 labels stay inside the timeline without shifting minute geometry", async ({

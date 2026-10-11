@@ -327,6 +327,41 @@ function buildTaskSummary(
         leftTask.id.localeCompare(rightTask.id)
       );
     });
+  // The dashboard needs the complete task list, including finished items.
+  // Existing today/AI summaries must continue to count unfinished tasks only.
+  const completedItems = tasks
+    .filter((task) => task.status === "COMPLETED")
+    .map((task) => ({
+      ...taskDeadline(
+        task.id,
+        task.title,
+        task.dueAt.trim() || null,
+        task.priority,
+        "学业",
+        today,
+        nowTime,
+      ),
+      completedAt: task.completedAt ?? "",
+    }))
+    .concat(
+      personalTasks
+        .filter((task) => task.status === "completed")
+        .map((task) => ({
+          ...personalTaskDeadline(task, today, nowTime),
+          completedAt: task.completedAt ?? "",
+        })),
+    )
+    .sort(
+      (left, right) =>
+        left.completedAt.localeCompare(right.completedAt) ||
+        (left.sortDate ?? "\uffff").localeCompare(right.sortDate ?? "\uffff") ||
+        (left.sortTime ?? "\uffff").localeCompare(right.sortTime ?? "\uffff") ||
+        left.preview.id.localeCompare(right.preview.id),
+    );
+  const listItems = [
+    ...items.map((item) => ({ ...item.preview, completed: false })),
+    ...completedItems.map((item) => ({ ...item.preview, completed: true })),
+  ];
   const preview = items.slice(0, TASK_PREVIEW_LIMIT).map((item) => item.preview);
   const todayItems = items
     .map((item) => item.preview)
@@ -334,6 +369,7 @@ function buildTaskSummary(
   return {
     source: "workspace",
     items: preview,
+    listItems,
     todayItems,
     totalOpenCount: items.length,
     hiddenCount: Math.max(0, items.length - preview.length),

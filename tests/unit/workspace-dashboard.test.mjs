@@ -96,6 +96,12 @@ test("dashboard task summary merges workspace sources, sorts deadlines and prior
   assert.equal(model.taskSummary.items[3].deadlineKind, "today");
   assert.equal(model.taskSummary.totalOpenCount, 6);
   assert.equal(model.taskSummary.hiddenCount, 2);
+  assert.equal(model.taskSummary.listItems.length, 7);
+  assert.deepEqual(
+    model.taskSummary.listItems.map((item) => item.completed),
+    [false, false, false, false, false, false, true],
+  );
+  assert.equal(model.taskSummary.listItems.at(-1).id, "completed");
   assert.ok(model.taskSummary.items.every((item) => item.sourceLabel === "学业"));
   assert.equal(model.taskSummary.source, "workspace");
 });

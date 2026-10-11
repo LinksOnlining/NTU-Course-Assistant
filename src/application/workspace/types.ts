@@ -18,9 +18,15 @@ export interface WorkspaceTaskPreview {
   readonly sourceLabel: "个人" | "学业";
 }
 
+export interface WorkspaceTaskListItem extends WorkspaceTaskPreview {
+  readonly completed: boolean;
+}
+
 export interface WorkspaceTaskSummary {
   readonly source: "workspace";
   readonly items: readonly WorkspaceTaskPreview[];
+  /** All tasks, with incomplete tasks first and completed tasks last. */
+  readonly listItems: readonly WorkspaceTaskListItem[];
   readonly todayItems: readonly WorkspaceTaskPreview[];
   readonly totalOpenCount: number;
   readonly hiddenCount: number;

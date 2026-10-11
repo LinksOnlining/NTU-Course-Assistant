@@ -19,6 +19,8 @@ import { aiPlannerProposalRuntime } from "../../application/ai/proposal-runtime.
 import { todayAssistantService } from "../ai/today-assistant-service.ts";
 import { TodayAssistantPanel } from "../ai/TodayAssistantPanel.tsx";
 import { DailyBriefPanel } from "../ai/DailyBriefPanel.tsx";
+import { toggleDashboardTaskState } from "../tasks/dashboard-task-actions.ts";
+import type { WorkspaceTaskListItem } from "../../application/workspace/types.ts";
 import "./workspace-dashboard.css";
 
 interface WorkspaceDashboardProps {
@@ -279,13 +281,19 @@ function TimeContext({
 function TaskCard({
   model,
   onNavigate,
+  onToggle,
+  busyTaskId,
+  taskError,
 }: {
   readonly model: WorkspaceDashboardViewModel;
   readonly onNavigate: (route: AppRoute) => void;
+  readonly onToggle: (task: WorkspaceTaskListItem) => Promise<void>;
+  readonly busyTaskId: string | null;
+  readonly taskError: string;
 }) {
   const summary = model.taskSummary;
   return (
-    <section className="workspace-dashboard-card workspace-task-card">
+    <section className="workspace-dashboard-card workspace-task-card" aria-label="任务快捷管理">
       <header className="workspace-card-header">
         <h2>
           <button
@@ -304,26 +312,44 @@ function TaskCard({
           查看全部 <span aria-hidden="true">→</span>
         </button>
       </header>
-      {summary.items.length === 0 ? (
-        <p className="workspace-card-empty">暂无未完成任务</p>
+      {summary.listItems.length === 0 ? (
+        <p className="workspace-card-empty workspace-task-empty">暂无未完成任务</p>
       ) : (
-        <ul className="workspace-task-list">
-          {summary.items.map((task) => (
-            <li key={task.id}>
-              <button type="button" onClick={() => onNavigate(taskRoute())}>
-                <strong>{task.title}</strong>
-                <span
-                  className={`workspace-task-deadline workspace-task-deadline--${task.deadlineKind}`}
+        <ul className="workspace-task-list" aria-label="任务列表" tabIndex={0}>
+          {summary.listItems.map((task) => {
+            const taskKey = `${task.sourceLabel}:${task.id}`;
+            return (
+              <li key={taskKey} className={task.completed ? "workspace-task-completed" : undefined}>
+                <input
+                  className="workspace-task-checkbox"
+                  type="checkbox"
+                  aria-label={`${task.completed ? "取消完成" : "完成"}${task.sourceLabel}任务：${task.title}`}
+                  checked={busyTaskId === taskKey ? !task.completed : task.completed}
+                  disabled={busyTaskId !== null}
+                  onChange={() => void onToggle(task)}
+                />
+                <button
+                  type="button"
+                  className="workspace-task-open"
+                  onClick={() => onNavigate(taskRoute())}
+                  title={task.title}
                 >
-                  {task.deadlineLabel} · {task.sourceLabel}
-                </span>
-              </button>
-            </li>
-          ))}
+                  <strong>{task.title}</strong>
+                  <span
+                    className={`workspace-task-deadline workspace-task-deadline--${task.deadlineKind}`}
+                  >
+                    {task.deadlineLabel} · {task.sourceLabel}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
-      {summary.hiddenCount > 0 && (
-        <p className="workspace-task-more">另有 {summary.hiddenCount} 项</p>
+      {taskError && (
+        <p className="workspace-task-error" role="alert">
+          {taskError}
+        </p>
       )}
     </section>
   );
@@ -379,6 +405,8 @@ export function WorkspaceDashboard({
   const date = localDateKey(now);
   const nowTime = localTimeKey(now);
   const [retry, setRetry] = useState(0);
+  const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
+  const [taskError, setTaskError] = useState("");
   const [showTodayDetails, setShowTodayDetails] = useState(false);
   const todayOverviewRef = useRef<HTMLElement>(null);
   const todayTriggerRef = useRef<HTMLButtonElement>(null);
@@ -391,6 +419,20 @@ export function WorkspaceDashboard({
         : null,
     [date, nowTime, sources, weatherSnapshot],
   );
+
+  async function toggleDashboardTask(task: WorkspaceTaskListItem): Promise<void> {
+    if (busyTaskId || !sources) return;
+    setBusyTaskId(`${task.sourceLabel}:${task.id}`);
+    setTaskError("");
+    try {
+      await toggleDashboardTaskState(task, sources);
+      setRetry((value) => value + 1);
+    } catch (cause) {
+      setTaskError(cause instanceof Error ? cause.message : "任务完成状态保存失败，请重试。");
+    } finally {
+      setBusyTaskId(null);
+    }
+  }
 
   useEffect(() => {
     if (!showTodayDetails) return;
@@ -536,7 +578,13 @@ export function WorkspaceDashboard({
         <TimelineCard model={model} nowTime={nowTime} onNavigate={onNavigate} />
         <TimeContext model={model} onScheduleRoutine={onScheduleRoutine} />
         <aside className="workspace-dashboard-rail" aria-label="工作台摘要">
-          <TaskCard model={model} onNavigate={onNavigate} />
+          <TaskCard
+            model={model}
+            onNavigate={onNavigate}
+            onToggle={toggleDashboardTask}
+            busyTaskId={busyTaskId}
+            taskError={taskError}
+          />
           <div className="workspace-module-pair">
             <ObsidianCard onNavigate={onNavigate} />
             <InboxCard pendingCount={model.context.pendingInboxCount} onNavigate={onNavigate} />
