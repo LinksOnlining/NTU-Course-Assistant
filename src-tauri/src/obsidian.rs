@@ -1,10 +1,16 @@
 //! Obsidian integration is a launcher only. It never opens or writes vault contents.
 use serde::Deserialize;
+#[cfg(target_os = "windows")]
+use std::process::Command;
 use std::{
     collections::HashMap,
     env, fs,
     path::{Path, PathBuf},
-    process::Command,
+};
+#[cfg(target_os = "windows")]
+use winreg::{
+    enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER},
+    RegKey,
 };
 
 #[derive(Deserialize)]
@@ -72,6 +78,50 @@ fn action_uri(action: &str, vault: &str, has_inbox: bool) -> Result<String, Stri
     }
 }
 
+/// Locate the Obsidian executable associated with obsidian://.
+#[cfg(target_os = "windows")]
+fn registered_obsidian_executable() -> Result<PathBuf, String> {
+    let command: String = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Classes\obsidian\shell\open\command")
+        .and_then(|key| key.get_value(""))
+        .or_else(|_| {
+            RegKey::predef(HKEY_CLASSES_ROOT)
+                .open_subkey(r"obsidian\shell\open\command")
+                .and_then(|key| key.get_value(""))
+        })
+        .map_err(|_| "没有找到 Obsidian 软件的链接注册信息，请重新安装或注册 Obsidian。")?;
+
+    let executable =
+        parse_obsidian_command(&command).ok_or("Obsidian 的链接注册信息无法识别软件路径。")?;
+    if !executable.is_file() {
+        return Err("Obsidian 软件文件不存在，请检查安装状态。".into());
+    }
+    Ok(executable)
+}
+
+/// A registry protocol command has the form `"C:\...\Obsidian.exe" "%1"`.
+/// Accept only an executable named Obsidian.exe, not a generic shell command.
+#[cfg(target_os = "windows")]
+fn parse_obsidian_command(command: &str) -> Option<PathBuf> {
+    let trimmed = command.trim();
+    let candidate = if let Some(quoted) = trimmed.strip_prefix('"') {
+        quoted.split_once('"')?.0
+    } else {
+        let exe_end = trimmed.to_ascii_lowercase().find(".exe")? + 4;
+        &trimmed[..exe_end]
+    };
+    let path = PathBuf::from(candidate);
+    if path
+        .file_name()?
+        .to_str()?
+        .eq_ignore_ascii_case("Obsidian.exe")
+    {
+        Some(path)
+    } else {
+        None
+    }
+}
+
 #[tauri::command]
 pub fn get_obsidian_vault() -> Result<String, String> {
     active_vault().map(|(name, _)| name)
@@ -81,14 +131,15 @@ pub fn get_obsidian_vault() -> Result<String, String> {
 pub fn open_obsidian(action: String) -> Result<(), String> {
     let (vault, path) = active_vault()?;
     let uri = action_uri(&action, &vault, path.join("00 收集箱").is_dir())?;
-    // explorer.exe delegates the registered obsidian:// scheme to Windows.
-    // The argument is a single fixed-scheme URI, never interpolated into a shell command.
+    // Launch Obsidian.exe itself. Running explorer.exe with an obsidian:// URI
+    // may open File Explorer instead of the actual Obsidian application.
     #[cfg(target_os = "windows")]
     {
-        Command::new("explorer.exe")
+        let executable = registered_obsidian_executable()?;
+        Command::new(executable)
             .arg(uri)
             .spawn()
-            .map_err(|_| "无法打开 Obsidian。请检查 Obsidian 是否已安装并注册链接协议。")?;
+            .map_err(|_| "无法启动 Obsidian 软件，请检查安装状态。")?;
         Ok(())
     }
     #[cfg(not(target_os = "windows"))]
@@ -100,6 +151,8 @@ pub fn open_obsidian(action: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "windows")]
+    use super::parse_obsidian_command;
     use super::{action_uri, url_component};
 
     #[test]
@@ -118,5 +171,25 @@ mod tests {
         assert!(inbox.contains("path%3A%2200%20"));
         assert!(action_uri("open:evil", "First", true).is_err());
         assert_eq!(url_component("a&b?"), "a%26b%3F");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn obsidian_protocol_command_parsing_only_accepts_obsidian_exe() {
+        assert_eq!(
+            parse_obsidian_command(
+                r#""D:\Users\Example\AppData\Local\Programs\Obsidian\Obsidian.exe" "%1""#
+            )
+            .unwrap(),
+            std::path::PathBuf::from(
+                r"D:\Users\Example\AppData\Local\Programs\Obsidian\Obsidian.exe"
+            )
+        );
+        assert_eq!(
+            parse_obsidian_command(r"C:\Obsidian\Obsidian.exe %1").unwrap(),
+            std::path::PathBuf::from(r"C:\Obsidian\Obsidian.exe")
+        );
+        assert!(parse_obsidian_command(r#"cmd.exe /c start "%1""#).is_none());
+        assert!(parse_obsidian_command(r#""C:\Windows\explorer.exe" "%1""#).is_none());
     }
 }
