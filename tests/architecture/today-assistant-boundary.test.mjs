@@ -79,7 +79,10 @@ test("AI only starts from explicit user action and Planner writes remain behind 
     source("src/workspace/ai/today-assistant-routing.ts"),
     /resolveTodayAssistantWorkflow/u,
   );
-  assert.doesNotMatch(panel, /aria-modal|today-assistant-backdrop|onClose/u);
+  assert.match(panel, /aria-modal="true"/u);
+  assert.match(panel, /today-assistant-backdrop/u);
+  assert.match(panel, /createPortal/u);
+  assert.doesNotMatch(panel, /看看风险/u);
   assert.match(panel, /<AiProposalReview/u);
   assert.match(panel, /inline\s*$/mu);
   assert.match(review, /inline \? "ai-proposal-inline"/u);

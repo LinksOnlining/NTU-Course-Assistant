@@ -236,3 +236,107 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* AI output is an independent, centered dialog; the sidebar never grows with results. */
+.today-assistant-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(17 30 25 / 46%);
+  backdrop-filter: blur(3px);
+}
+
+.today-assistant-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(700px, 100%);
+  max-height: min(800px, calc(100dvh - 32px));
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-dialog);
+  background: var(--surface-primary);
+  box-shadow: var(--shadow-medium);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.today-assistant-dialog-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-dialog-header);
+}
+
+.today-assistant-dialog-header h2 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: var(--font-size-module);
+}
+
+.today-assistant-dialog-eyebrow {
+  margin: 0 0 var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--font-size-caption);
+}
+
+.today-assistant-dialog-close {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.today-assistant-dialog-close:focus-visible,
+.today-assistant-dialog button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.today-assistant-dialog-close:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.today-assistant-dialog-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 22px;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.today-assistant-dialog .today-assistant-result {
+  border: 0;
+  padding: 0;
+}
+
+@media (max-width: 760px), (max-height: 600px) {
+  .today-assistant-backdrop {
+    padding: 10px;
+  }
+
+  .today-assistant-dialog {
+    max-height: calc(100dvh - 20px);
+  }
+
+  .today-assistant-dialog-header {
+    padding: 10px 14px;
+  }
+
+  .today-assistant-dialog-body {
+    padding: 12px 14px;
+  }
+}

@@ -11,7 +11,7 @@ const lastRequest = (page: import("@playwright/test").Page) =>
     return { workflow: state.__todayWorkflow, instruction: state.__todayInstruction };
   });
 
-test("工作台直接显示一次性 AI Composer；不点击第二层也能输入，结果按结构渲染", async ({ page }) => {
+test("工作台保留 AI 输入框，分析结果在独立的居中弹窗内结构化显示", async ({ page }) => {
   await page.goto(harnessPath);
   const panel = page.getByTestId("today-assistant-panel");
   await expect(panel).toBeVisible();
@@ -21,7 +21,15 @@ test("工作台直接显示一次性 AI Composer；不点击第二层也能输�
   expect(await requestCount(page)).toBe(0);
 
   await page.getByRole("button", { name: "分析今天" }).click();
-  await expect(page.getByTestId("today-assistant-result")).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "分析今天" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByTestId("today-assistant-result")).toBeVisible();
+  await expect(panel.locator(".today-assistant-result")).toHaveCount(0);
+  const windowSize = page.viewportSize()!;
+  const bounds = await dialog.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(Math.abs(bounds!.x + bounds!.width / 2 - windowSize.width / 2)).toBeLessThan(3);
+  expect(Math.abs(bounds!.y + bounds!.height / 2 - windowSize.height / 2)).toBeLessThan(3);
   await expect(page.getByRole("heading", { name: "🌙 今日概览" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "⏰ 需要注意" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "✨ 建议安排" })).toBeVisible();
@@ -84,18 +92,61 @@ test("请求期间阻止重复提交；完成后恢复输入", async ({ page }) 
   await expect(send).toBeEnabled();
 });
 
-test("快捷操作仍可分别发起分析、安排和风险检查", async ({ page }) => {
+test("处理中关闭弹窗不会因迟到响应再次弹出，且恢复输入状态", async ({ page }) => {
+  await page.goto(`${harnessPath}?mode=delay`);
+  const trigger = page.getByRole("button", { name: "分析今天" });
+  await trigger.click();
+  await expect(page.getByTestId("today-assistant-loading")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("today-assistant-dialog")).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toBeEnabled();
+  await page.waitForTimeout(220);
+  await expect(page.getByTestId("today-assistant-dialog")).toHaveCount(0);
+  expect(await requestCount(page)).toBe(1);
+});
+
+test("关闭按钮、Tab 焦点约束与结果关闭后侧栏高度保持稳定", async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 520 });
+  await page.goto(harnessPath);
+  const panel = page.getByTestId("today-assistant-panel");
+  const before = await panel.boundingBox();
+  await page.getByRole("button", { name: "分析今天" }).click();
+  const dialog = page.getByTestId("today-assistant-dialog");
+  await expect(dialog).toBeVisible();
+  const viewport = page.viewportSize()!;
+  const box = await dialog.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 1);
+  await expect(page.getByRole("button", { name: "关闭 AI 结果" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  const focusedInside = await dialog.evaluate((element) =>
+    element.contains(document.activeElement),
+  );
+  expect(focusedInside).toBe(true);
+  await page.getByRole("button", { name: "关闭 AI 结果" }).click();
+  await expect(dialog).toHaveCount(0);
+  const after = await panel.boundingBox();
+  expect(before).not.toBeNull();
+  expect(after).not.toBeNull();
+  expect(Math.abs(before!.height - after!.height)).toBeLessThan(2);
+});
+
+test("分析与安排是两种独立流程，风险快捷按钮已去重", async ({ page }) => {
   await page.goto(harnessPath);
   for (const [label, expectedWorkflow] of [
     ["分析今天", "today.analyze"],
     ["安排今天", "planner.route"],
-    ["看看风险", "today.analyze"],
   ]) {
     await page.getByRole("button", { name: label }).click();
-    await expect(page.getByTestId("today-assistant-result")).toBeVisible();
+    await expect(page.getByTestId("today-assistant-dialog")).toBeVisible();
     expect((await lastRequest(page)).workflow).toBe(expectedWorkflow);
+    await page.getByRole("button", { name: "关闭 AI 结果" }).click();
+    await expect(page.getByTestId("today-assistant-dialog")).toHaveCount(0);
   }
-  expect(await requestCount(page)).toBe(3);
+  await expect(page.getByRole("button", { name: "看看风险" })).toHaveCount(0);
+  expect(await requestCount(page)).toBe(2);
 });
 
 test("无权限和未配置状态提供设置入口，工作台 Composer 保持可用", async ({ page }) => {
@@ -135,26 +186,33 @@ test("结构化字段剥离 Markdown，并以分区列表展示风险、建议�
   await expect(result.locator("ul li")).toHaveCount(3);
 });
 
-test("提案在结果下方直接进入本地 Review；取消与 Escape 不调用写入", async ({ page }) => {
+test("规划提案与结果同处居中弹窗；Escape 安全撤销并恢复焦点", async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 520 });
   await page.goto(`${harnessPath}?mode=ready&theme=dark`);
   const result = page.getByTestId("today-assistant-result");
   const review = page.getByTestId("ai-proposal-review");
   await page.getByRole("button", { name: "安排今天" }).click();
   await expect(review).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "安排今天" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByTestId("ai-proposal-review")).toBeVisible();
   await expect(page.getByTestId("ai-proposal-backdrop")).toHaveCount(0);
-  await expect(page.getByRole("dialog", { name: "AI 规划提案" })).toHaveCount(0);
   await expect(page.getByTestId("confirmation-count")).toHaveText("0");
   const resultBox = await result.boundingBox();
   const reviewBox = await review.boundingBox();
+  const dialogBox = await dialog.boundingBox();
   expect(resultBox).not.toBeNull();
   expect(reviewBox).not.toBeNull();
-  expect(reviewBox!.y).toBeGreaterThanOrEqual(resultBox!.y + resultBox!.height);
+  expect(dialogBox).not.toBeNull();
+  expect(reviewBox!.x).toBeGreaterThanOrEqual(dialogBox!.x);
+  expect(reviewBox!.x + reviewBox!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width + 1);
   for (const label of ["任务", "日期", "开始", "结束", "时长"]) {
     await expect(review.getByText(label, { exact: true })).toBeVisible();
   }
   await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
   await expect(review).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "安排今天" })).toBeFocused();
   await expect(page.getByTestId("cancellation-count")).toHaveText("1");
   await expect(page.getByTestId("confirmation-count")).toHaveText("0");
   await expect(page.getByTestId("applied")).toHaveCount(0);
@@ -209,7 +267,7 @@ test("720×520 浅色与深色下 Composer、快捷按钮和键盘焦点可访�
     await expect(page.getByTestId("today-assistant-send")).toBeVisible();
     await expect(page.getByRole("button", { name: "分析今天" })).toBeVisible();
     await expect(page.getByRole("button", { name: "安排今天" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "看看风险" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "看看风险" })).toHaveCount(0);
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     await page.getByLabel("想让我帮你看看什么？").focus();
     await expect(page.getByLabel("想让我帮你看看什么？")).toBeFocused();
