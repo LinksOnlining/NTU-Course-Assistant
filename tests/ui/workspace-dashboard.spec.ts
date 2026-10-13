@@ -2110,3 +2110,33 @@ test("本机搜索可定位私人日记，支持无结果、键盘返回与多�
   await expect(page.getByTestId("workspace-schedule")).toHaveAttribute("data-date", "2026-09-24");
   await expect(page.getByText("搜索结果日程", { exact: true })).toBeVisible();
 });
+
+test("Completing a task never flashes the full-page daily schedule loading state", async ({
+  page,
+}) => {
+  await seedDashboardRuntime(page);
+  await expect(page.getByRole("heading", { name: "今日日程" })).toBeVisible();
+  await page.evaluate(() => {
+    const tracking = window as typeof window & { __dashboardLoadingFlashes?: number };
+    tracking.__dashboardLoadingFlashes = 0;
+    new MutationObserver(() => {
+      if (
+        document
+          .querySelector(".workspace-dashboard-state")
+          ?.textContent?.includes("正在读取今日日程")
+      ) {
+        tracking.__dashboardLoadingFlashes = (tracking.__dashboardLoadingFlashes ?? 0) + 1;
+      }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  await page.getByRole("checkbox", { name: "完成学业任务：逾期事项" }).click();
+  await expect(page.getByRole("checkbox", { name: "取消完成学业任务：逾期事项" })).toBeChecked();
+  await expect(page.getByRole("heading", { name: "今日日程" })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () =>
+        (window as typeof window & { __dashboardLoadingFlashes?: number })
+          .__dashboardLoadingFlashes,
+    ),
+  ).toBe(0);
+});

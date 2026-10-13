@@ -71,7 +71,6 @@ function useDashboardSources(
   useEffect(() => {
     if (!ready) return;
     let active = true;
-    setSources(null);
     setError("");
     void loadWorkspaceDashboardSources(date, termConfig)
       .then((result) => {
